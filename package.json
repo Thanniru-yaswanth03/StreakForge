@@ -10,7 +10,10 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
-    "clean": "pnpm -r run clean"
+    "clean": "pnpm -r run clean",
+    "package:extension": "node scripts/package-extension.mjs",
+    "package:agent": "node scripts/package-agent.mjs",
+    "package:all": "node scripts/package-extension.mjs && node scripts/package-agent.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

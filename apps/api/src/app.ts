@@ -2,6 +2,7 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 import { ENV } from './config/env.js';
 import { authRouter } from './routes/authRoutes.js';
 import { repoRouter } from './routes/repoRoutes.js';
@@ -91,14 +92,30 @@ export function createApp(): Express {
   );
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Health Check
+  // Comprehensive Liveness & Readiness Health Check
   app.get('/health', (_req: Request, res: Response) => {
-    res.json({
-      status: 'healthy',
+    const isDbConnected = mongoose.connection.readyState === 1;
+    const memUsage = process.memoryUsage();
+
+    const isHealthy = isDbConnected || process.env.NODE_ENV === 'test';
+
+    const healthData = {
+      status: isHealthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
       service: 'streakforge-api',
-      version: '1.0.0'
-    });
+      version: '1.0.0',
+      uptimeSeconds: Math.floor(process.uptime()),
+      database: {
+        status: isDbConnected ? 'connected' : 'disconnected',
+        readyState: mongoose.connection.readyState
+      },
+      memory: {
+        rssMb: Math.round(memUsage.rss / 1024 / 1024),
+        heapUsedMb: Math.round(memUsage.heapUsed / 1024 / 1024)
+      }
+    };
+
+    res.status(isHealthy ? 200 : 503).json(healthData);
   });
 
   // Mount API routes

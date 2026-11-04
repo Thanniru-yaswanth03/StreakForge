@@ -46,6 +46,15 @@ jobs:
           JWT_SECRET: test_jwt_secret_must_be_at_least_32_characters_long
           ENCRYPTION_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
+      - name: Dependency Security Audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
       - name: Build Monorepo
         run: pnpm build
+
+      - name: Verify Release Packaging
+        run: |
+          node scripts/package-extension.mjs
+          node scripts/package-agent.mjs
 

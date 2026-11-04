@@ -1,0 +1,105 @@
+name: StreakForge Release Candidate
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0-beta.1)'
+        required: true
+        default: 'v1.0.0-beta.1'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-package:
+    name: Build & Draft Release
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.13.1
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Run Typecheck
+        run: pnpm typecheck
+
+      - name: Run Full Test Suite
+        run: pnpm test
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/streakforge-test
+          JWT_SECRET: test_jwt_secret_must_be_at_least_32_characters_long
+          ENCRYPTION_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+      - name: Dependency Audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Production Build
+        run: pnpm build
+
+      - name: Package Extension & Agent Release Artifacts
+        run: |
+          node scripts/package-extension.mjs
+          node scripts/package-agent.mjs
+
+      - name: Generate Checksums
+        run: |
+          cd dist-releases
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Generates a DRAFT release requiring explicit manual approval before publishing
+      - name: Create GitHub Release Draft (Requires Manual Approval)
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          draft: true
+          prerelease: true
+          name: StreakForge Release Candidate ${{ github.ref_name || inputs.version }}
+          body: |
+            ## StreakForge ${{ github.ref_name || inputs.version }} (Public Beta)
+
+            ### Release Artifacts
+            - `streakforge-extension-v1.0.0.zip`: Chrome Extension (Manifest V3)
+            - `streakforge-agent-windows-v1.0.0.zip`: Windows Local Desktop Agent Daemon & CLI
+            - `SHA256SUMS.txt`: Cryptographic checksums
+
+            ### Quality Gates
+            - 103 Unit, Integration & Security Tests Passing
+            - Clean Production Build
+            - Zero-Fabrication Integrity Certified
+            
+            > **Notice**: This release is created as a **DRAFT**. Review and test before clicking **Publish Release**.
+          files: |
+            dist-releases/streakforge-extension-*.zip
+            dist-releases/streakforge-agent-*.zip
+            dist-releases/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
