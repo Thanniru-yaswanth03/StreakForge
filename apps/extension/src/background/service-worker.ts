@@ -24,7 +24,7 @@ async function updateActionBadge(): Promise<void> {
 }
 
 // 1. Message Dispatcher
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
   (async () => {
     try {
       if (message.type === 'LEETCODE_SUBMISSION_DETECTED') {
@@ -48,6 +48,16 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       }
 
       if (message.type === 'UPDATE_CONFIG') {
+        // Enforce privilege separation: Only internal extension pages (popup/options) can update configuration
+        // In Chrome MV3, sender.tab is populated for content scripts injected into web pages.
+        if (sender?.tab) {
+          sendResponse({
+            success: false,
+            error: 'SECURITY_ERROR: Content scripts are not permitted to modify extension settings or authentication tokens.'
+          });
+          return;
+        }
+
         const updated = await StorageManager.updateConfig(message.payload);
         sendResponse({ success: true, config: updated });
         return;
@@ -55,13 +65,18 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
 
       if (message.type === 'GET_SYNC_STATUS') {
         const config = await StorageManager.getConfig();
+        // Redact auth token for injected content scripts to prevent token leakage into DOM context
+        const safeConfig = sender?.tab
+          ? { ...config, authToken: config.authToken ? '••••••••' : '' }
+          : config;
+
         const pending = await StorageManager.getPendingQueue();
         const history = await StorageManager.getSyncedHistory();
         const activeProblem = await StorageManager.getActiveProblem();
         const failedArchive = await StorageManager.getFailedArchive();
         sendResponse({
           success: true,
-          config,
+          config: safeConfig,
           pending,
           history,
           activeProblem,

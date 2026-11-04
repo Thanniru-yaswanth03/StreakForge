@@ -526,3 +526,158 @@ All errors return consistent JSON:
 ### 9.5 Clear All Notifications
 - **Endpoint**: `DELETE /notifications`
 - **Headers**: `Authorization: Bearer <JWT>`
+
+---
+
+## 10. Developer Analytics, Journal & Reports Endpoints
+
+### 10.1 GitHub Analytics
+- **Endpoint**: `GET /analytics/github`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Returns verified GitHub activity breakdown including total commits, weekly commits, monthly commits, repository activity distribution, programming language shares, pull request states, issue states, and cumulative repository growth over time.
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalCommits": 164,
+    "weeklyCommits": 28,
+    "monthlyCommits": 94,
+    "repositoryActivity": [
+      { "repoName": "alexdeveloper/streakforge", "commitCount": 110, "percentage": 67.1 },
+      { "repoName": "alexdeveloper/leetcode-solutions", "commitCount": 54, "percentage": 32.9 }
+    ],
+    "languages": [
+      { "language": "TypeScript", "count": 120, "percentage": 73.2 },
+      { "language": "Python", "count": 44, "percentage": 26.8 }
+    ],
+    "pullRequests": { "total": 24, "open": 2, "merged": 20, "closed": 2 },
+    "issues": { "total": 12, "open": 3, "closed": 9 },
+    "repositoryGrowth": [
+      { "date": "2026-10-01", "commits": 12 },
+      { "date": "2026-11-01", "commits": 164 }
+    ],
+    "activeRepositoriesCount": 2
+  }
+}
+```
+
+### 10.2 LeetCode Analytics (Strict Deduplication)
+- **Endpoint**: `GET /analytics/leetcode`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Returns verified LeetCode solving progress. **Rule of truth**: Multiple accepted submissions for the same problem slug or question ID are strictly deduplicated into 1 unique problem solved.
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalSubmissions": 76,
+    "acceptedSubmissions": 58,
+    "uniqueProblemsSolved": 54,
+    "acceptanceRate": 76.3,
+    "difficultyDistribution": { "Easy": 26, "Medium": 22, "Hard": 6 },
+    "languageDistribution": [
+      { "language": "TypeScript", "count": 40, "percentage": 69.0 }
+    ],
+    "topicDistribution": [
+      { "topic": "Algorithms", "count": 32, "percentage": 59.3 }
+    ],
+    "submissionHistory": [],
+    "avgSubmissionsPerSolved": 1.4,
+    "problemSolvingConsistency": {
+      "currentStreakDays": 8,
+      "weeklyAverage": 13.5,
+      "monthlyAverage": 36.0
+    }
+  }
+}
+```
+
+### 10.3 Coding Analytics (Zero-Inference Duration)
+- **Endpoint**: `GET /analytics/coding`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Returns verified local companion agent coding sessions. **Rule of truth**: Precise coding duration is never guessed or inferred from Git commit timestamps. When duration is not actively tracked by the desktop companion agent, `trackedDurationAvailable` is set to `false` and duration fields evaluate to `null`.
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "trackedDurationAvailable": false,
+    "dailyCodingDurationMinutes": null,
+    "weeklyCodingDurationMinutes": null,
+    "activeCodingDays": 14,
+    "repositoryActivity": [],
+    "languageUsage": [],
+    "sessionHistory": [],
+    "durationNotice": "Precise coding duration is never inferred from Git commit timestamps. Only active duration measured by the StreakForge companion agent is shown."
+  }
+}
+```
+
+### 10.4 Get Daily Activity Journal
+- **Endpoint**: `GET /analytics/journal?date=YYYY-MM-DD`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Aggregates the day's verified external records (commits list, PRs, LeetCode unique problems solved, repositories modified, sync ledger count) alongside isolated developer reflections.
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "date": "2026-11-04",
+    "notes": "Implemented Phase 7 analytics with strict problem deduplication.",
+    "codingDurationMinutes": null,
+    "durationTracked": false,
+    "githubActivity": {
+      "commitsCount": 4,
+      "commits": [
+        {
+          "sha": "8f7d9a1",
+          "message": "feat(analytics): add developer progress engine",
+          "repo": "alexdeveloper/streakforge",
+          "timestamp": "2026-11-04T12:30:00Z"
+        }
+      ],
+      "prsCount": 1,
+      "issuesCount": 0
+    },
+    "leetCodeActivity": {
+      "acceptedCount": 2,
+      "uniqueProblems": [
+        {
+          "questionId": "146",
+          "questionTitle": "LRU Cache",
+          "difficulty": "Medium",
+          "language": "TypeScript"
+        }
+      ]
+    },
+    "repositoriesModified": ["alexdeveloper/streakforge"],
+    "syncEventsCount": 6,
+    "updatedAt": "2026-11-04T13:00:00Z"
+  }
+}
+```
+
+### 10.5 Update Daily Personal Notes
+- **Endpoint**: `PUT /analytics/journal`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**:
+```json
+{
+  "date": "2026-11-04",
+  "notes": "Architecture review: Verified RFC 4180 CSV export compliance."
+}
+```
+- **Description**: Upserts personal developer notes in an isolated MongoDB collection without altering verified external activity records or commit audit trails.
+
+### 10.6 Generate Executive Developer Report
+- **Endpoint**: `GET /analytics/reports?period=daily|weekly|monthly|quarterly|annual&date=YYYY-MM-DD`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Generates a consolidated progress report spanning the specified period, calculating calendar boundaries in the user's timezone, activity volume, consistency score, and daily breakdowns.
+- **Response `200 OK`**: Returns `DeveloperReport` object with full breakdown and data freshness status.
+
+### 10.7 Export Developer Report (CSV / JSON)
+- **Endpoint**: `GET /analytics/reports/export?period=weekly&format=csv&date=YYYY-MM-DD`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Downloads report as RFC 4180 compliant CSV (with proper header headers `Content-Disposition: attachment; filename="streakforge-report-weekly-....csv"` and escaped strings) or structured JSON.
+

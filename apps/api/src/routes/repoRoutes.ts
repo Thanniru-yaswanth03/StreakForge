@@ -151,6 +151,13 @@ repoRouter.patch(
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
       const repoId = String(req.params.id);
+      if (!Types.ObjectId.isValid(repoId)) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Repository connection not found' }
+        });
+        return;
+      }
       const {
         category,
         defaultBranch,
@@ -213,6 +220,13 @@ repoRouter.delete(
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
       const repoId = String(req.params.id);
+      if (!Types.ObjectId.isValid(repoId)) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Repository connection not found' }
+        });
+        return;
+      }
       const connection = await RepositoryConnection.findOneAndDelete({
         _id: new Types.ObjectId(repoId),
         userId: new Types.ObjectId(req.userId)

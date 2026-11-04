@@ -18,7 +18,11 @@ export function createApp(): Express {
   const app = express();
 
   // Security Middleware
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' }
+    })
+  );
 
   const allowedOrigins = ENV.CORS_ORIGIN.split(',').map((o) => o.trim());
   app.use(
@@ -34,13 +38,17 @@ export function createApp(): Express {
           return origin === allowed;
         });
         if (isAllowed) return callback(null, true);
+
+        if (process.env.NODE_ENV === 'production') {
+          return callback(new Error('CORS origin access denied by security policy'), false);
+        }
         callback(null, true); // Permissive in development
       },
       credentials: true
     })
   );
 
-  // Rate Limiting
+  // Rate Limiting (General API tier)
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 200,
@@ -55,6 +63,22 @@ export function createApp(): Express {
     }
   });
   app.use('/api/', limiter);
+
+  // Strict Authentication Rate Limiting (Mitigate brute-force & credential stuffing)
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      error: {
+        code: 'AUTH_RATE_LIMIT_EXCEEDED',
+        message: 'Too many authentication attempts, please try again later.'
+      }
+    }
+  });
+  app.use('/api/v1/auth/', authLimiter);
 
   // Body Parsing (with raw body buffer preservation for webhook signature checks)
   app.use(

@@ -20,6 +20,7 @@ import type {
   SyncProposal,
   SyncMode
 } from '@streakforge/shared-types';
+import { isSafeRepositoryPath } from '@streakforge/validation';
 import {
   getLocalConfig,
   saveLocalConfig,
@@ -537,6 +538,13 @@ export class StreakForgeAgent {
             if (!targetPath) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'Missing repository path' }));
+              return;
+            }
+
+            const pathCheck = isSafeRepositoryPath(targetPath);
+            if (!pathCheck.safe) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `FORBIDDEN_PATH: ${pathCheck.reason}` }));
               return;
             }
 

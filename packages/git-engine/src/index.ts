@@ -47,6 +47,43 @@ export interface GitCommitInfo {
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB safety threshold
 
 /**
+ * Validates repository path safety against path traversal, root corruption, and system directories
+ */
+export function isSafeRepositoryPath(repoPath: string): { safe: boolean; reason?: string } {
+  if (!repoPath || typeof repoPath !== 'string') {
+    return { safe: false, reason: 'Invalid path' };
+  }
+  // Null byte injection check
+  if (repoPath.includes('\0')) {
+    return { safe: false, reason: 'Null byte injection detected in path' };
+  }
+
+  const resolved = path.resolve(repoPath);
+
+  // System root protection (Windows root or Unix root)
+  const root = path.parse(resolved).root;
+  if (resolved === root) {
+    return { safe: false, reason: 'Root filesystem directory cannot be registered as repository' };
+  }
+
+  // Windows system directory protection
+  if (process.platform === 'win32') {
+    const winDir = process.env.SystemRoot || 'C:\\Windows';
+    if (resolved.toLowerCase().startsWith(winDir.toLowerCase())) {
+      return { safe: false, reason: 'System directory access is forbidden' };
+    }
+  } else {
+    // Unix system directory protection
+    const forbiddenPrefixes = ['/etc', '/sys', '/proc', '/dev', '/boot', '/bin', '/sbin'];
+    if (forbiddenPrefixes.some((p) => resolved.startsWith(p))) {
+      return { safe: false, reason: 'System directory access is forbidden' };
+    }
+  }
+
+  return { safe: true };
+}
+
+/**
  * Execute Git CLI command safely using spawn with argument array (prevents shell injection)
  */
 export async function executeGit(

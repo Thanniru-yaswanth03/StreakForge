@@ -85,3 +85,4 @@ JobRecordSchema.index({ userId: 1, idempotencyKey: 1, status: 1 });
 JobRecordSchema.index({ userId: 1, createdAt: -1 });
 
 export const JobRecord = mongoose.model<IJobRecordDoc>('JobRecord', JobRecordSchema);
+

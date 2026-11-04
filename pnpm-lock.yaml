@@ -99,6 +99,9 @@ importers:
       '@streakforge/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@streakforge/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       chokidar:
         specifier: ^4.0.3
         version: 4.0.3

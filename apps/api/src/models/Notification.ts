@@ -59,3 +59,4 @@ export const Notification = mongoose.model<INotificationDoc>(
   'Notification',
   NotificationSchema
 );
+

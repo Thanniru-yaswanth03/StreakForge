@@ -87,3 +87,4 @@ export const AutomationRule = mongoose.model<IAutomationRuleDoc>(
   'AutomationRule',
   AutomationRuleSchema
 );
+

@@ -626,3 +626,177 @@ export interface QueueStats {
   avgDurationMs: number;
 }
 
+// --------------------------------------------------------
+// Phase 7 — Comprehensive Analytics & Progress Contracts
+// --------------------------------------------------------
+
+export interface GitHubAnalytics {
+  totalCommits: number;
+  weeklyCommits: number;
+  monthlyCommits: number;
+  repositoryActivity: Array<{
+    repoFullName: string;
+    commitsCount: number;
+    pullRequestsCount: number;
+    issuesCount: number;
+    percentageOfTotal: number;
+    lastCommitAt?: string;
+  }>;
+  languages: Array<{
+    language: string;
+    count: number;
+    percentage: number;
+  }>;
+  pullRequests: {
+    total: number;
+    open: number;
+    merged: number;
+    closed: number;
+  };
+  issues: {
+    total: number;
+    open: number;
+    closed: number;
+  };
+  repositoryGrowth: Array<{
+    date: string;
+    cumulativeCommits: number;
+    newCommits: number;
+  }>;
+  activeRepositories: string[];
+  dataFreshness: {
+    lastSyncedAt?: string;
+    isStale: boolean;
+  };
+}
+
+export interface LeetCodeAnalytics {
+  totalSubmissions: number;
+  acceptedSubmissions: number;
+  uniqueProblemsSolved: number;
+  acceptanceRate: number;
+  difficultyDistribution: {
+    Easy: { count: number; percentage: number };
+    Medium: { count: number; percentage: number };
+    Hard: { count: number; percentage: number };
+  };
+  languageDistribution: Array<{
+    language: string;
+    count: number;
+    percentage: number;
+  }>;
+  topicDistribution: Array<{
+    topic: string;
+    solvedCount: number;
+    percentage: number;
+  }>;
+  submissionHistory: Array<{
+    submissionId: string;
+    questionTitle: string;
+    difficulty: Difficulty;
+    language: string;
+    runtimeMs: number;
+    status: string;
+    submittedAt: string;
+  }>;
+  avgSubmissionsPerSolved: number;
+  problemSolvingConsistency: {
+    currentStreakDays: number;
+    weeklyAverage: number;
+    monthlyAverage: number;
+  };
+}
+
+export interface CodingAnalytics {
+  trackedDurationAvailable: boolean;
+  dailyCodingDurationMinutes: number | null;
+  weeklyCodingDurationMinutes: number | null;
+  activeCodingDays: number;
+  repositoryActivity: Array<{
+    repoName: string;
+    sessionCount: number;
+    filesModified: number;
+  }>;
+  languageUsage: Array<{
+    language: string;
+    count: number;
+    percentage: number;
+  }>;
+  sessionHistory: Array<{
+    id: string;
+    timestamp: string;
+    repoPath: string;
+    filesChanged: number;
+    durationMinutes?: number;
+    agentName: string;
+  }>;
+  durationNotice: string;
+}
+
+export interface DailyJournalData {
+  date: string;
+  notes: string;
+  codingDurationMinutes: number | null;
+  durationTracked: boolean;
+  githubActivity: {
+    commitsCount: number;
+    commits: Array<{
+      sha: string;
+      message: string;
+      repo: string;
+      timestamp: string;
+    }>;
+    prsCount: number;
+    issuesCount: number;
+  };
+  leetCodeActivity: {
+    acceptedCount: number;
+    uniqueProblems: Array<{
+      questionId: string;
+      questionTitle: string;
+      difficulty: Difficulty;
+      language: string;
+    }>;
+  };
+  repositoriesModified: string[];
+  syncEventsCount: number;
+  updatedAt: string;
+}
+
+export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual';
+
+export interface DeveloperReport {
+  period: ReportPeriod;
+  title: string;
+  startDate: string;
+  endDate: string;
+  generatedAt: string;
+  dataFreshness: {
+    lastSyncedAt?: string;
+    status: 'LIVE' | 'CACHED';
+  };
+  summary: {
+    totalActivities: number;
+    githubCommits: number;
+    githubPRs: number;
+    githubIssues: number;
+    leetCodeSubmissions: number;
+    leetCodeAccepted: number;
+    uniqueProblemsSolved: number;
+    codingDurationMinutes: number | null;
+    activeDaysCount: number;
+    consistencyScore: number;
+    longestStreak: number;
+    topLanguages: Array<{ name: string; count: number; percentage: number }>;
+    topRepositories: Array<{ name: string; count: number; percentage: number }>;
+  };
+  activityBreakdown: Array<{
+    date: string;
+    commits: number;
+    leetCode: number;
+    localDev: number;
+    maintenance: number;
+    total: number;
+  }>;
+}
+

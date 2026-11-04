@@ -16,6 +16,7 @@
     "@streakforge/config": "workspace:*",
     "@streakforge/git-engine": "workspace:*",
     "@streakforge/shared-types": "workspace:*",
+    "@streakforge/validation": "workspace:*",
     "chokidar": "^4.0.3",
     "commander": "^13.0.0",
     "dotenv": "^16.4.7"

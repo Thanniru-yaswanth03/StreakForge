@@ -555,6 +555,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [refreshData]);
 
   const updateJournalNote = (date: string, note: string) => {
+    // Attempt backend sync
+    api.analytics.saveJournalNote(date, note).catch(() => {
+      // Ignored in offline/demo mode
+    });
+
     setJournalEntries((prev) => {
       const existingIndex = prev.findIndex((j) => j.date === date);
       let updated: JournalEntry[];

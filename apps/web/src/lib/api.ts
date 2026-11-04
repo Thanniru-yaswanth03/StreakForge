@@ -23,7 +23,13 @@ import type {
   AutomationRule,
   JobRecord,
   QueueStats,
-  AppNotification
+  AppNotification,
+  GitHubAnalytics,
+  LeetCodeAnalytics,
+  CodingAnalytics,
+  DailyJournalData,
+  DeveloperReport,
+  ReportPeriod
 } from '@streakforge/shared-types';
 
 export const LOCAL_AGENT_URL = 'http://127.0.0.1:4545';
@@ -158,7 +164,28 @@ export const api = {
       apiFetch<{ message: string; daysProcessed: number }>('/analytics/recalculate', {
         method: 'POST',
         body: JSON.stringify({ timezone })
-      })
+      }),
+    getGitHubAnalytics: () => apiFetch<GitHubAnalytics>('/analytics/github'),
+    getLeetCodeAnalytics: () => apiFetch<LeetCodeAnalytics>('/analytics/leetcode'),
+    getCodingAnalytics: () => apiFetch<CodingAnalytics>('/analytics/coding'),
+    getJournal: (date?: string) =>
+      apiFetch<DailyJournalData>(`/analytics/journal${date ? `?date=${date}` : ''}`),
+    saveJournalNote: (date: string, notes: string) =>
+      apiFetch<DailyJournalData>('/analytics/journal', {
+        method: 'PUT',
+        body: JSON.stringify({ date, notes })
+      }),
+    getReport: (period: ReportPeriod, date?: string) =>
+      apiFetch<DeveloperReport>(`/analytics/reports?period=${period}${date ? `&date=${date}` : ''}`),
+    exportReport: async (period: ReportPeriod, format: 'csv' | 'json', date?: string) => {
+      const token = getStoredToken();
+      const url = `${API_BASE_URL}/analytics/reports/export?period=${period}&format=${format}${date ? `&date=${date}` : ''}`;
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!res.ok) throw new Error('Report export failed');
+      return format === 'csv' ? res.text() : res.json();
+    }
   },
   repos: {
     list: () =>

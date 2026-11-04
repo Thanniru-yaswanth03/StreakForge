@@ -66,8 +66,17 @@ syncRouter.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
+      const idStr = String(req.params.id);
+      if (!Types.ObjectId.isValid(idStr)) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Submission not found' }
+        });
+        return;
+      }
+
       const sub = await LeetCodeSubmission.findOne({
-        _id: new Types.ObjectId(String(req.params.id)),
+        _id: new Types.ObjectId(idStr),
         userId: new Types.ObjectId(req.userId)
       });
 

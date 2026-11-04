@@ -79,6 +79,7 @@ export async function getNotifications(
 }
 
 export async function markAsRead(userId: string, notificationId: string) {
+  if (!Types.ObjectId.isValid(notificationId)) return false;
   const doc = await Notification.findOneAndUpdate(
     { _id: new Types.ObjectId(notificationId), userId: new Types.ObjectId(userId) },
     { isRead: true, readAt: new Date() },
@@ -96,6 +97,7 @@ export async function markAllAsRead(userId: string) {
 }
 
 export async function deleteNotification(userId: string, notificationId: string) {
+  if (!Types.ObjectId.isValid(notificationId)) return false;
   const result = await Notification.deleteOne({
     _id: new Types.ObjectId(notificationId),
     userId: new Types.ObjectId(userId)
@@ -107,3 +109,4 @@ export async function clearAllNotifications(userId: string) {
   const result = await Notification.deleteMany({ userId: new Types.ObjectId(userId) });
   return result.deletedCount;
 }
+

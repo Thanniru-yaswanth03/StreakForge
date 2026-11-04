@@ -142,6 +142,7 @@ export class SchedulerService {
     ruleId: string,
     updates: Partial<CreateRuleInput> & { enabled?: boolean }
   ): Promise<IAutomationRuleDoc | null> {
+    if (!Types.ObjectId.isValid(ruleId)) return null;
     const rule = await AutomationRule.findOne({
       _id: new Types.ObjectId(ruleId),
       userId: new Types.ObjectId(userId)
@@ -176,6 +177,7 @@ export class SchedulerService {
    * Toggles enabled state of an automation rule.
    */
   public static async toggleRule(userId: string, ruleId: string): Promise<IAutomationRuleDoc | null> {
+    if (!Types.ObjectId.isValid(ruleId)) return null;
     const rule = await AutomationRule.findOne({
       _id: new Types.ObjectId(ruleId),
       userId: new Types.ObjectId(userId)
@@ -208,6 +210,7 @@ export class SchedulerService {
    * Manually triggers an automation rule immediately.
    */
   public static async triggerRuleNow(userId: string, ruleId: string) {
+    if (!Types.ObjectId.isValid(ruleId)) throw new Error('Automation rule not found');
     const rule = await AutomationRule.findOne({
       _id: new Types.ObjectId(ruleId),
       userId: new Types.ObjectId(userId)
@@ -247,6 +250,7 @@ export class SchedulerService {
    * Deletes an automation rule.
    */
   public static async deleteRule(userId: string, ruleId: string): Promise<boolean> {
+    if (!Types.ObjectId.isValid(ruleId)) return false;
     const result = await AutomationRule.deleteOne({
       _id: new Types.ObjectId(ruleId),
       userId: new Types.ObjectId(userId)
