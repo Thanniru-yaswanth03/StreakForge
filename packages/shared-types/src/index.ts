@@ -495,3 +495,134 @@ export interface GitHubActivityFeed {
   };
 }
 
+// --------------------------------------------------------
+// Phase 6 — Automation Engine, Scheduler & Job Queue Types
+// --------------------------------------------------------
+
+export type AutomationType =
+  | 'LEETCODE_EXPORT'
+  | 'GITHUB_SYNC_CHANGES'
+  | 'LOCAL_BACKUP'
+  | 'REPO_HEALTH_CHECK'
+  | 'GITHUB_ACTIVITY_SYNC'
+  | 'LEETCODE_HISTORY_SYNC'
+  | 'DAILY_REMINDERS'
+  | 'WEEKLY_ANALYTICS';
+
+export type AutomationTriggerType = 'CRON' | 'EVENT' | 'MANUAL' | 'WEBHOOK';
+
+export type JobStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'RETRYING'
+  | 'CANCELLED';
+
+export interface AutomationExecutionPolicy {
+  timeoutSeconds: number;
+  concurrency: 'FORBID' | 'ALLOW';
+  retryLimit: number;
+  backoffInitialSeconds: number;
+}
+
+export interface AutomationFailurePolicy {
+  maxRetries: number;
+  backoffMultiplier: number;
+  deadLetter: boolean;
+  notifyOnFailure: boolean;
+}
+
+export interface AutomationLastExecution {
+  timestamp: string;
+  status: 'SUCCESS' | 'FAILURE' | 'SKIPPED';
+  durationMs: number;
+  summary: string;
+  jobId?: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  userId: string;
+  name: string;
+  description: string;
+  type: AutomationType;
+  enabled: boolean;
+  triggerType: AutomationTriggerType;
+  schedule: string;
+  timezone: string;
+  repositoryScope: 'ALL' | 'DEFAULT' | string[];
+  executionPolicy: AutomationExecutionPolicy;
+  lastExecution?: AutomationLastExecution;
+  nextExecution?: string;
+  failurePolicy: AutomationFailurePolicy;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobRecord {
+  id: string;
+  userId: string;
+  automationRuleId?: string;
+  jobType: AutomationType;
+  payload: Record<string, any>;
+  status: JobStatus;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  retryCount: number;
+  maxRetries: number;
+  nextRunAt?: string;
+  error?: {
+    message: string;
+    stack?: string;
+    code?: string;
+    failedAt: string;
+  };
+  idempotencyKey: string;
+  workerId?: string;
+  progress?: number;
+  result?: Record<string, any>;
+}
+
+export type NotificationCategory =
+  | 'EXPORT_SUCCESS'
+  | 'EXPORT_FAILURE'
+  | 'AUTH_EXPIRATION'
+  | 'AGENT_DISCONNECTED'
+  | 'BACKUP_COMPLETED'
+  | 'MISSING_SOURCE'
+  | 'PENDING_APPROVAL'
+  | 'STREAK_WARNING'
+  | 'HEALTH_CHECK_WARNING'
+  | 'GENERAL';
+
+export type NotificationSeverity = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  category: NotificationCategory;
+  severity: NotificationSeverity;
+  title: string;
+  message: string;
+  link?: string;
+  metadata?: Record<string, any>;
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface QueueStats {
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+  retrying: number;
+  cancelled: number;
+  totalJobs: number;
+  successRate: number;
+  avgDurationMs: number;
+}
+

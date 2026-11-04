@@ -402,7 +402,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setIsLoading(true);
-      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes] =
+      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes, rulesRes, notifsRes] =
         await Promise.allSettled([
           api.auth.getMe(),
           api.analytics.getOverview(),
@@ -411,7 +411,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           api.sync.getHistory(1, 50),
           api.agent.list(),
           api.audit.getLogs(1, 100),
-          api.github.getActivity(1, 20)
+          api.github.getActivity(1, 20),
+          api.automations.getRules(),
+          api.notifications.list(1, 50)
         ]);
 
       if (meRes.status === 'fulfilled') {
@@ -434,6 +436,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (subsRes.status === 'fulfilled') setSubmissions(subsRes.value);
       if (agentsRes.status === 'fulfilled') setAgents(agentsRes.value);
       if (logsRes.status === 'fulfilled') setAuditLogs(logsRes.value);
+
+      if (rulesRes.status === 'fulfilled' && rulesRes.value.length > 0) {
+        setAutomations(
+          rulesRes.value.map((r) => ({
+            id: r.id,
+            name: r.name,
+            type: r.type as any,
+            status: r.enabled ? 'ACTIVE' : 'PAUSED',
+            scheduleDescription: `${r.triggerType}: ${r.schedule} (${r.timezone})`,
+            nextExecution: r.nextExecution ? new Date(r.nextExecution).toLocaleString() : 'Paused',
+            lastExecution: r.lastExecution?.timestamp
+              ? new Date(r.lastExecution.timestamp).toLocaleString()
+              : 'Never',
+            lastExecutionStatus: r.lastExecution?.status || 'SKIPPED',
+            successCount: r.lastExecution?.status === 'SUCCESS' ? 1 : 0,
+            failureCount: r.lastExecution?.status === 'FAILURE' ? 1 : 0,
+            config: { repositoryScope: r.repositoryScope }
+          }))
+        );
+      }
+
+      if (notifsRes.status === 'fulfilled' && notifsRes.value.items.length > 0) {
+        setNotifications(
+          notifsRes.value.items.map((n) => ({
+            id: n.id,
+            type: (n.category === 'STREAK_WARNING'
+              ? 'STREAK_WARNING'
+              : n.category === 'EXPORT_SUCCESS'
+              ? 'EXPORT_SUCCESS'
+              : n.category === 'EXPORT_FAILURE'
+              ? 'EXPORT_FAILURE'
+              : n.category === 'AGENT_DISCONNECTED'
+              ? 'AGENT_ALERT'
+              : 'SECURITY') as any,
+            title: n.title,
+            message: n.message,
+            timestamp: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isRead: n.isRead,
+            link: n.link
+          }))
+        );
+      }
 
       if (ghActRes.status === 'fulfilled' && ghActRes.value.commits.length > 0) {
         const gh = ghActRes.value;
@@ -547,24 +591,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         a.id === id ? { ...a, status: a.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' } : a
       )
     );
+    if (!isDemoMode) {
+      api.automations.toggleRule(id).catch(() => {});
+    }
   };
 
   const deleteAutomation = (id: string) => {
     setAutomations((prev) => prev.filter((a) => a.id !== id));
+    if (!isDemoMode) {
+      api.automations.deleteRule(id).catch(() => {});
+    }
   };
 
   const markNotificationAsRead = (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
     );
+    if (!isDemoMode) {
+      api.notifications.markAsRead(id).catch(() => {});
+    }
   };
 
   const markAllNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    if (!isDemoMode) {
+      api.notifications.markAllAsRead().catch(() => {});
+    }
   };
 
   const clearNotifications = () => {
     setNotifications([]);
+    if (!isDemoMode) {
+      api.notifications.clearAll().catch(() => {});
+    }
   };
 
   return (

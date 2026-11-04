@@ -183,11 +183,10 @@ export function StreakCalendarView() {
             <button
               key={f.id}
               onClick={() => setActiveFilter(f.id as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                isSelected
-                  ? 'bg-theme-accent text-slate-950 font-semibold shadow-xs'
-                  : 'bg-theme-surface border border-theme-border text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${isSelected
+                ? 'bg-theme-accent text-slate-950 font-semibold shadow-xs'
+                : 'bg-theme-surface border border-theme-border text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
+                }`}
             >
               <Icon className="w-3.5 h-3.5" />
               <span>{f.label}</span>

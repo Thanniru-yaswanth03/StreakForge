@@ -428,3 +428,101 @@ All errors return consistent JSON:
 ### 7.6 Query Audit Logs
 - **Endpoint**: `GET /audit/logs?page=1&limit=50&component=AGENT`
 - **Headers**: `Authorization: Bearer <JWT>`
+
+---
+
+## 8. Automation Engine & Scheduler Endpoints
+
+### 8.1 List Automation Rules
+- **Endpoint**: `GET /automations/rules`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: Array of configured automation rules with last/next execution and failure policies.
+
+### 8.2 Create Automation Rule
+- **Endpoint**: `POST /automations/rules`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**:
+```json
+{
+  "name": "LeetCode Auto-Exporter",
+  "type": "LEETCODE_EXPORT",
+  "triggerType": "CRON",
+  "schedule": "every 15m",
+  "timezone": "America/New_York",
+  "repositoryScope": "DEFAULT",
+  "executionPolicy": {
+    "timeoutSeconds": 300,
+    "concurrency": "FORBID",
+    "retryLimit": 3,
+    "backoffInitialSeconds": 10
+  },
+  "failurePolicy": {
+    "maxRetries": 3,
+    "backoffMultiplier": 2,
+    "deadLetter": true,
+    "notifyOnFailure": true
+  }
+}
+```
+
+### 8.3 Update Automation Rule
+- **Endpoint**: `PATCH /automations/rules/:id`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.4 Pause or Resume Rule
+- **Endpoint**: `POST /automations/rules/:id/toggle`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.5 Trigger Rule Immediately
+- **Endpoint**: `POST /automations/rules/:id/trigger`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: `{ "jobId": "job_...", "jobType": "...", "status": "QUEUED", "isDuplicate": false }`
+
+### 8.6 Delete Automation Rule
+- **Endpoint**: `DELETE /automations/rules/:id`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.7 List Persistent Queue Jobs
+- **Endpoint**: `GET /automations/jobs?page=1&limit=20&status=QUEUED`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.8 Get Job Details
+- **Endpoint**: `GET /automations/jobs/:id`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.9 Cancel Queued or Running Job
+- **Endpoint**: `POST /automations/jobs/:id/cancel`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.10 Retry Failed or Dead-Letter Job
+- **Endpoint**: `POST /automations/jobs/:id/retry`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 8.11 Get Queue Statistics
+- **Endpoint**: `GET /automations/stats`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: `{ "queued": 0, "running": 1, "completed": 45, "failed": 0, "retrying": 0, "successRate": 100.0, "avgDurationMs": 420 }`
+
+---
+
+## 9. Notification Engine Endpoints
+
+### 9.1 List Notifications
+- **Endpoint**: `GET /notifications?page=1&limit=20&unreadOnly=false`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 9.2 Mark Notification as Read
+- **Endpoint**: `PATCH /notifications/:id/read`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 9.3 Mark All Notifications as Read
+- **Endpoint**: `POST /notifications/mark-all-read`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 9.4 Delete Notification
+- **Endpoint**: `DELETE /notifications/:id`
+- **Headers**: `Authorization: Bearer <JWT>`
+
+### 9.5 Clear All Notifications
+- **Endpoint**: `DELETE /notifications`
+- **Headers**: `Authorization: Bearer <JWT>`

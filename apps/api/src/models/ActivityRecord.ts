@@ -55,3 +55,4 @@ export const ActivityRecord = mongoose.model<IActivityRecordDocument>(
   'ActivityRecord',
   ActivityRecordSchema
 );
+

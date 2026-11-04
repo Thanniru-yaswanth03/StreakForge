@@ -10,6 +10,8 @@ import { syncRouter } from './routes/syncRoutes.js';
 import { agentRouter } from './routes/agentRoutes.js';
 import { analyticsRouter } from './routes/analyticsRoutes.js';
 import { auditRouter } from './routes/auditRoutes.js';
+import { automationRoutes } from './routes/automationRoutes.js';
+import { notificationRoutes } from './routes/notificationRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp(): Express {
@@ -83,6 +85,8 @@ export function createApp(): Express {
   app.use('/api/v1/agent', agentRouter);
   app.use('/api/v1/analytics', analyticsRouter);
   app.use('/api/v1/audit', auditRouter);
+  app.use('/api/v1/automations', automationRoutes);
+  app.use('/api/v1/notifications', notificationRoutes);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {

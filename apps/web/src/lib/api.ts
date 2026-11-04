@@ -19,7 +19,11 @@ import type {
   SyncProposal,
   WatchedRepositoryConfig,
   ActivityRecord,
-  StreakReminder
+  StreakReminder,
+  AutomationRule,
+  JobRecord,
+  QueueStats,
+  AppNotification
 } from '@streakforge/shared-types';
 
 export const LOCAL_AGENT_URL = 'http://127.0.0.1:4545';
@@ -248,5 +252,61 @@ export const api = {
       apiFetch<AuditLog[]>(
         `/audit/logs?page=${page}&limit=${limit}${component ? `&component=${component}` : ''}`
       )
+  },
+  automations: {
+    getRules: () => apiFetch<AutomationRule[]>('/automations/rules'),
+    createRule: (input: any) =>
+      apiFetch<{ id: string; name: string; type: string; schedule: string }>('/automations/rules', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }),
+    updateRule: (id: string, updates: any) =>
+      apiFetch<AutomationRule>(`/automations/rules/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates)
+      }),
+    toggleRule: (id: string) =>
+      apiFetch<{ id: string; enabled: boolean }>(`/automations/rules/${id}/toggle`, {
+        method: 'POST'
+      }),
+    triggerRule: (id: string) =>
+      apiFetch<{ jobId: string; jobType: string; status: string; isDuplicate: boolean }>(
+        `/automations/rules/${id}/trigger`,
+        { method: 'POST' }
+      ),
+    deleteRule: (id: string) =>
+      apiFetch<{ message: string }>(`/automations/rules/${id}`, {
+        method: 'DELETE'
+      }),
+    getJobs: (page: number = 1, limit: number = 20, status?: string, jobType?: string) =>
+      apiFetch<{ jobs: JobRecord[]; total: number; page: number; totalPages: number }>(
+        `/automations/jobs?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}${jobType ? `&jobType=${jobType}` : ''}`
+      ),
+    getJobDetails: (id: string) => apiFetch<JobRecord>(`/automations/jobs/${id}`),
+    cancelJob: (id: string) =>
+      apiFetch<{ message: string }>(`/automations/jobs/${id}/cancel`, { method: 'POST' }),
+    retryJob: (id: string) =>
+      apiFetch<{ jobId: string; status: string }>(`/automations/jobs/${id}/retry`, { method: 'POST' }),
+    getStats: () => apiFetch<QueueStats>('/automations/stats')
+  },
+  notifications: {
+    list: (page: number = 1, limit: number = 20, unreadOnly: boolean = false, category?: string) =>
+      apiFetch<{
+        items: AppNotification[];
+        total: number;
+        unreadCount: number;
+        page: number;
+        totalPages: number;
+      }>(
+        `/notifications?page=${page}&limit=${limit}&unreadOnly=${unreadOnly}${category ? `&category=${category}` : ''}`
+      ),
+    markAsRead: (id: string) =>
+      apiFetch<{ message: string }>(`/notifications/${id}/read`, { method: 'PATCH' }),
+    markAllAsRead: () =>
+      apiFetch<{ updatedCount: number }>('/notifications/mark-all-read', { method: 'POST' }),
+    delete: (id: string) =>
+      apiFetch<{ message: string }>(`/notifications/${id}`, { method: 'DELETE' }),
+    clearAll: () =>
+      apiFetch<{ deletedCount: number }>('/notifications', { method: 'DELETE' })
   }
 };

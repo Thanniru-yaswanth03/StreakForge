@@ -1,12 +1,16 @@
 import { createApp } from './app.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { ENV } from './config/env.js';
+import { SchedulerService } from './services/schedulerService.js';
 import { logger } from './utils/logger.js';
 
 async function bootstrap() {
   try {
     await connectDatabase();
     const app = createApp();
+
+    // Start background scheduler and worker loops
+    SchedulerService.start();
 
     const server = app.listen(ENV.PORT, () => {
       logger.info(`StreakForge API Server running on port ${ENV.PORT}`, {
@@ -17,6 +21,7 @@ async function bootstrap() {
 
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}. Shutting down gracefully...`);
+      SchedulerService.stop();
       server.close(async () => {
         await disconnectDatabase();
         logger.info('API server closed');
