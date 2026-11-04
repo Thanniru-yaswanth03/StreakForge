@@ -15,11 +15,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 RUN npm install -g pnpm@10.13.1
-COPY package.json pnpm-workspace.yaml ./
-COPY packages/ ./packages/
-COPY apps/api/ ./apps/api/
-
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+COPY --from=builder /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/api ./apps/api
+COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 4000
 CMD ["node", "apps/api/dist/server.js"]
