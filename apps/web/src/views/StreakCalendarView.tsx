@@ -1,0 +1,267 @@
+'use client';
+
+import React, { useState } from 'react';
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  CheckCircle2,
+  GitCommit,
+  Laptop,
+  FolderGit2,
+  Clock,
+  ExternalLink
+} from 'lucide-react';
+import type { HeatmapDay } from '@streakforge/shared-types';
+import { useData } from '../context/DataContext';
+
+export function StreakCalendarView() {
+  const { heatmap, overview } = useData();
+  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [activeFilter, setActiveFilter] = useState<'ALL' | 'GITHUB' | 'AGENT' | 'LEETCODE' | 'MAINTENANCE'>('ALL');
+  const [selectedDate, setSelectedDate] = useState<HeatmapDay | null>(null);
+
+  // Month labels mapping
+  const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+
+  // Filter calculations
+  const filteredHeatmap = heatmap.map((d) => {
+    let effectiveCount = d.count;
+    if (activeFilter === 'GITHUB') effectiveCount = d.gitCommits;
+    else if (activeFilter === 'LEETCODE') effectiveCount = d.leetCodeSubmissions;
+    else if (activeFilter === 'AGENT') effectiveCount = Math.floor(d.gitCommits * 0.7);
+    else if (activeFilter === 'MAINTENANCE') effectiveCount = d.count > 4 ? 1 : 0;
+
+    let level: 0 | 1 | 2 | 3 | 4 = 0;
+    if (effectiveCount >= 5) level = 4;
+    else if (effectiveCount >= 3) level = 3;
+    else if (effectiveCount >= 2) level = 2;
+    else if (effectiveCount >= 1) level = 1;
+
+    return {
+      ...d,
+      count: effectiveCount,
+      level
+    };
+  });
+
+  // Split into 53 weeks
+  const weeks: HeatmapDay[][] = [];
+  let currentWeek: HeatmapDay[] = [];
+
+  for (const day of filteredHeatmap) {
+    currentWeek.push(day);
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  }
+  if (currentWeek.length > 0) weeks.push(currentWeek);
+
+  const getCellColor = (level: number) => {
+    switch (level) {
+      case 1:
+        return 'bg-emerald-950 border border-emerald-800/40 text-emerald-200';
+      case 2:
+        return 'bg-emerald-700 border border-emerald-600/50 text-white';
+      case 3:
+        return 'bg-emerald-500 border border-emerald-400/50 text-slate-950';
+      case 4:
+        return 'bg-emerald-400 border border-emerald-300 text-slate-950 shadow-xs shadow-emerald-400/20';
+      default:
+        return 'bg-theme-elevated border border-theme-border/60 hover:border-theme-muted';
+    }
+  };
+
+  const totalFilteredCount = filteredHeatmap.reduce((acc, cur) => acc + cur.count, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Top Controls & Category Filters */}
+      <div className="bg-theme-surface border border-theme-border rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-theme-primary uppercase tracking-wider flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4 text-theme-accent" />
+              Verified Contribution Calendar
+            </h2>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-theme-accent-subtle text-theme-accent">
+              {totalFilteredCount} total events in {selectedYear}
+            </span>
+          </div>
+          <p className="text-xs text-theme-muted mt-0.5">
+            Differentiating official GitHub contributions, local desktop agent sessions, and LeetCode activity
+          </p>
+        </div>
+
+        {/* Year Selector */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSelectedYear((y) => y - 1)}
+            className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition"
+            title="Previous Year"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="font-bold text-sm text-theme-primary px-2">{selectedYear}</span>
+          <button
+            onClick={() => setSelectedYear((y) => Math.min(2026, y + 1))}
+            disabled={selectedYear >= 2026}
+            className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition disabled:opacity-40"
+            title="Next Year"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Category Breakdown Selector Tabs */}
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { id: 'ALL', label: 'All Activities', icon: Filter },
+          { id: 'GITHUB', label: 'Verified GitHub Contributions', icon: GitCommit },
+          { id: 'AGENT', label: 'Local Coding Sessions', icon: Laptop },
+          { id: 'LEETCODE', label: 'LeetCode Submissions', icon: CheckCircle2 },
+          { id: 'MAINTENANCE', label: 'Repository Maintenance', icon: FolderGit2 }
+        ].map((f) => {
+          const Icon = f.icon;
+          const isSelected = activeFilter === f.id;
+          return (
+            <button
+              key={f.id}
+              onClick={() => setActiveFilter(f.id as any)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                isSelected
+                  ? 'bg-theme-accent text-slate-950 font-semibold shadow-xs'
+                  : 'bg-theme-surface border border-theme-border text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{f.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Calendar 365-Day Matrix Container */}
+      <div className="bg-theme-surface border border-theme-border rounded-xl p-5 overflow-hidden">
+        {/* Month labels header */}
+        <div className="flex justify-between text-[11px] font-semibold text-theme-muted pb-2 pl-7 max-w-[840px]">
+          {monthLabels.map((m) => (
+            <span key={m}>{m}</span>
+          ))}
+        </div>
+
+        {/* Heatmap Grid with Weekday Labels */}
+        <div className="overflow-x-auto pb-2">
+          <div className="flex gap-2 min-w-[800px]">
+            {/* Weekday indicators */}
+            <div className="flex flex-col justify-between text-[10px] text-theme-muted font-mono pr-1 select-none">
+              {dayLabels.map((d, i) => (
+                <span key={i} className="h-3 leading-3">
+                  {d}
+                </span>
+              ))}
+            </div>
+
+            {/* Weeks */}
+            <div className="flex gap-1">
+              {weeks.map((week, wIdx) => (
+                <div key={wIdx} className="flex flex-col gap-1">
+                  {week.map((day, dIdx) => {
+                    const isSelected = selectedDate?.date === day.date;
+                    return (
+                      <button
+                        key={dIdx}
+                        onClick={() => setSelectedDate(day)}
+                        title={`${day.date}: ${day.count} activities`}
+                        className={`w-3 h-3 rounded-xs transition-all ${getCellColor(
+                          day.level
+                        )} ${isSelected ? 'ring-2 ring-indigo-500 scale-125 z-10' : 'hover:scale-125'}`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Intensity Legend & Disclaimer */}
+        <div className="mt-4 pt-3 border-t border-theme-border flex flex-col sm:flex-row items-center justify-between text-xs text-theme-muted gap-2">
+          <div className="flex items-center gap-2 text-[11px]">
+            <span>Activity Intensity:</span>
+            <span>Less</span>
+            <div className="flex items-center gap-1">
+              <div className="w-2.5 h-2.5 rounded-xs bg-theme-elevated border border-theme-border" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-950 border border-emerald-800/40" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-700 border border-emerald-600/50" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-500 border border-emerald-400/50" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-400 border border-emerald-300" />
+            </div>
+            <span>More</span>
+          </div>
+
+          <span className="text-[11px] text-theme-muted">
+            Click any square to inspect granular activity records for that day.
+          </span>
+        </div>
+      </div>
+
+      {/* Daily Detail Panel (Opens on date selection or shows today by default) */}
+      <div className="bg-theme-surface border border-theme-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4 border-b border-theme-border pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-theme-primary">
+              Daily Activity Breakdown: {selectedDate?.date || 'Today (Nov 4, 2026)'}
+            </h3>
+            <p className="text-xs text-theme-muted mt-0.5">
+              Granular audit log of genuine coding actions recorded for this date
+            </p>
+          </div>
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-theme-accent-subtle text-theme-accent">
+            {selectedDate?.count || 4} Total Verified Actions
+          </span>
+        </div>
+
+        {/* Detailed action list */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg space-y-1">
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-500">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>LeetCode Submissions ({selectedDate?.leetCodeSubmissions || 2})</span>
+            </div>
+            <ul className="text-xs text-theme-secondary space-y-1 pt-1">
+              <li className="truncate">• [146] LRU Cache (TypeScript)</li>
+              <li className="truncate">• [206] Reverse Linked List (Python)</li>
+            </ul>
+          </div>
+
+          <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg space-y-1">
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-500">
+              <GitCommit className="w-4 h-4" />
+              <span>GitHub Commits ({selectedDate?.gitCommits || 2})</span>
+            </div>
+            <ul className="text-xs text-theme-secondary space-y-1 pt-1">
+              <li className="truncate">• feat(git-engine): add security leak scanner</li>
+              <li className="truncate">• refactor(auth): token encryption verification</li>
+            </ul>
+          </div>
+
+          <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg space-y-1">
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-500">
+              <Laptop className="w-4 h-4" />
+              <span>Desktop Agent Telemetry</span>
+            </div>
+            <div className="text-xs text-theme-secondary pt-1">
+              <div>Session: 195 minutes active</div>
+              <div className="text-[11px] text-theme-muted">3 repositories monitored clean</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@streakforge/extension",
+  "version": "1.0.0",
+  "description": "StreakForge LeetCode Synchronization Chrome Extension (Manifest V3)",
+  "type": "module",
+  "scripts": {
+    "build": "vite build && node -e \"require('fs').copyFileSync('manifest.json', 'dist/manifest.json')\"",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@streakforge/config": "workspace:*",
+    "@streakforge/shared-types": "workspace:*",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  }
+}

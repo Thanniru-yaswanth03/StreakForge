@@ -1,0 +1,30 @@
+{
+  "name": "@streakforge/desktop-agent",
+  "version": "1.0.0",
+  "description": "StreakForge Local Desktop Agent Daemon & CLI",
+  "bin": {
+    "streakforge-agent": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@streakforge/config": "workspace:*",
+    "@streakforge/git-engine": "workspace:*",
+    "@streakforge/shared-types": "workspace:*",
+    "chokidar": "^4.0.3",
+    "commander": "^13.0.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
+
