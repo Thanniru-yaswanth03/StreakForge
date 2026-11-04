@@ -1,23 +1,40 @@
 {
   "manifest_version": 3,
-  "name": "StreakForge — LeetCode to GitHub Sync",
+  "name": "StreakForge LeetCode Sync",
   "version": "1.0.0",
-  "description": "Authentic coding activity synchronization from LeetCode to your GitHub repositories.",
+  "description": "Authentic LeetCode activity synchronization from verified accepted submissions to your GitHub repositories.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "activeTab",
+    "notifications"
   ],
   "host_permissions": [
     "https://leetcode.com/*",
     "https://leetcode.cn/*",
-    "http://localhost:4000/*"
+    "http://localhost:4000/*",
+    "http://127.0.0.1:4000/*"
   ],
   "action": {
     "default_popup": "index.html",
-    "default_title": "StreakForge"
+    "default_title": "StreakForge LeetCode Sync",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "background": {
-    "service_worker": "src/background/service-worker.ts",
+    "service_worker": "src/background/service-worker.js",
     "type": "module"
   },
   "content_scripts": [
@@ -27,7 +44,7 @@
         "https://leetcode.cn/problems/*"
       ],
       "js": [
-        "src/content/leetcode-observer.ts"
+        "src/content/leetcode-observer.js"
       ],
       "run_at": "document_idle"
     }

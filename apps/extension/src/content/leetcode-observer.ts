@@ -1,126 +1,139 @@
-import type { LeetCodeSubmissionInput, Difficulty } from '@streakforge/shared-types';
+import { LeetCodeDomExtractor } from './dom-extractor';
+import type { DetectedSubmission, ActiveProblemContext } from '../shared/types';
 
-console.log('[StreakForge] LeetCode content observer injected.');
+console.log('[StreakForge] LeetCode authentic activity observer initialized.');
 
 let lastObservedSubmissionId: string | null = null;
+let lastObservedVerdict: string | null = null;
+let lastReportedSlug: string | null = null;
 
-function getProblemSlug(): string {
-  const match = window.location.pathname.match(/\/problems\/([^/]+)/);
-  return match ? match[1] : '';
-}
+/**
+ * Broadcasts currently viewed problem details to background worker and popup
+ */
+function reportActiveProblem(): void {
+  const slug = LeetCodeDomExtractor.getProblemSlug();
+  if (!slug || slug === lastReportedSlug) return;
 
-function parseDifficulty(): Difficulty {
-  const text = document.body.innerText;
-  if (/Difficulty:\s*Hard|\bHard\b/i.test(text) && document.querySelector('.text-red-s, .text-difficulty-hard')) {
-    return 'Hard';
-  }
-  if (/Difficulty:\s*Medium|\bMedium\b/i.test(text) && document.querySelector('.text-yellow-s, .text-difficulty-medium')) {
-    return 'Medium';
-  }
-  return 'Easy';
-}
+  const details = LeetCodeDomExtractor.extractProblemDetails();
+  const language = LeetCodeDomExtractor.extractLanguage();
 
-function extractEditorCode(): string {
-  // Monaco editor text extraction
-  const lines = document.querySelectorAll('.monaco-editor .view-line');
-  if (lines.length > 0) {
-    return Array.from(lines)
-      .map((line) => line.textContent || '')
-      .join('\n');
-  }
+  const payload: ActiveProblemContext = {
+    title: details.title,
+    slug: details.slug,
+    id: details.id,
+    difficulty: details.difficulty,
+    language,
+    topicTags: details.topicTags,
+    detectedAt: new Date().toISOString()
+  };
 
-  // Fallback to code element
-  const codeEl = document.querySelector('code, pre');
-  return codeEl?.textContent || '// StreakForge: Solution captured';
-}
+  lastReportedSlug = slug;
 
-function extractLanguage(): string {
-  // Language button or selector
-  const btn = document.querySelector('button[id*="headlessui-listbox-button"], [data-cy="lang-select"]');
-  const langText = btn?.textContent?.trim().toLowerCase() || 'python3';
-
-  if (langText.includes('python')) return 'python3';
-  if (langText.includes('c++') || langText.includes('cpp')) return 'cpp';
-  if (langText.includes('java') && !langText.includes('javascript')) return 'java';
-  if (langText.includes('typescript')) return 'typescript';
-  if (langText.includes('javascript')) return 'javascript';
-  if (langText.includes('go')) return 'golang';
-  if (langText.includes('rust')) return 'rust';
-  return langText;
-}
-
-function observeSubmissionResults(): void {
-  const observer = new MutationObserver(() => {
-    // Look for "Accepted" banner in submission modal or panel
-    const acceptedElements = Array.from(document.querySelectorAll('*')).filter((el) => {
-      return el.children.length === 0 && el.textContent?.trim() === 'Accepted';
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({
+      type: 'PROBLEM_VIEWED',
+      payload
+    }).catch(() => {
+      // Background worker might be idle
     });
+  }
+}
 
-    if (acceptedElements.length === 0) return;
+/**
+ * Scans for submission events and results
+ */
+function checkSubmissionResult(): void {
+  const result = LeetCodeDomExtractor.extractSubmissionResult();
+  if (!result) return;
 
-    // Check runtime and memory elements nearby
-    const bodyText = document.body.innerText;
-    const runtimeMatch = bodyText.match(/Runtime\s*[:\n]\s*([0-9.]+)\s*ms.*?Beats\s*([0-9.]+)%/i);
-    const memoryMatch = bodyText.match(/Memory\s*[:\n]\s*([0-9.]+)\s*MB.*?Beats\s*([0-9.]+)%/i);
+  // Debounce duplicate notifications for same result
+  if (
+    lastObservedSubmissionId === result.submissionId &&
+    lastObservedVerdict === result.verdict
+  ) {
+    return;
+  }
 
-    const runtimeMs = runtimeMatch ? parseFloat(runtimeMatch[1]) : 50;
-    const runtimePercentile = runtimeMatch ? parseFloat(runtimeMatch[2]) : 80;
-    const memoryMb = memoryMatch ? parseFloat(memoryMatch[1]) : 50;
-    const memoryBytes = Math.round(memoryMb * 1024 * 1024);
-    const memoryPercentile = memoryMatch ? parseFloat(memoryMatch[2]) : 75;
+  lastObservedSubmissionId = result.submissionId;
+  lastObservedVerdict = result.verdict;
 
-    const slug = getProblemSlug();
-    if (!slug) return;
+  const problem = LeetCodeDomExtractor.extractProblemDetails();
+  const language = LeetCodeDomExtractor.extractLanguage();
+  const code = LeetCodeDomExtractor.extractEditorCode();
 
-    const pageTitle = document.title || '';
-    const titleMatch = pageTitle.match(/^([0-9]+)?\.?\s*([^-|]+)/);
-    const questionId = titleMatch && titleMatch[1] ? titleMatch[1].trim() : '1';
-    const questionTitle = titleMatch && titleMatch[2] ? titleMatch[2].trim() : slug;
+  const submissionPayload: DetectedSubmission = {
+    submissionId: result.submissionId,
+    questionId: problem.id,
+    questionTitle: problem.title,
+    questionSlug: problem.slug,
+    difficulty: problem.difficulty,
+    language,
+    code,
+    runtimeMs: result.runtimeMs,
+    runtimePercentile: result.runtimePercentile,
+    memoryBytes: result.memoryBytes,
+    memoryPercentile: result.memoryPercentile,
+    verdict: result.verdict,
+    topicTags: problem.topicTags,
+    submittedAt: new Date().toISOString(),
+    state: 'DETECTED'
+  };
 
-    // Generate pseudo unique submission ID if not accessible in DOM
-    const submissionId = `${slug}-${Date.now().toString().slice(-6)}`;
-    if (lastObservedSubmissionId === submissionId) return;
-    lastObservedSubmissionId = submissionId;
-
-    const code = extractEditorCode();
-    const language = extractLanguage();
-    const difficulty = parseDifficulty();
-
-    const submissionPayload: LeetCodeSubmissionInput = {
-      submissionId,
-      questionId,
-      questionTitle,
-      questionSlug: slug,
-      difficulty,
-      language,
-      code,
-      runtimeMs,
-      runtimePercentile,
-      memoryBytes,
-      memoryPercentile,
-      submittedAt: new Date().toISOString()
-    };
-
-    console.log('[StreakForge] Genuine Accepted Submission detected:', submissionPayload);
-
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({
-        type: 'LEETCODE_SUBMISSION_DETECTED',
-        payload: submissionPayload
-      });
-    }
+  console.log('[StreakForge] Submission event observed:', {
+    id: submissionPayload.submissionId,
+    verdict: submissionPayload.verdict,
+    question: submissionPayload.questionTitle,
+    codeLength: submissionPayload.code.length
   });
 
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({
+      type: 'LEETCODE_SUBMISSION_DETECTED',
+      payload: submissionPayload
+    }).catch((err) => {
+      console.warn('[StreakForge] Failed to dispatch submission message to worker:', err);
+    });
+  }
+}
+
+// Observe DOM mutations
+const observer = new MutationObserver(() => {
+  reportActiveProblem();
+  checkSubmissionResult();
+});
+
+function initObserver(): void {
+  reportActiveProblem();
   observer.observe(document.body, {
     childList: true,
-    subtree: true
+    subtree: true,
+    characterData: false
   });
 }
 
-// Start observing when document is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', observeSubmissionResults);
+  document.addEventListener('DOMContentLoaded', initObserver);
 } else {
-  observeSubmissionResults();
+  initObserver();
 }
 
+// Listen for manual capture requests from Popup
+if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === 'MANUAL_CAPTURE_REQUEST') {
+      const code = LeetCodeDomExtractor.extractEditorCode();
+      const language = LeetCodeDomExtractor.extractLanguage();
+      const problem = LeetCodeDomExtractor.extractProblemDetails();
+
+      sendResponse({
+        success: true,
+        payload: {
+          code,
+          language,
+          problem
+        }
+      });
+      return true;
+    }
+  });
+}

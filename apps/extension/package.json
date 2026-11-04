@@ -4,8 +4,9 @@
   "description": "StreakForge LeetCode Synchronization Chrome Extension (Manifest V3)",
   "type": "module",
   "scripts": {
-    "build": "vite build && node -e \"require('fs').copyFileSync('manifest.json', 'dist/manifest.json')\"",
+    "build": "node generate-icons.js && vite build && node build-manifest.js",
     "dev": "vite build --watch",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

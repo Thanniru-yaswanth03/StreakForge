@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         popup: path.resolve(__dirname, 'index.html'),
+        options: path.resolve(__dirname, 'options.html'),
         'service-worker': path.resolve(__dirname, 'src/background/service-worker.ts'),
         'leetcode-observer': path.resolve(__dirname, 'src/content/leetcode-observer.ts')
       },
