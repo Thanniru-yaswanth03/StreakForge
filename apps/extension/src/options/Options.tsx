@@ -57,7 +57,7 @@ export function Options() {
       setTargetBranch(cfg.targetBranch || 'main');
       setTemplate(
         cfg.folderStructureTemplate ||
-          'leetcode-solutions/{Language}/{Topic}/{id}_{slug}{ext}'
+        'leetcode-solutions/{Language}/{Topic}/{id}_{slug}{ext}'
       );
       setArchiveFailed(cfg.archiveFailedSubmissionsLocally !== false);
       setNotifySuccess(cfg.notifyOnSuccess !== false);
@@ -242,9 +242,8 @@ export function Options() {
 
             {testResult && (
               <span
-                className={`text-xs font-medium flex items-center gap-1.5 ${
-                  testResult.success ? 'text-emerald-400' : 'text-rose-400'
-                }`}
+                className={`text-xs font-medium flex items-center gap-1.5 ${testResult.success ? 'text-emerald-400' : 'text-rose-400'
+                  }`}
               >
                 {testResult.success ? (
                   <CheckCircle2 className="w-4 h-4" />
@@ -472,3 +471,4 @@ export function Options() {
     </div>
   );
 }
+

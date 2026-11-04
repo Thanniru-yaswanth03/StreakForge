@@ -131,10 +131,24 @@ const DEMO_OVERVIEW: AnalyticsOverview = {
   todayCommitCount: 4,
   todayLeetCodeCount: 2,
   weeklyConsistencyPercent: 86,
+  weeklyActivityScore: 92,
   streakDeadlineHoursLeft: 6.5,
   totalLeetCodeSolved: 58,
   totalGitCommitsTracked: 164,
-  difficultyDistribution: { Easy: 28, Medium: 23, Hard: 7 }
+  difficultyDistribution: { Easy: 28, Medium: 23, Hard: 7 },
+  githubStreak: { currentStreak: 14, longestStreak: 42, activeDays: 45, hasSubmittedToday: true },
+  leetCodeStreak: { currentStreak: 8, longestStreak: 21, activeDays: 32, hasSubmittedToday: true },
+  localDevStreak: { currentStreak: 12, longestStreak: 30, activeDays: 40, hasSubmittedToday: true },
+  breakdown: {
+    githubCommits: 164,
+    githubPRs: 24,
+    githubIssues: 12,
+    leetCodeTotalSubmissions: 76,
+    leetCodeAccepted: 58,
+    leetCodeUniqueProblems: 54,
+    localSessions: 48,
+    maintenanceBackups: 16
+  }
 };
 
 const DEMO_AUTOMATIONS: AutomationJob[] = [

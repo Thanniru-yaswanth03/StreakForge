@@ -339,3 +339,4 @@ export class SyncManager {
     await StorageManager.setPendingQueue(remaining);
   }
 }
+

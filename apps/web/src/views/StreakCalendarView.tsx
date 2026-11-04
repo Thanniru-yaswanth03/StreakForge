@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -11,28 +11,62 @@ import {
   Laptop,
   FolderGit2,
   Clock,
-  ExternalLink
+  ExternalLink,
+  RotateCw,
+  Globe,
+  Archive,
+  GitPullRequest,
+  AlertCircle
 } from 'lucide-react';
-import type { HeatmapDay } from '@streakforge/shared-types';
+import type { HeatmapDay, ActivityRecord } from '@streakforge/shared-types';
 import { useData } from '../context/DataContext';
+import { api } from '../lib/api';
 
 export function StreakCalendarView() {
-  const { heatmap, overview } = useData();
+  const { heatmap, overview, user, refreshData } = useData();
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'GITHUB' | 'AGENT' | 'LEETCODE' | 'MAINTENANCE'>('ALL');
   const [selectedDate, setSelectedDate] = useState<HeatmapDay | null>(null);
+  const [dayRecords, setDayRecords] = useState<ActivityRecord[]>([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState<boolean>(false);
+  const [isRecalculating, setIsRecalculating] = useState<boolean>(false);
 
   // Month labels mapping
   const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 
+  // Load granular activity records when a date is selected
+  useEffect(() => {
+    if (!selectedDate?.date) return;
+    setIsLoadingRecords(true);
+    api.analytics
+      .getDayDetails(selectedDate.date)
+      .then((records) => setDayRecords(records))
+      .catch(() => setDayRecords([]))
+      .finally(() => setIsLoadingRecords(false));
+  }, [selectedDate]);
+
+  // Recalculate streaks trigger
+  const handleRecalculate = async () => {
+    setIsRecalculating(true);
+    try {
+      const res = await api.analytics.recalculate(user?.timezone);
+      alert(res.message);
+      await refreshData();
+    } catch (err: any) {
+      alert(`Recalculation failed: ${err.message}`);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
   // Filter calculations
   const filteredHeatmap = heatmap.map((d) => {
     let effectiveCount = d.count;
-    if (activeFilter === 'GITHUB') effectiveCount = d.gitCommits;
-    else if (activeFilter === 'LEETCODE') effectiveCount = d.leetCodeSubmissions;
-    else if (activeFilter === 'AGENT') effectiveCount = Math.floor(d.gitCommits * 0.7);
-    else if (activeFilter === 'MAINTENANCE') effectiveCount = d.count > 4 ? 1 : 0;
+    if (activeFilter === 'GITHUB') effectiveCount = d.verifiedGitHub?.commits ?? d.gitCommits;
+    else if (activeFilter === 'LEETCODE') effectiveCount = d.leetCode?.submissions ?? d.leetCodeSubmissions;
+    else if (activeFilter === 'AGENT') effectiveCount = d.localDev?.sessions ?? Math.floor(d.gitCommits * 0.7);
+    else if (activeFilter === 'MAINTENANCE') effectiveCount = d.maintenance?.backups ?? 0;
 
     let level: 0 | 1 | 2 | 3 | 4 = 0;
     if (effectiveCount >= 5) level = 4;
@@ -88,32 +122,49 @@ export function StreakCalendarView() {
               Verified Contribution Calendar
             </h2>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-theme-accent-subtle text-theme-accent">
-              {totalFilteredCount} total events in {selectedYear}
+              {totalFilteredCount} events in {selectedYear}
             </span>
           </div>
-          <p className="text-xs text-theme-muted mt-0.5">
-            Differentiating official GitHub contributions, local desktop agent sessions, and LeetCode activity
-          </p>
+          <div className="flex items-center gap-2 text-xs text-theme-muted mt-1">
+            <span className="flex items-center gap-1 font-mono text-[11px]">
+              <Globe className="w-3 h-3 text-theme-accent" />
+              Timezone: <strong className="text-theme-secondary">{user?.timezone || 'UTC'}</strong>
+            </span>
+            <span>•</span>
+            <span>Differentiating official GitHub contributions, local desktop agent sessions, and LeetCode activity</span>
+          </div>
         </div>
 
-        {/* Year Selector */}
-        <div className="flex items-center gap-2">
+        {/* Action Controls & Year Selector */}
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setSelectedYear((y) => y - 1)}
-            className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition"
-            title="Previous Year"
+            onClick={handleRecalculate}
+            disabled={isRecalculating}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded-lg text-xs font-medium text-theme-primary transition disabled:opacity-50"
+            title="Recalculate streak history and daily snapshots"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <RotateCw className={`w-3.5 h-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
+            <span>Recalculate Streaks</span>
           </button>
-          <span className="font-bold text-sm text-theme-primary px-2">{selectedYear}</span>
-          <button
-            onClick={() => setSelectedYear((y) => Math.min(2026, y + 1))}
-            disabled={selectedYear >= 2026}
-            className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition disabled:opacity-40"
-            title="Next Year"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSelectedYear((y) => y - 1)}
+              className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition"
+              title="Previous Year"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-bold text-sm text-theme-primary px-2">{selectedYear}</span>
+            <button
+              onClick={() => setSelectedYear((y) => Math.min(2026, y + 1))}
+              disabled={selectedYear >= 2026}
+              className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition disabled:opacity-40"
+              title="Next Year"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -179,7 +230,7 @@ export function StreakCalendarView() {
                         title={`${day.date}: ${day.count} activities`}
                         className={`w-3 h-3 rounded-xs transition-all ${getCellColor(
                           day.level
-                        )} ${isSelected ? 'ring-2 ring-indigo-500 scale-125 z-10' : 'hover:scale-125'}`}
+                        )} ${isSelected ? 'ring-2 ring-emerald-500 scale-125 z-10' : 'hover:scale-125'}`}
                       />
                     );
                   })}
@@ -205,64 +256,121 @@ export function StreakCalendarView() {
           </div>
 
           <span className="text-[11px] text-theme-muted">
-            Click any square to inspect granular activity records for that day.
+            Click any square to inspect verified underlying activity records for that date.
           </span>
         </div>
       </div>
 
-      {/* Daily Detail Panel (Opens on date selection or shows today by default) */}
-      <div className="bg-theme-surface border border-theme-border rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4 border-b border-theme-border pb-3">
+      {/* Daily Detail Panel: Granular Activity Records */}
+      <div className="bg-theme-surface border border-theme-border rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-theme-border pb-3">
           <div>
             <h3 className="text-sm font-bold text-theme-primary">
-              Daily Activity Breakdown: {selectedDate?.date || 'Today (Nov 4, 2026)'}
+              Daily Activity Breakdown: {selectedDate?.date || 'Select a Date Above'}
             </h3>
             <p className="text-xs text-theme-muted mt-0.5">
-              Granular audit log of genuine coding actions recorded for this date
+              Granular audit log of genuine coding events verified in {user?.timezone || 'UTC'} calendar day
             </p>
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-theme-accent-subtle text-theme-accent">
-            {selectedDate?.count || 4} Total Verified Actions
+            {selectedDate?.count || 0} Total Actions
           </span>
         </div>
 
-        {/* Detailed action list */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-500">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>LeetCode Submissions ({selectedDate?.leetCodeSubmissions || 2})</span>
+        {/* Summary Metric Badges */}
+        {selectedDate && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg">
+              <div className="text-[11px] text-theme-muted font-semibold uppercase">GitHub</div>
+              <div className="text-lg font-bold text-indigo-400 mt-0.5">
+                {selectedDate.verifiedGitHub?.commits ?? selectedDate.gitCommits} Commits
+              </div>
+              <div className="text-[11px] text-theme-muted">
+                {selectedDate.verifiedGitHub?.prs || 0} PRs • {selectedDate.verifiedGitHub?.issues || 0} Issues
+              </div>
             </div>
-            <ul className="text-xs text-theme-secondary space-y-1 pt-1">
-              <li className="truncate">• [146] LRU Cache (TypeScript)</li>
-              <li className="truncate">• [206] Reverse Linked List (Python)</li>
-            </ul>
+
+            <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg">
+              <div className="text-[11px] text-theme-muted font-semibold uppercase">LeetCode</div>
+              <div className="text-lg font-bold text-emerald-400 mt-0.5">
+                {selectedDate.leetCode?.accepted ?? selectedDate.leetCodeSubmissions} Solved
+              </div>
+              <div className="text-[11px] text-theme-muted">
+                {selectedDate.leetCode?.uniqueProblems || 0} Unique Problems
+              </div>
+            </div>
+
+            <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg">
+              <div className="text-[11px] text-theme-muted font-semibold uppercase">Local Dev</div>
+              <div className="text-lg font-bold text-amber-400 mt-0.5">
+                {selectedDate.localDev?.sessions || 0} Sessions
+              </div>
+              <div className="text-[11px] text-theme-muted">
+                {selectedDate.localDev?.filesChanged || 0} Files Modified
+              </div>
+            </div>
+
+            <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg">
+              <div className="text-[11px] text-theme-muted font-semibold uppercase">Maintenance</div>
+              <div className="text-lg font-bold text-purple-400 mt-0.5">
+                {selectedDate.maintenance?.backups || 0} Backups
+              </div>
+              <div className="text-[11px] text-theme-muted">Excluded from streak</div>
+            </div>
+          </div>
+        )}
+
+        {/* Underlying Activity Records List */}
+        <div className="space-y-2 pt-2">
+          <div className="text-xs font-bold text-theme-primary uppercase tracking-wider">
+            Verified Event Records:
           </div>
 
-          <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-500">
-              <GitCommit className="w-4 h-4" />
-              <span>GitHub Commits ({selectedDate?.gitCommits || 2})</span>
+          {isLoadingRecords ? (
+            <div className="text-center py-6 text-xs text-theme-muted">Loading activity events...</div>
+          ) : dayRecords.length === 0 ? (
+            <div className="text-center py-6 text-xs text-theme-muted bg-theme-elevated/40 rounded-xl border border-dashed border-theme-border">
+              {selectedDate
+                ? `No granular records stored for ${selectedDate.date}. Click "Recalculate Streaks" to synchronize.`
+                : 'Click any square on the 365-day calendar to inspect underlying records.'}
             </div>
-            <ul className="text-xs text-theme-secondary space-y-1 pt-1">
-              <li className="truncate">• feat(git-engine): add security leak scanner</li>
-              <li className="truncate">• refactor(auth): token encryption verification</li>
-            </ul>
-          </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {dayRecords.map((rec) => (
+                <div
+                  key={rec.id}
+                  className="p-3 bg-theme-elevated border border-theme-border rounded-lg flex items-center justify-between text-xs font-mono"
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    {rec.category === 'GITHUB' && <GitCommit className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
+                    {rec.category === 'LEETCODE' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                    {rec.category === 'LOCAL_DEV' && <Laptop className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+                    {rec.category === 'MAINTENANCE' && <Archive className="w-4 h-4 text-purple-400 flex-shrink-0" />}
 
-          <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg space-y-1">
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-500">
-              <Laptop className="w-4 h-4" />
-              <span>Desktop Agent Telemetry</span>
+                    <div className="truncate">
+                      <div className="font-semibold text-theme-primary truncate">
+                        {rec.reference}
+                      </div>
+                      <div className="text-[11px] text-theme-muted font-sans">
+                        {rec.eventType} • Source: {rec.source}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {rec.verificationStatus}
+                    </span>
+                    <span className="text-[11px] text-theme-muted">
+                      {new Date(rec.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="text-xs text-theme-secondary pt-1">
-              <div>Session: 195 minutes active</div>
-              <div className="text-[11px] text-theme-muted">3 repositories monitored clean</div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-

@@ -96,3 +96,4 @@ export class StorageManager {
     return res.transitionLogs || [];
   }
 }
+

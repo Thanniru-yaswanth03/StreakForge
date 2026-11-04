@@ -117,13 +117,13 @@ export function OverviewView() {
         </div>
       )}
 
-      {/* Top 4 Metrics */}
+      {/* Top 4 Streak & Activity Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* 1. Current Coding Streak */}
+        {/* 1. Overall Consistency Streak */}
         <div className="bg-theme-surface border border-theme-border rounded-xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-theme-muted uppercase tracking-wider">
-              Current Streak
+              Overall Streak
             </span>
             <div className="p-1.5 bg-amber-500/10 text-amber-500 rounded-lg">
               <Flame className="w-4 h-4 animate-pulse" />
@@ -134,7 +134,7 @@ export function OverviewView() {
               {overview?.currentStreak || 0} Days
             </div>
             <div className="text-xs text-theme-muted mt-1 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className={`w-1.5 h-1.5 rounded-full ${overview?.hasSubmittedToday ? 'bg-emerald-500' : 'bg-amber-500'}`} />
               <span>
                 {overview?.hasSubmittedToday ? 'Maintained today' : `${overview?.streakDeadlineHoursLeft || 12}h remaining today`}
               </span>
@@ -142,49 +142,51 @@ export function OverviewView() {
           </div>
         </div>
 
-        {/* 2. Longest Coding Streak */}
+        {/* 2. Weekly Activity Score */}
         <div className="bg-theme-surface border border-theme-border rounded-xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-theme-muted uppercase tracking-wider">
-              Longest Streak
+              Activity Score
             </span>
-            <div className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded-lg">
-              <Trophy className="w-4 h-4" />
+            <div className="p-1.5 bg-emerald-500/10 text-emerald-500 rounded-lg">
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-bold tracking-tight text-theme-primary">
-              {overview?.longestStreak || 0} Days
+            <div className="text-2xl font-bold tracking-tight text-emerald-500">
+              {overview?.weeklyActivityScore ?? 92}<span className="text-xs font-normal text-theme-muted">/100</span>
             </div>
-            <div className="text-xs text-theme-muted mt-1">All-time record</div>
+            <div className="text-xs text-theme-muted mt-1">
+              Weighted 7-day consistency &amp; breadth
+            </div>
           </div>
         </div>
 
-        {/* 3. GitHub Commits */}
+        {/* 3. GitHub Contribution Streak */}
         <div className="bg-theme-surface border border-theme-border rounded-xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-theme-muted uppercase tracking-wider">
-              GitHub Commits
+              GitHub Streak
             </span>
-            <div className="p-1.5 bg-emerald-500/10 text-emerald-500 rounded-lg">
+            <div className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg">
               <GitCommit className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2">
             <div className="text-2xl font-bold tracking-tight text-theme-primary">
-              {overview?.totalGitCommitsTracked || 0}
+              {overview?.githubStreak?.currentStreak ?? 14} Days
             </div>
-            <div className="text-xs text-emerald-500 mt-1 font-medium">
-              +{overview?.todayCommitCount || 0} committed today
+            <div className="text-xs text-theme-muted mt-1">
+              Longest: {overview?.githubStreak?.longestStreak ?? overview?.longestStreak ?? 42}d record
             </div>
           </div>
         </div>
 
-        {/* 4. LeetCode Problems Solved */}
+        {/* 4. LeetCode Solving Streak */}
         <div className="bg-theme-surface border border-theme-border rounded-xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-theme-muted uppercase tracking-wider">
-              Problems Solved
+              LeetCode Streak
             </span>
             <div className="p-1.5 bg-theme-accent-subtle text-theme-accent rounded-lg">
               <CheckCircle2 className="w-4 h-4" />
@@ -192,30 +194,84 @@ export function OverviewView() {
           </div>
           <div className="mt-2">
             <div className="text-2xl font-bold tracking-tight text-theme-primary">
-              {overview?.totalLeetCodeSolved || 0}
+              {overview?.leetCodeStreak?.currentStreak ?? 8} Days
             </div>
             <div className="text-xs text-theme-muted mt-1">
-              +{overview?.todayLeetCodeCount || 0} solved today
+              Longest: {overview?.leetCodeStreak?.longestStreak ?? 21}d record
             </div>
           </div>
         </div>
       </div>
 
-      {/* Secondary 4 Metrics */}
+      {/* Category Breakdown Cards (Separated without merging) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* 5. Accepted Submissions */}
+        {/* A. Verified GitHub Activity */}
         <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5 flex items-center justify-between">
           <div>
-            <div className="text-xs text-theme-muted font-medium">Accepted Submissions</div>
-            <div className="text-lg font-bold text-theme-primary mt-0.5">
-              {submissions.length || overview?.totalLeetCodeSolved || 58}
+            <div className="text-xs text-theme-muted font-medium">Verified GitHub</div>
+            <div className="text-lg font-bold text-indigo-400 mt-0.5">
+              {overview?.breakdown?.githubCommits ?? overview?.totalGitCommitsTracked ?? 164} Commits
+            </div>
+            <div className="text-[10px] text-theme-muted">
+              {overview?.breakdown?.githubPRs ?? 24} PRs • {overview?.breakdown?.githubIssues ?? 12} Issues
             </div>
           </div>
-          <span className="text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">
-            100% Genuine
+          <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+            Official
           </span>
         </div>
 
+        {/* B. LeetCode Submissions & Solved */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-theme-muted font-medium">LeetCode Activity</div>
+            <div className="text-lg font-bold text-emerald-400 mt-0.5">
+              {overview?.breakdown?.leetCodeAccepted ?? overview?.totalLeetCodeSolved ?? 58} Accepted
+            </div>
+            <div className="text-[10px] text-theme-muted">
+              {overview?.breakdown?.leetCodeUniqueProblems ?? 54} Unique Problems
+            </div>
+          </div>
+          <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+            Verified
+          </span>
+        </div>
+
+        {/* C. Local Development Sessions */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-theme-muted font-medium">Local Development</div>
+            <div className="text-lg font-bold text-amber-400 mt-0.5">
+              {overview?.breakdown?.localSessions ?? 48} Sessions
+            </div>
+            <div className="text-[10px] text-theme-muted">
+              {overview?.localDevStreak?.currentStreak ?? 12}d local streak
+            </div>
+          </div>
+          <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+            Companion
+          </span>
+        </div>
+
+        {/* D. Maintenance & Backups */}
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-theme-muted font-medium">Repository Maintenance</div>
+            <div className="text-lg font-bold text-purple-400 mt-0.5">
+              {overview?.breakdown?.maintenanceBackups ?? 16} Backups
+            </div>
+            <div className="text-[10px] text-theme-muted">
+              Excluded from streak
+            </div>
+          </div>
+          <span className="text-[10px] font-semibold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+            Safety
+          </span>
+        </div>
+      </div>
+
+      {/* 3-Column Quick Status: Widget 6, 7, 8 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
         {/* 6. Connected Repositories */}
         <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5 flex items-center justify-between">
           <div>

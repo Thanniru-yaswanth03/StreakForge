@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   CheckCheck,
@@ -10,9 +10,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   Laptop,
-  ShieldCheck
+  ShieldCheck,
+  Clock,
+  RotateCw
 } from 'lucide-react';
+import type { StreakReminder } from '@streakforge/shared-types';
 import { useData } from '../context/DataContext';
+import { api } from '../lib/api';
 
 export function NotificationsView() {
   const {
@@ -22,6 +26,17 @@ export function NotificationsView() {
     clearNotifications
   } = useData();
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'WARNINGS'>('ALL');
+  const [reminders, setReminders] = useState<StreakReminder[]>([]);
+  const [isLoadingReminders, setIsLoadingReminders] = useState<boolean>(false);
+
+  useEffect(() => {
+    setIsLoadingReminders(true);
+    api.analytics
+      .getReminders()
+      .then((rems) => setReminders(rems))
+      .catch(() => setReminders([]))
+      .finally(() => setIsLoadingReminders(false));
+  }, []);
 
   const filtered = notifications.filter((n) => {
     if (filter === 'UNREAD') return !n.isRead;
@@ -99,6 +114,59 @@ export function NotificationsView() {
           </button>
         ))}
       </div>
+
+      {/* Active Streak Reminders Engine Section */}
+      {reminders.length > 0 && (
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-theme-primary uppercase tracking-wider flex items-center gap-1.5">
+              <Flame className="w-4 h-4 text-amber-500 animate-pulse" />
+              Active Streak Reminders ({reminders.length})
+            </h3>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              TIMEZONE_AWARE_WATCHDOG
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {reminders.map((r) => (
+              <div
+                key={r.id}
+                className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                  r.urgency === 'CRITICAL'
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                    : r.urgency === 'WARNING'
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    : 'bg-theme-elevated border-theme-border text-theme-secondary'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {r.type === 'NO_ACTIVITY_TODAY' && <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+                  {r.type === 'PENDING_LEETCODE_EXPORT' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                  {r.type === 'FAILED_GITHUB_SYNC' && <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />}
+                  {r.type === 'LOCAL_AGENT_DISCONNECTED' && <Laptop className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
+                  {r.type === 'UPCOMING_BACKUP' && <RotateCw className="w-4 h-4 text-purple-400 flex-shrink-0" />}
+
+                  <div className="truncate">
+                    <div className="font-semibold text-theme-primary truncate">{r.title}</div>
+                    <div className="text-[11px] text-theme-muted mt-0.5">{r.message}</div>
+                  </div>
+                </div>
+
+                {r.actionLink && (
+                  <a
+                    href={r.actionLink}
+                    className="flex-shrink-0 px-2.5 py-1 bg-theme-surface hover:bg-theme-elevated border border-theme-border rounded-lg text-xs font-semibold text-theme-primary transition flex items-center gap-1"
+                  >
+                    <span>Inspect</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Notifications List */}
       <div className="bg-theme-surface border border-theme-border rounded-xl overflow-hidden divide-y divide-theme-border">

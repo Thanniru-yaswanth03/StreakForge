@@ -17,7 +17,9 @@ import type {
   RepoHealthDiagnosticsResult,
   SyncMode,
   SyncProposal,
-  WatchedRepositoryConfig
+  WatchedRepositoryConfig,
+  ActivityRecord,
+  StreakReminder
 } from '@streakforge/shared-types';
 
 export const LOCAL_AGENT_URL = 'http://127.0.0.1:4545';
@@ -144,7 +146,15 @@ export const api = {
   analytics: {
     getOverview: () => apiFetch<AnalyticsOverview>('/analytics/overview'),
     getHeatmap: (year?: number) =>
-      apiFetch<HeatmapDay[]>(year ? `/analytics/heatmap?year=${year}` : '/analytics/heatmap')
+      apiFetch<HeatmapDay[]>(year ? `/analytics/heatmap?year=${year}` : '/analytics/heatmap'),
+    getReminders: () => apiFetch<StreakReminder[]>('/analytics/reminders'),
+    getDayDetails: (date: string) =>
+      apiFetch<ActivityRecord[]>(`/analytics/day-details?date=${date}`),
+    recalculate: (timezone?: string) =>
+      apiFetch<{ message: string; daysProcessed: number }>('/analytics/recalculate', {
+        method: 'POST',
+        body: JSON.stringify({ timezone })
+      })
   },
   repos: {
     list: () =>

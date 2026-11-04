@@ -30,3 +30,4 @@ if (fs.existsSync(srcIcons)) {
   }
   console.log(`Copied ${files.length} icon(s) to dist/icons/`);
 }
+

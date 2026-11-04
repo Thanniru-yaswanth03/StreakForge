@@ -282,6 +282,41 @@ export interface AgentHeartbeatInput {
   recentActivities?: AgentActivityReport[];
 }
 
+export type ActivityCategory = 'GITHUB' | 'LEETCODE' | 'LOCAL_DEV' | 'MAINTENANCE';
+
+export type ActivityEventType =
+  | 'GITHUB_COMMIT'
+  | 'GITHUB_PR'
+  | 'GITHUB_ISSUE'
+  | 'GITHUB_OTHER'
+  | 'LEETCODE_SUBMISSION'
+  | 'LEETCODE_ACCEPTED'
+  | 'LOCAL_SESSION'
+  | 'LOCAL_REPO_CHANGE'
+  | 'MAINTENANCE_BACKUP'
+  | 'MAINTENANCE_DEPENDENCY'
+  | 'MAINTENANCE_DOCS';
+
+export interface ActivityRecord {
+  id: string;
+  userId: string;
+  category: ActivityCategory;
+  eventType: ActivityEventType;
+  source: 'GITHUB' | 'LEETCODE' | 'LOCAL_AGENT' | 'SYSTEM';
+  timestamp: string; // UTC ISO string
+  date: string; // YYYY-MM-DD in user's timezone
+  reference: string; // repo full name or problem slug
+  verificationStatus: 'VERIFIED' | 'UNVERIFIED' | 'REJECTED';
+  metadata?: Record<string, any>;
+}
+
+export interface StreakMetric {
+  currentStreak: number;
+  longestStreak: number;
+  activeDays: number;
+  hasSubmittedToday?: boolean;
+}
+
 export interface AnalyticsOverview {
   currentStreak: number;
   longestStreak: number;
@@ -289,6 +324,7 @@ export interface AnalyticsOverview {
   todayCommitCount: number;
   todayLeetCodeCount: number;
   weeklyConsistencyPercent: number;
+  weeklyActivityScore: number; // 0 to 100 comprehensive activity score
   streakDeadlineHoursLeft: number;
   totalLeetCodeSolved: number;
   totalGitCommitsTracked: number;
@@ -296,6 +332,19 @@ export interface AnalyticsOverview {
     Easy: number;
     Medium: number;
     Hard: number;
+  };
+  githubStreak: StreakMetric;
+  leetCodeStreak: StreakMetric;
+  localDevStreak: StreakMetric;
+  breakdown: {
+    githubCommits: number;
+    githubPRs: number;
+    githubIssues: number;
+    leetCodeTotalSubmissions: number;
+    leetCodeAccepted: number;
+    leetCodeUniqueProblems: number;
+    localSessions: number;
+    maintenanceBackups: number;
   };
 }
 
@@ -305,6 +354,40 @@ export interface HeatmapDay {
   gitCommits: number;
   leetCodeSubmissions: number;
   level: 0 | 1 | 2 | 3 | 4;
+  verifiedGitHub?: {
+    commits: number;
+    prs: number;
+    issues: number;
+  };
+  leetCode?: {
+    submissions: number;
+    accepted: number;
+    uniqueProblems: number;
+  };
+  localDev?: {
+    sessions: number;
+    filesChanged: number;
+  };
+  maintenance?: {
+    backups: number;
+  };
+  events?: ActivityRecord[];
+}
+
+export interface StreakReminder {
+  id: string;
+  type:
+    | 'NO_ACTIVITY_TODAY'
+    | 'PENDING_LEETCODE_EXPORT'
+    | 'FAILED_GITHUB_SYNC'
+    | 'LOCAL_AGENT_DISCONNECTED'
+    | 'UPCOMING_BACKUP';
+  title: string;
+  message: string;
+  urgency: 'INFO' | 'WARNING' | 'CRITICAL';
+  timestamp: string;
+  dueInHours?: number;
+  actionLink?: string;
 }
 
 export interface AuditLogQuery {

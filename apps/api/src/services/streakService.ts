@@ -1,53 +1,147 @@
 import { Types } from 'mongoose';
 import { DailyActivitySnapshot } from '../models/DailyActivitySnapshot.js';
+import { ActivityRecord } from '../models/ActivityRecord.js';
 import { User } from '../models/User.js';
 import { LeetCodeSubmission } from '../models/LeetCodeSubmission.js';
-import type { AnalyticsOverview, HeatmapDay } from '@streakforge/shared-types';
+import { StreakEngine, DailySummaryInput } from './streakEngine.js';
+import type {
+  AnalyticsOverview,
+  HeatmapDay,
+  ActivityCategory,
+  ActivityEventType
+} from '@streakforge/shared-types';
 
 /**
  * Format a Date to YYYY-MM-DD in the given IANA timezone
  */
 export function getDateStringInTimezone(date: Date, timezone: string = 'UTC'): string {
-  try {
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    return formatter.format(date); // Formats as YYYY-MM-DD
-  } catch {
-    return date.toISOString().split('T')[0];
-  }
+  return StreakEngine.formatDateInTimezone(date, timezone);
 }
 
 /**
  * Calculate hours remaining until midnight in the given timezone
  */
-export function getHoursUntilMidnight(timezone: string = 'UTC'): number {
-  try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: 'numeric',
-      minute: 'numeric',
-      second: 'numeric',
-      hour12: false
-    });
-    const parts = formatter.formatToParts(now);
-    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
-    const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+export function getHoursUntilMidnight(timezone: string = 'UTC', now: Date = new Date()): number {
+  return StreakEngine.getHoursUntilMidnight(timezone, now);
+}
 
-    const minutesPassed = hour * 60 + minute;
-    const minutesLeft = 24 * 60 - minutesPassed;
-    return parseFloat((minutesLeft / 60).toFixed(1));
-  } catch {
-    return 12.0;
-  }
+export interface RecordActivityInput {
+  userId: string | Types.ObjectId;
+  category: ActivityCategory;
+  eventType: ActivityEventType;
+  source: 'GITHUB' | 'LEETCODE' | 'LOCAL_AGENT' | 'SYSTEM';
+  reference: string;
+  verificationStatus?: 'VERIFIED' | 'UNVERIFIED' | 'REJECTED';
+  metadata?: Record<string, any>;
+  timestamp?: Date;
+  eventId?: string;
 }
 
 /**
- * Record a genuine activity (LeetCode solve or Git commit) into the daily snapshot
+ * Record a granular, auditable activity event into the immutable ledger
+ * and update the daily activity snapshot with category-separated stats.
+ */
+export async function recordActivityEvent(input: RecordActivityInput): Promise<void> {
+  const user = await User.findById(input.userId);
+  const tz = user?.timezone || 'UTC';
+  const timestamp = input.timestamp || new Date();
+  const dateStr = StreakEngine.formatDateInTimezone(timestamp, tz);
+  const goal = user?.streakGoalPerDay || 1;
+
+  // 1. Generate idempotent event ID
+  const eventId =
+    input.eventId ||
+    `${input.userId.toString()}:${input.source}:${input.eventType}:${input.reference}:${timestamp.getTime()}`;
+
+  // 2. Persist ActivityRecord (idempotent upsert)
+  const existingRecord = await ActivityRecord.findOne({
+    userId: new Types.ObjectId(input.userId.toString()),
+    id: eventId
+  });
+
+  if (existingRecord) {
+    return; // Already ingested, ignore duplicate
+  }
+
+  await ActivityRecord.create({
+    id: eventId,
+    userId: new Types.ObjectId(input.userId.toString()),
+    category: input.category,
+    eventType: input.eventType,
+    source: input.source,
+    timestamp,
+    date: dateStr,
+    reference: input.reference,
+    verificationStatus: input.verificationStatus || 'VERIFIED',
+    metadata: input.metadata || {}
+  });
+
+  // 3. Update DailyActivitySnapshot
+  const incFields: Record<string, number> = {};
+
+  if (input.category === 'GITHUB') {
+    if (input.eventType === 'GITHUB_COMMIT') {
+      incFields['github.commits'] = 1;
+      incFields['gitCommitCount'] = 1;
+    } else if (input.eventType === 'GITHUB_PR') {
+      incFields['github.prs'] = 1;
+    } else if (input.eventType === 'GITHUB_ISSUE') {
+      incFields['github.issues'] = 1;
+    } else {
+      incFields['github.other'] = 1;
+    }
+    incFields['totalActivities'] = 1;
+  } else if (input.category === 'LEETCODE') {
+    incFields['leetcode.submissions'] = 1;
+    incFields['leetCodeCount'] = 1;
+    if (input.eventType === 'LEETCODE_ACCEPTED' || input.metadata?.isAccepted) {
+      incFields['leetcode.accepted'] = 1;
+    }
+    if (input.metadata?.isUniqueProblem) {
+      incFields['leetcode.uniqueProblems'] = 1;
+    }
+    incFields['totalActivities'] = 1;
+  } else if (input.category === 'LOCAL_DEV') {
+    incFields['localDev.sessions'] = 1;
+    incFields['localDev.filesChanged'] = input.metadata?.filesChanged || 1;
+    incFields['totalActivities'] = 1;
+  } else if (input.category === 'MAINTENANCE') {
+    if (input.eventType === 'MAINTENANCE_BACKUP') {
+      incFields['maintenance.backups'] = 1;
+    } else if (input.eventType === 'MAINTENANCE_DEPENDENCY') {
+      incFields['maintenance.dependencyUpdates'] = 1;
+    } else {
+      incFields['maintenance.docsSync'] = 1;
+    }
+    // Maintenance excluded from coding streak criteria
+  }
+
+  const snapshot = await DailyActivitySnapshot.findOneAndUpdate(
+    { userId: new Types.ObjectId(input.userId.toString()), date: dateStr },
+    {
+      $inc: incFields,
+      ...(input.metadata?.language ? { $addToSet: { languagesUsed: input.metadata.language } } : {})
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  // Update streak eligibility flags
+  const ghTotal = (snapshot.github?.commits || 0) + (snapshot.github?.prs || 0) + (snapshot.github?.issues || 0);
+  const lcAccepted = snapshot.leetcode?.accepted || snapshot.leetCodeCount || 0;
+  const localSessions = snapshot.localDev?.sessions || 0;
+  const codingTotal = ghTotal + lcAccepted + localSessions;
+
+  snapshot.githubStreakEligible = ghTotal > 0;
+  snapshot.leetCodeStreakEligible = lcAccepted > 0;
+  snapshot.localDevStreakEligible = localSessions > 0;
+  snapshot.overallStreakEligible = codingTotal >= goal;
+  snapshot.streakMaintained = codingTotal >= goal;
+
+  await snapshot.save();
+}
+
+/**
+ * Backward-compatible helper for recording daily activity
  */
 export async function recordDailyActivity(
   userId: string | Types.ObjectId,
@@ -55,108 +149,84 @@ export async function recordDailyActivity(
   language?: string,
   activityDate: Date = new Date()
 ): Promise<void> {
-  const user = await User.findById(userId);
-  const tz = user?.timezone || 'UTC';
-  const dateStr = getDateStringInTimezone(activityDate, tz);
-  const goal = user?.streakGoalPerDay || 1;
+  const category: ActivityCategory = type === 'LEETCODE' ? 'LEETCODE' : 'GITHUB';
+  const eventType: ActivityEventType = type === 'LEETCODE' ? 'LEETCODE_ACCEPTED' : 'GITHUB_COMMIT';
 
-  const snapshot = await DailyActivitySnapshot.findOneAndUpdate(
-    { userId: new Types.ObjectId(userId.toString()), date: dateStr },
-    {
-      $inc: {
-        gitCommitCount: type === 'GIT_COMMIT' ? 1 : 0,
-        leetCodeCount: type === 'LEETCODE' ? 1 : 0,
-        totalActivities: 1
-      },
-      ...(language ? { $addToSet: { languagesUsed: language } } : {})
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  if (snapshot.totalActivities >= goal && !snapshot.streakMaintained) {
-    snapshot.streakMaintained = true;
-    await snapshot.save();
-  }
+  await recordActivityEvent({
+    userId,
+    category,
+    eventType,
+    source: type === 'LEETCODE' ? 'LEETCODE' : 'GITHUB',
+    reference: type === 'LEETCODE' ? 'leetcode-submission' : 'git-commit',
+    metadata: { language, isAccepted: true },
+    timestamp: activityDate
+  });
 }
 
 /**
- * Compute current streak, longest streak, and consistency overview
+ * Compute current streak, longest streak, category streaks, and consistency overview
  */
-export async function getStreakOverview(userId: string | Types.ObjectId): Promise<AnalyticsOverview> {
+export async function getStreakOverview(
+  userId: string | Types.ObjectId
+): Promise<AnalyticsOverview> {
   const user = await User.findById(userId);
   const tz = user?.timezone || 'UTC';
-  const todayStr = getDateStringInTimezone(new Date(), tz);
+  const todayStr = StreakEngine.formatDateInTimezone(new Date(), tz);
+  const goal = user?.streakGoalPerDay || 1;
 
   const snapshots = await DailyActivitySnapshot.find({
     userId: new Types.ObjectId(userId.toString())
   }).sort({ date: -1 });
 
-  const snapshotMap = new Map<string, boolean>();
-  let totalGitCommits = 0;
+  // Map to DailySummaryInput
+  const summaries: DailySummaryInput[] = snapshots.map((s) => ({
+    date: s.date,
+    github: s.github,
+    leetcode: s.leetcode,
+    localDev: s.localDev,
+    maintenance: s.maintenance,
+    gitCommitCount: s.gitCommitCount,
+    leetCodeCount: s.leetCodeCount,
+    totalActivities: s.totalActivities,
+    streakMaintained: s.streakMaintained || s.overallStreakEligible
+  }));
+
+  // Separate streak calculations
+  const overallStreak = StreakEngine.calculateOverallStreak(summaries, todayStr, goal);
+  const githubStreak = StreakEngine.calculateGitHubStreak(summaries, todayStr);
+  const leetCodeStreak = StreakEngine.calculateLeetCodeStreak(summaries, todayStr);
+  const localDevStreak = StreakEngine.calculateLocalDevStreak(summaries, todayStr);
+  const weeklyActivityScore = StreakEngine.calculateWeeklyActivityScore(summaries, todayStr);
+
+  // Today activity checks
   let todayCommitCount = 0;
   let todayLeetCodeCount = 0;
+  let totalGitCommits = 0;
+  let totalPRs = 0;
+  let totalIssues = 0;
+  let totalLeetCodeSubmissions = 0;
+  let totalLeetCodeAccepted = 0;
+  let totalUniqueProblems = 0;
+  let totalLocalSessions = 0;
+  let totalBackups = 0;
 
   for (const s of snapshots) {
-    snapshotMap.set(s.date, s.streakMaintained);
-    totalGitCommits += s.gitCommitCount;
+    const ghCommits = s.github?.commits ?? s.gitCommitCount ?? 0;
+    const lcSubs = s.leetcode?.submissions ?? s.leetCodeCount ?? 0;
+
+    totalGitCommits += ghCommits;
+    totalPRs += s.github?.prs ?? 0;
+    totalIssues += s.github?.issues ?? 0;
+    totalLeetCodeSubmissions += lcSubs;
+    totalLeetCodeAccepted += s.leetcode?.accepted ?? lcSubs;
+    totalUniqueProblems += s.leetcode?.uniqueProblems ?? (s.leetcode?.accepted ? 1 : 0);
+    totalLocalSessions += s.localDev?.sessions ?? 0;
+    totalBackups += s.maintenance?.backups ?? 0;
+
     if (s.date === todayStr) {
-      todayCommitCount = s.gitCommitCount;
-      todayLeetCodeCount = s.leetCodeCount;
+      todayCommitCount = ghCommits;
+      todayLeetCodeCount = s.leetcode?.accepted ?? lcSubs;
     }
-  }
-
-  const hasSubmittedToday = snapshotMap.get(todayStr) || false;
-
-  // Calculate current streak
-  let currentStreak = 0;
-  const cursorDate = new Date();
-
-  // If today hasn't been completed yet, check if yesterday was completed
-  if (!hasSubmittedToday) {
-    cursorDate.setDate(cursorDate.getDate() - 1);
-  }
-
-  while (true) {
-    const curStr = getDateStringInTimezone(cursorDate, tz);
-    if (snapshotMap.get(curStr)) {
-      currentStreak++;
-      cursorDate.setDate(cursorDate.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-
-  // Calculate longest streak in history
-  let longestStreak = 0;
-  let runningStreak = 0;
-
-  const sortedAscending = [...snapshots].reverse();
-  let prevDate: Date | null = null;
-
-  for (const snap of sortedAscending) {
-    if (snap.streakMaintained) {
-      const snapDate = new Date(snap.date + 'T00:00:00Z');
-      if (prevDate) {
-        const diffDays = Math.round(
-          (snapDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (diffDays === 1) {
-          runningStreak++;
-        } else {
-          runningStreak = 1;
-        }
-      } else {
-        runningStreak = 1;
-      }
-      prevDate = snapDate;
-      if (runningStreak > longestStreak) {
-        longestStreak = runningStreak;
-      }
-    }
-  }
-
-  if (currentStreak > longestStreak) {
-    longestStreak = currentStreak;
   }
 
   // Difficulty distribution
@@ -172,34 +242,51 @@ export async function getStreakOverview(userId: string | Types.ObjectId): Promis
     }
   }
 
-  // Weekly consistency (last 7 days)
+  // Trailing 7 days consistency percent
+  const snapMap = new Map<string, boolean>();
+  for (const s of summaries) {
+    snapMap.set(s.date, s.streakMaintained || false);
+  }
+
   let activeDaysLast7 = 0;
-  const weekCursor = new Date();
   for (let i = 0; i < 7; i++) {
-    const dStr = getDateStringInTimezone(weekCursor, tz);
-    if (snapshotMap.get(dStr)) {
+    const dStr = StreakEngine.getShiftedDate(todayStr, -i);
+    if (snapMap.get(dStr)) {
       activeDaysLast7++;
     }
-    weekCursor.setDate(weekCursor.getDate() - 1);
   }
   const weeklyConsistency = Math.round((activeDaysLast7 / 7) * 100);
 
   return {
-    currentStreak,
-    longestStreak,
-    hasSubmittedToday,
+    currentStreak: overallStreak.currentStreak,
+    longestStreak: overallStreak.longestStreak,
+    hasSubmittedToday: overallStreak.hasSubmittedToday || false,
     todayCommitCount,
     todayLeetCodeCount,
     weeklyConsistencyPercent: weeklyConsistency,
-    streakDeadlineHoursLeft: getHoursUntilMidnight(tz),
-    totalLeetCodeSolved: submissions.length,
+    weeklyActivityScore,
+    streakDeadlineHoursLeft: StreakEngine.getHoursUntilMidnight(tz),
+    totalLeetCodeSolved: submissions.length || totalLeetCodeAccepted,
     totalGitCommitsTracked: totalGitCommits,
-    difficultyDistribution: diffCount
+    difficultyDistribution: diffCount,
+    githubStreak,
+    leetCodeStreak,
+    localDevStreak,
+    breakdown: {
+      githubCommits: totalGitCommits,
+      githubPRs: totalPRs,
+      githubIssues: totalIssues,
+      leetCodeTotalSubmissions: totalLeetCodeSubmissions,
+      leetCodeAccepted: totalLeetCodeAccepted,
+      leetCodeUniqueProblems: Math.max(submissions.length, totalUniqueProblems),
+      localSessions: totalLocalSessions,
+      maintenanceBackups: totalBackups
+    }
   };
 }
 
 /**
- * Generate calendar heatmap data for the past 365 days
+ * Generate calendar heatmap data for the target year (365/366 days)
  */
 export async function getHeatmapData(
   userId: string | Types.ObjectId,
@@ -207,47 +294,104 @@ export async function getHeatmapData(
 ): Promise<HeatmapDay[]> {
   const user = await User.findById(userId);
   const tz = user?.timezone || 'UTC';
+  const targetYear = year || new Date().getFullYear();
 
   const snapshots = await DailyActivitySnapshot.find({
     userId: new Types.ObjectId(userId.toString())
   });
 
-  const snapshotMap = new Map<string, { total: number; commits: number; leetcode: number }>();
-  for (const s of snapshots) {
-    snapshotMap.set(s.date, {
-      total: s.totalActivities,
-      commits: s.gitCommitCount,
-      leetcode: s.leetCodeCount
-    });
-  }
+  const summaries: DailySummaryInput[] = snapshots.map((s) => ({
+    date: s.date,
+    github: s.github,
+    leetcode: s.leetcode,
+    localDev: s.localDev,
+    maintenance: s.maintenance,
+    gitCommitCount: s.gitCommitCount,
+    leetCodeCount: s.leetCodeCount,
+    totalActivities: s.totalActivities,
+    streakMaintained: s.streakMaintained
+  }));
 
-  const days: HeatmapDay[] = [];
-  const targetYear = year || new Date().getFullYear();
-  const startDate = new Date(targetYear, 0, 1);
-  const endDate = new Date(targetYear, 11, 31);
-
-  const cursor = new Date(startDate);
-  while (cursor <= endDate) {
-    const dStr = getDateStringInTimezone(cursor, tz);
-    const act = snapshotMap.get(dStr) || { total: 0, commits: 0, leetcode: 0 };
-
-    let level: 0 | 1 | 2 | 3 | 4 = 0;
-    if (act.total >= 8) level = 4;
-    else if (act.total >= 5) level = 3;
-    else if (act.total >= 3) level = 2;
-    else if (act.total >= 1) level = 1;
-
-    days.push({
-      date: dStr,
-      count: act.total,
-      gitCommits: act.commits,
-      leetCodeSubmissions: act.leetcode,
-      level
-    });
-
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return days;
+  return StreakEngine.generateCalendarHeatmap(summaries, targetYear, tz);
 }
 
+/**
+ * Fetch granular underlying ActivityRecord items for a specific calendar date
+ */
+export async function getDayDetails(
+  userId: string | Types.ObjectId,
+  dateStr: string
+) {
+  const records = await ActivityRecord.find({
+    userId: new Types.ObjectId(userId.toString()),
+    date: dateStr
+  }).sort({ timestamp: -1 });
+
+  return records;
+}
+
+/**
+ * Recalculate historical streaks and daily snapshots from raw ActivityRecords
+ * (e.g. after timezone changes or late retroactive syncs)
+ */
+export async function recalculateHistoricalStreaks(
+  userId: string | Types.ObjectId,
+  newTimezone?: string
+): Promise<{ message: string; daysProcessed: number }> {
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  if (newTimezone) {
+    user.timezone = newTimezone;
+    await user.save();
+  }
+
+  const tz = user.timezone || 'UTC';
+  const records = await ActivityRecord.find({
+    userId: new Types.ObjectId(userId.toString())
+  });
+
+  const aggregated = StreakEngine.aggregateActivityRecords(
+    records.map((r) => ({
+      id: r.id,
+      category: r.category,
+      eventType: r.eventType,
+      source: r.source,
+      timestamp: r.timestamp,
+      reference: r.reference,
+      verificationStatus: r.verificationStatus,
+      metadata: r.metadata
+    })),
+    tz,
+    user.streakGoalPerDay || 1
+  );
+
+  // Clear and rewrite snapshots
+  await DailyActivitySnapshot.deleteMany({
+    userId: new Types.ObjectId(userId.toString())
+  });
+
+  for (const day of aggregated) {
+    await DailyActivitySnapshot.create({
+      userId: new Types.ObjectId(userId.toString()),
+      date: day.date,
+      github: day.github,
+      leetcode: day.leetcode,
+      localDev: day.localDev,
+      maintenance: day.maintenance,
+      githubStreakEligible: (day.github?.commits || 0) > 0 || (day.github?.prs || 0) > 0,
+      leetCodeStreakEligible: (day.leetcode?.accepted || 0) > 0,
+      localDevStreakEligible: (day.localDev?.sessions || 0) > 0,
+      overallStreakEligible: day.streakMaintained,
+      gitCommitCount: day.github?.commits || 0,
+      leetCodeCount: day.leetcode?.accepted || 0,
+      totalActivities: day.totalActivities || 0,
+      streakMaintained: day.streakMaintained
+    });
+  }
+
+  return {
+    message: `Recalculated activity snapshots for ${aggregated.length} day(s) in timezone ${tz}`,
+    daysProcessed: aggregated.length
+  };
+}

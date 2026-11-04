@@ -120,3 +120,4 @@ if (!fs.existsSync(iconsDir)) {
   fs.writeFileSync(filePath, pngBuf);
   console.log(`Generated ${filePath} (${pngBuf.length} bytes)`);
 });
+
