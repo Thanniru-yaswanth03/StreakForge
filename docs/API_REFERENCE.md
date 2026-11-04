@@ -397,11 +397,34 @@ All errors return consistent JSON:
 ### 7.1 Get Overview Metrics
 - **Endpoint**: `GET /analytics/overview`
 - **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: Separated streaks (`githubStreak`, `leetCodeStreak`, `localDevStreak`), `weeklyActivityScore` (0–100), and unmerged category breakdown.
 
 ### 7.2 Get Contribution Heatmap
 - **Endpoint**: `GET /analytics/heatmap?year=2026`
 - **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: Array of 365 calendar day snapshots with individual `githubCount`, `leetCodeCount`, `localDevCount`, and `maintenanceCount`.
 
-### 7.3 Query Audit Logs
+### 7.3 Get Date Event Details
+- **Endpoint**: `GET /analytics/day-details?date=YYYY-MM-DD`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: Detailed audit breakdown of all immutable activity records occurring on that calendar day in the user's configured timezone.
+
+### 7.4 Get Active Streak Reminders
+- **Endpoint**: `GET /analytics/reminders`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Response**: Proactive notification warnings:
+  - `NO_ACTIVITY_TODAY`: Timezone-aware streak loss warning before local midnight.
+  - `PENDING_EXPORT`: LeetCode solution pending export to GitHub.
+  - `FAILED_EXPORT`: Solution export failure requiring attention.
+  - `AGENT_OFFLINE`: Local desktop agent heartbeat missing for $>30$ minutes.
+  - `UPCOMING_BACKUP`: Scheduled repository safety maintenance.
+
+### 7.5 Recalculate Historical Streaks
+- **Endpoint**: `POST /analytics/recalculate`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**: `{ "timezone": "America/New_York" }`
+- **Response**: Recomputed historical streak counters across calendar boundaries and leap years.
+
+### 7.6 Query Audit Logs
 - **Endpoint**: `GET /audit/logs?page=1&limit=50&component=AGENT`
 - **Headers**: `Authorization: Bearer <JWT>`
