@@ -90,6 +90,11 @@ export interface GitHubActivityData {
     author: string;
     createdAt: string;
   }>;
+  rateLimit?: {
+    limit: number;
+    remaining: number;
+    reset: number;
+  };
 }
 
 interface DataContextValue {
@@ -383,7 +388,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setIsLoading(true);
-      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes] =
+      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes] =
         await Promise.allSettled([
           api.auth.getMe(),
           api.analytics.getOverview(),
@@ -391,7 +396,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           api.repos.list(),
           api.sync.getHistory(1, 50),
           api.agent.list(),
-          api.audit.getLogs(1, 100)
+          api.audit.getLogs(1, 100),
+          api.github.getActivity(1, 20)
         ]);
 
       if (meRes.status === 'fulfilled') {
@@ -414,6 +420,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (subsRes.status === 'fulfilled') setSubmissions(subsRes.value);
       if (agentsRes.status === 'fulfilled') setAgents(agentsRes.value);
       if (logsRes.status === 'fulfilled') setAuditLogs(logsRes.value);
+
+      if (ghActRes.status === 'fulfilled' && ghActRes.value.commits.length > 0) {
+        const gh = ghActRes.value;
+        setGithubActivity((prev) => ({
+          ...prev,
+          totalCommits: gh.commits.length,
+          recentCommits: gh.commits.map((c) => ({
+            sha: c.sha,
+            repo: c.repo,
+            branch: c.branch,
+            author: c.author,
+            message: c.message,
+            timestamp: new Date(c.timestamp).toLocaleString(),
+            filesChanged: c.filesChanged
+          })),
+          pullRequests: gh.pullRequests.map((p) => ({
+            number: p.number,
+            title: p.title,
+            repo: p.repo,
+            state: p.state,
+            author: p.author,
+            createdAt: new Date(p.createdAt).toLocaleDateString()
+          })),
+          issues: gh.issues.map((i) => ({
+            number: i.number,
+            title: i.title,
+            repo: i.repo,
+            state: i.state,
+            author: i.author,
+            createdAt: new Date(i.createdAt).toLocaleDateString()
+          })),
+          branches: gh.branches.map((b) => ({
+            name: b.name,
+            repo: b.repo,
+            isProtected: b.isProtected,
+            lastCommitSha: b.lastCommitSha
+          })),
+          rateLimit: gh.rateLimit
+        }));
+      }
     } catch {
       setIsDemoMode(true);
     } finally {
@@ -545,3 +591,4 @@ export function useData() {
   }
   return context;
 }
+

@@ -38,13 +38,66 @@ export type LeetCodeSubmissionInputType = z.infer<typeof LeetCodeSubmissionInput
 export const ConnectRepositoryInputSchema = z.object({
   repoFullName: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/, 'Invalid repo format (owner/repo)'),
   githubRepoId: z.number().int().positive('GitHub repo ID must be positive integer'),
+  description: z.string().optional(),
+  primaryLanguage: z.string().optional(),
+  cloneUrl: z.string().url().optional(),
   defaultBranch: z.string().min(1).default('main'),
   isTargetForLeetCode: z.boolean().default(true),
   solutionPathPattern: z.string().min(1).default('solutions/{difficulty}/{id}-{slug}'),
-  autoCommitEnabled: z.boolean().default(false)
+  autoCommitEnabled: z.boolean().default(false),
+  category: z.string().default('LeetCode Solutions'),
+  permissions: z
+    .object({
+      admin: z.boolean(),
+      push: z.boolean(),
+      pull: z.boolean()
+    })
+    .optional(),
+  syncPolicy: z
+    .object({
+      autoCommit: z.boolean().default(false),
+      autoPush: z.boolean().default(false),
+      branch: z.string().default('main'),
+      pathPattern: z.string().default('solutions/{difficulty}/{id}-{slug}'),
+      intervalMinutes: z.number().int().min(5).max(1440).default(15)
+    })
+    .optional()
 });
 
 export type ConnectRepositoryInputType = z.infer<typeof ConnectRepositoryInputSchema>;
+
+export const UpdateRepositoryInputSchema = z.object({
+  category: z.string().optional(),
+  defaultBranch: z.string().optional(),
+  isTargetForLeetCode: z.boolean().optional(),
+  solutionPathPattern: z.string().optional(),
+  autoCommitEnabled: z.boolean().optional(),
+  syncPolicy: z
+    .object({
+      autoCommit: z.boolean().default(false),
+      autoPush: z.boolean().default(false),
+      branch: z.string().default('main'),
+      pathPattern: z.string().default('solutions/{difficulty}/{id}-{slug}'),
+      intervalMinutes: z.number().int().min(5).max(1440).default(15)
+    })
+    .optional()
+});
+
+export type UpdateRepositoryInputType = z.infer<typeof UpdateRepositoryInputSchema>;
+
+export const DiagnoseCommitInputSchema = z.object({
+  repoFullName: z.string().min(1, 'Repository name is required'),
+  commitSha: z.string().min(4, 'Commit SHA is required'),
+  branch: z.string().optional()
+});
+
+export type DiagnoseCommitInputType = z.infer<typeof DiagnoseCommitInputSchema>;
+
+export const DiagnoseRepoInputSchema = z.object({
+  repoFullName: z.string().min(1, 'Repository name is required')
+});
+
+export type DiagnoseRepoInputType = z.infer<typeof DiagnoseRepoInputSchema>;
 
 // --------------------------------------------------------
 // Local Agent Schemas

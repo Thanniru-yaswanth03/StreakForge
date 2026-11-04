@@ -40,7 +40,7 @@ All errors return consistent JSON:
 
 ### 2.1 Initiates GitHub OAuth
 - **Endpoint**: `GET /auth/github`
-- **Description**: Redirects user to GitHub OAuth login with required scopes (`repo`, `read:user`, `user:email`).
+- **Description**: Redirects user to GitHub OAuth login with required scopes (`repo`, `read:user`, `user:email`) and anti-CSRF state token.
 - **Response**: `302 Redirect` to `https://github.com/login/oauth/authorize`
 
 ### 2.2 GitHub OAuth Callback
@@ -48,7 +48,7 @@ All errors return consistent JSON:
 - **Query Params**:
   - `code` (string, required): GitHub temporary auth code
   - `state` (string, required): Anti-CSRF verification state
-- **Response**: Redirects to Web Dashboard with session cookie/token.
+- **Response**: Validates CSRF state, exchanges code for token, stores token encrypted with AES-256-GCM, and redirects to Web Dashboard with session token.
 
 ### 2.3 Get Current User Profile
 - **Endpoint**: `GET /auth/me`
@@ -60,8 +60,10 @@ All errors return consistent JSON:
   "data": {
     "user": {
       "id": "6732f91a...",
+      "githubId": "123456",
       "username": "alexdeveloper",
       "email": "alex@example.com",
+      "verifiedEmails": ["alex@example.com", "alex.work@company.com"],
       "avatarUrl": "https://avatars.githubusercontent.com/u/12345",
       "timezone": "America/New_York",
       "streakGoalPerDay": 1
@@ -69,6 +71,16 @@ All errors return consistent JSON:
   }
 }
 ```
+
+### 2.4 User Logout
+- **Endpoint**: `POST /auth/logout`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Revokes the current session JWT token.
+
+### 2.5 Disconnect GitHub Account
+- **Endpoint**: `POST /auth/disconnect`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Purges all stored encrypted GitHub OAuth tokens, disconnects repositories, logs audit event, and terminates active session.
 
 ---
 
@@ -86,8 +98,18 @@ All errors return consistent JSON:
       {
         "id": "6732f99b...",
         "repoFullName": "alexdeveloper/leetcode-archive",
+        "description": "Genuine LeetCode solutions archive",
+        "primaryLanguage": "TypeScript",
         "defaultBranch": "main",
+        "category": "LeetCode Solutions",
         "isTargetForLeetCode": true,
+        "syncPolicy": {
+          "autoCommit": true,
+          "autoPush": false,
+          "branch": "main",
+          "pathPattern": "solutions/{difficulty}/{id}-{slug}",
+          "intervalMinutes": 15
+        },
         "lastSyncedAt": "2026-11-04T12:00:00.000Z"
       }
     ],
@@ -96,14 +118,24 @@ All errors return consistent JSON:
         "id": 1234567,
         "name": "leetcode-archive",
         "fullName": "alexdeveloper/leetcode-archive",
-        "isPrivate": false
+        "description": "Genuine LeetCode solutions archive",
+        "isPrivate": false,
+        "visibility": "public",
+        "primaryLanguage": "TypeScript",
+        "defaultBranch": "main",
+        "cloneUrl": "https://github.com/alexdeveloper/leetcode-archive.git",
+        "permissions": {
+          "admin": true,
+          "push": true,
+          "pull": true
+        }
       }
     ]
   }
 }
 ```
 
-### 3.2 Connect Target Repository
+### 3.2 Connect Repository
 - **Endpoint**: `POST /repos/connect`
 - **Headers**: `Authorization: Bearer <JWT>`
 - **Body**:
@@ -111,17 +143,190 @@ All errors return consistent JSON:
 {
   "repoFullName": "alexdeveloper/leetcode-archive",
   "githubRepoId": 1234567,
+  "description": "Genuine LeetCode solutions archive",
+  "primaryLanguage": "TypeScript",
+  "cloneUrl": "https://github.com/alexdeveloper/leetcode-archive.git",
   "defaultBranch": "main",
   "isTargetForLeetCode": true,
-  "solutionPathPattern": "solutions/{difficulty}/{id}-{slug}"
+  "category": "LeetCode Solutions",
+  "solutionPathPattern": "solutions/{difficulty}/{id}-{slug}",
+  "syncPolicy": {
+    "autoCommit": true,
+    "autoPush": false,
+    "branch": "main",
+    "pathPattern": "solutions/{difficulty}/{id}-{slug}",
+    "intervalMinutes": 15
+  }
+}
+```
+
+### 3.3 Update Repository Policy
+- **Endpoint**: `PATCH /repos/:id`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**: Allows updating `category`, `syncPolicy`, `defaultBranch`, `solutionPathPattern`, `isTargetForLeetCode`.
+
+### 3.4 Disconnect Repository
+- **Endpoint**: `DELETE /repos/:id`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Disconnects monitored repository from StreakForge without deleting remote files on GitHub.
+
+---
+
+## 4. GitHub Activity & Diagnostics Endpoints
+
+### 4.1 Activity Feed
+- **Endpoint**: `GET /github/activity`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Query Params**: `page` (default: 1), `limit` (default: 20)
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "commits": [
+      {
+        "sha": "8f7d9a1c3e...",
+        "repo": "alexdeveloper/leetcode-archive",
+        "branch": "main",
+        "author": "alexdeveloper",
+        "authorEmail": "alex@example.com",
+        "message": "feat(solutions): add LRU Cache solution in Go",
+        "timestamp": "2026-11-04T14:15:00.000Z",
+        "filesChanged": 2,
+        "url": "https://github.com/alexdeveloper/leetcode-archive/commit/8f7d9a1c"
+      }
+    ],
+    "pullRequests": [],
+    "issues": [],
+    "branches": [],
+    "releases": [],
+    "rateLimit": {
+      "limit": 5000,
+      "remaining": 4950,
+      "reset": 1730725200
+    }
+  }
+}
+```
+
+### 4.2 Commit Attribution Diagnostics
+- **Endpoint**: `POST /github/diagnose-commit`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**:
+```json
+{
+  "repoFullName": "alexdeveloper/leetcode-archive",
+  "commitSha": "8f7d9a1c3e",
+  "branch": "main"
+}
+```
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "commitSha": "8f7d9a1c3e",
+    "authorEmail": "alex@example.com",
+    "repoFullName": "alexdeveloper/leetcode-archive",
+    "branch": "main",
+    "isEligible": true,
+    "status": "ELIGIBLE",
+    "checks": [
+      {
+        "name": "Author Email Association",
+        "passed": true,
+        "message": "Commit author email \"alex@example.com\" matches verified GitHub account emails."
+      },
+      {
+        "name": "Repository Ownership & Fork Policy",
+        "passed": true,
+        "message": "Repository is a standalone repository (not a fork)."
+      },
+      {
+        "name": "Branch Eligibility (Default or gh-pages)",
+        "passed": true,
+        "message": "Commit is on eligible default branch \"main\"."
+      },
+      {
+        "name": "Commit Content & Integrity",
+        "passed": true,
+        "message": "Standard commit with 2 file(s) changed."
+      },
+      {
+        "name": "Contribution Window (Last 365 Days)",
+        "passed": true,
+        "message": "Committed on 11/04/2026, within the visible 1-year contribution window."
+      }
+    ],
+    "summary": "Commit 8f7d9a1 meets all GitHub contribution graph requirements."
+  }
+}
+```
+
+### 4.3 Repository Health Diagnostics
+- **Endpoint**: `POST /github/diagnose-repo`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**:
+```json
+{
+  "repoFullName": "alexdeveloper/leetcode-archive"
+}
+```
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "repoFullName": "alexdeveloper/leetcode-archive",
+    "healthScore": 90,
+    "hasReadme": true,
+    "hasGitignore": true,
+    "hasLicense": true,
+    "licenseName": "MIT License",
+    "openIssuesCount": 0,
+    "daysSinceLastActivity": 0,
+    "branchProtection": {
+      "isProtected": true,
+      "requiresPullRequest": true,
+      "enforceAdmins": true
+    },
+    "secretScanResult": {
+      "safe": true,
+      "findings": []
+    },
+    "scannedScope": "Inspected default branch ('main'), root configuration files (.gitignore, README, LICENSE), repository metadata, and recent commit diffs. Full-history clone or complete repository tree scan was not performed.",
+    "recommendations": []
+  }
+}
+```
+
+### 4.4 Trigger Manual Sync
+- **Endpoint**: `POST /github/sync`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Refreshes sync cursors and updates last activity timestamps across all connected repositories.
+
+### 4.5 GitHub Webhook Listener
+- **Endpoint**: `POST /github/webhook`
+- **Headers**:
+  - `X-Hub-Signature-256`: HMAC-SHA256 signature generated using `GITHUB_WEBHOOK_SECRET`
+  - `X-GitHub-Delivery`: Unique delivery UUID for deduplication
+  - `X-GitHub-Event`: Event name (`push`, `pull_request`, `issues`, `release`, etc.)
+- **Response `200 OK`**:
+```json
+{
+  "success": true,
+  "data": {
+    "status": "PROCESSED",
+    "message": "Event push recorded successfully"
+  }
 }
 ```
 
 ---
 
-## 4. LeetCode Synchronization Endpoints
+## 5. LeetCode Synchronization Endpoints
 
-### 4.1 Ingest Accepted Submission
+### 5.1 Ingest Accepted Submission
 - **Endpoint**: `POST /sync/leetcode/submission`
 - **Headers**: `Authorization: Bearer <TOKEN>` or `X-Extension-Key: <TOKEN>`
 - **Body**:
@@ -141,30 +346,17 @@ All errors return consistent JSON:
   "submittedAt": "2026-11-04T14:30:00.000Z"
 }
 ```
-- **Response `201 Created`**:
-```json
-{
-  "success": true,
-  "data": {
-    "submissionId": "987654321",
-    "syncStatus": "SYNCED",
-    "commitSha": "a1b2c3d4e5f6...",
-    "commitUrl": "https://github.com/alexdeveloper/leetcode-archive/commit/a1b2c3d4",
-    "filePath": "solutions/Easy/1-two-sum/two-sum.ts"
-  }
-}
-```
 
-### 4.2 List Submission Sync History
+### 5.2 List Submission Sync History
 - **Endpoint**: `GET /sync/leetcode/history`
 - **Query Params**: `page` (number), `limit` (number), `status` (PENDING|SYNCED|FAILED)
 - **Response `200 OK`**: Paginated array of submissions.
 
 ---
 
-## 5. Local Desktop Agent Endpoints
+## 6. Local Desktop Agent Endpoints
 
-### 5.1 Register Local Agent
+### 6.1 Register Local Agent
 - **Endpoint**: `POST /agent/register`
 - **Headers**: `Authorization: Bearer <JWT>`
 - **Body**:
@@ -176,18 +368,8 @@ All errors return consistent JSON:
   "agentVersion": "1.0.0"
 }
 ```
-- **Response `201 Created`**:
-```json
-{
-  "success": true,
-  "data": {
-    "agentId": "uuid-v4-string",
-    "apiKey": "sf_agent_live_secret_key_12345"
-  }
-}
-```
 
-### 5.2 Agent Heartbeat & Telemetry
+### 6.2 Agent Heartbeat & Telemetry
 - **Endpoint**: `POST /agent/heartbeat`
 - **Headers**: `X-StreakForge-Agent-Key: <API_KEY>`
 - **Body**:
@@ -210,34 +392,16 @@ All errors return consistent JSON:
 
 ---
 
-## 6. Analytics & Audit Endpoints
+## 7. Analytics & Audit Endpoints
 
-### 6.1 Get Overview Metrics
+### 7.1 Get Overview Metrics
 - **Endpoint**: `GET /analytics/overview`
 - **Headers**: `Authorization: Bearer <JWT>`
-- **Response `200 OK`**:
-```json
-{
-  "success": true,
-  "data": {
-    "currentStreak": 14,
-    "longestStreak": 42,
-    "hasSubmittedToday": true,
-    "todayCommitCount": 4,
-    "todayLeetCodeCount": 1,
-    "weeklyConsistencyPercent": 100,
-    "streakDeadlineHoursLeft": 8.5
-  }
-}
-```
 
-### 6.2 Get Contribution Heatmap
+### 7.2 Get Contribution Heatmap
 - **Endpoint**: `GET /analytics/heatmap?year=2026`
 - **Headers**: `Authorization: Bearer <JWT>`
-- **Response `200 OK`**: Daily activity map for calendar visualization.
 
-### 6.3 Query Audit Logs
+### 7.3 Query Audit Logs
 - **Endpoint**: `GET /audit/logs?page=1&limit=50&component=AGENT`
 - **Headers**: `Authorization: Bearer <JWT>`
-- **Response `200 OK`**: Paginated audit log records.
-

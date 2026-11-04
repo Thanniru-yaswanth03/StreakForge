@@ -3,14 +3,20 @@ import { ENV } from '../config/env.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { UserUpdatePreferencesSchema } from '@streakforge/validation';
-import { exchangeGitHubCode } from '../services/authService.js';
+import {
+  generateOAuthState,
+  verifyOAuthState,
+  exchangeGitHubCode,
+  revokeSessionToken,
+  disconnectGitHubAccount
+} from '../services/authService.js';
 import { User } from '../models/User.js';
 
 export const authRouter: Router = Router();
 
 authRouter.get('/github', (_req, res: Response) => {
   const scopes = ['repo', 'read:user', 'user:email'].join(' ');
-  const state = Math.random().toString(36).substring(7);
+  const state = generateOAuthState();
   const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${ENV.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(
     ENV.GITHUB_CALLBACK_URL
   )}&scope=${encodeURIComponent(scopes)}&state=${state}`;
@@ -20,6 +26,8 @@ authRouter.get('/github', (_req, res: Response) => {
 
 authRouter.get('/github/callback', async (req, res: Response, next) => {
   const code = req.query.code as string;
+  const state = req.query.state as string;
+
   if (!code) {
     res.status(400).json({
       success: false,
@@ -28,8 +36,19 @@ authRouter.get('/github/callback', async (req, res: Response, next) => {
     return;
   }
 
+  if (!state || !verifyOAuthState(state)) {
+    res.status(403).json({
+      success: false,
+      error: {
+        code: 'CSRF_STATE_INVALID',
+        message: 'Invalid or expired OAuth state parameter (CSRF verification failed)'
+      }
+    });
+    return;
+  }
+
   try {
-    const { token, user } = await exchangeGitHubCode(code);
+    const { token, user } = await exchangeGitHubCode(code, state);
     // If request accepts HTML (direct browser redirect), redirect to frontend with token
     if (req.headers.accept?.includes('text/html')) {
       res.redirect(`${ENV.WEB_APP_URL}/auth/callback?token=${token}`);
@@ -45,10 +64,36 @@ authRouter.get('/github/callback', async (req, res: Response, next) => {
           username: user.username,
           name: user.name,
           email: user.email,
+          verifiedEmails: user.verifiedEmails,
           avatarUrl: user.avatarUrl,
           timezone: user.timezone
         }
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/logout', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  if (req.token) {
+    revokeSessionToken(req.token);
+  }
+  res.json({
+    success: true,
+    data: { message: 'Logged out successfully' }
+  });
+});
+
+authRouter.post('/disconnect', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    await disconnectGitHubAccount(req.userId!);
+    if (req.token) {
+      revokeSessionToken(req.token);
+    }
+    res.json({
+      success: true,
+      data: { message: 'GitHub account disconnected and credentials safely purged' }
     });
   } catch (error) {
     next(error);
@@ -66,6 +111,7 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Respon
         username: user.username,
         name: user.name,
         email: user.email,
+        verifiedEmails: user.verifiedEmails || [user.email],
         avatarUrl: user.avatarUrl,
         timezone: user.timezone,
         streakGoalPerDay: user.streakGoalPerDay,

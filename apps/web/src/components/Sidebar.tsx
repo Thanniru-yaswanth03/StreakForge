@@ -232,3 +232,4 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
     </>
   );
 }
+

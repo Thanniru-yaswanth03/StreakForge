@@ -271,3 +271,4 @@ export function AutomationCenterView() {
     </div>
   );
 }
+

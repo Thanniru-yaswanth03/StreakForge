@@ -6,6 +6,7 @@ export interface IUserDocument extends Document {
   username: string;
   name: string;
   email: string;
+  verifiedEmails: string[];
   avatarUrl: string;
   timezone: string;
   streakGoalPerDay: number;
@@ -25,6 +26,7 @@ const UserSchema = new Schema<IUserDocument>(
     username: { type: String, required: true, index: true },
     name: { type: String, default: '' },
     email: { type: String, required: true, unique: true, index: true },
+    verifiedEmails: [{ type: String }],
     avatarUrl: { type: String, default: '' },
     timezone: { type: String, default: 'UTC' },
     streakGoalPerDay: { type: Number, default: 1 },

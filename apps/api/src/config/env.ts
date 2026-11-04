@@ -18,6 +18,7 @@ export const ENV = {
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || 'dummy_client_secret',
   GITHUB_CALLBACK_URL:
     process.env.GITHUB_CALLBACK_URL || 'http://localhost:4000/api/v1/auth/github/callback',
+  GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET || 'sf_webhook_secret_development_at_least_20_chars',
   WEB_APP_URL: process.env.WEB_APP_URL || 'http://localhost:3000',
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000,chrome-extension://*'
 };

@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { ENV } from './config/env.js';
 import { authRouter } from './routes/authRoutes.js';
 import { repoRouter } from './routes/repoRoutes.js';
+import { githubRouter } from './routes/githubRoutes.js';
 import { syncRouter } from './routes/syncRoutes.js';
 import { agentRouter } from './routes/agentRoutes.js';
 import { analyticsRouter } from './routes/analyticsRoutes.js';
@@ -53,8 +54,15 @@ export function createApp(): Express {
   });
   app.use('/api/', limiter);
 
-  // Body Parsing
-  app.use(express.json({ limit: '10mb' }));
+  // Body Parsing (with raw body buffer preservation for webhook signature checks)
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      }
+    })
+  );
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // Health Check
@@ -70,6 +78,7 @@ export function createApp(): Express {
   // Mount API routes
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/repos', repoRouter);
+  app.use('/api/v1/github', githubRouter);
   app.use('/api/v1/sync', syncRouter);
   app.use('/api/v1/agent', agentRouter);
   app.use('/api/v1/analytics', analyticsRouter);

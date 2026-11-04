@@ -9,8 +9,12 @@ import type {
   AuditLog,
   ApiResponse,
   ConnectRepositoryInput,
+  UpdateRepositoryInput,
   AgentRegisterInput,
-  AgentRegisterResponse
+  AgentRegisterResponse,
+  GitHubActivityFeed,
+  CommitDiagnosticsResult,
+  RepoHealthDiagnosticsResult
 } from '@streakforge/shared-types';
 
 export class ApiError extends Error {
@@ -60,6 +64,26 @@ export const api = {
       apiFetch('/auth/preferences', {
         method: 'PATCH',
         body: JSON.stringify(prefs)
+      }),
+    logout: () => apiFetch('/auth/logout', { method: 'POST' }),
+    disconnect: () => apiFetch('/auth/disconnect', { method: 'POST' })
+  },
+  github: {
+    getActivity: (page: number = 1, limit: number = 20) =>
+      apiFetch<GitHubActivityFeed>(`/github/activity?page=${page}&limit=${limit}`),
+    diagnoseCommit: (input: { repoFullName: string; commitSha: string; branch?: string }) =>
+      apiFetch<CommitDiagnosticsResult>('/github/diagnose-commit', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }),
+    diagnoseRepo: (input: { repoFullName: string }) =>
+      apiFetch<RepoHealthDiagnosticsResult>('/github/diagnose-repo', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }),
+    sync: () =>
+      apiFetch<{ message: string; syncedAt: string }>('/github/sync', {
+        method: 'POST'
       })
   },
   analytics: {
@@ -74,6 +98,15 @@ export const api = {
       apiFetch<RepositoryConnection>('/repos/connect', {
         method: 'POST',
         body: JSON.stringify(input)
+      }),
+    update: (id: string, update: UpdateRepositoryInput) =>
+      apiFetch<RepositoryConnection>(`/repos/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(update)
+      }),
+    disconnect: (id: string) =>
+      apiFetch<{ message: string }>(`/repos/${id}`, {
+        method: 'DELETE'
       })
   },
   sync: {

@@ -18,6 +18,7 @@ export interface User {
   username: string;
   name: string;
   email: string;
+  verifiedEmails?: string[];
   avatarUrl: string;
   timezone: string;
   streakGoalPerDay: number;
@@ -41,16 +42,34 @@ export interface Account {
   updatedAt: string;
 }
 
+export interface SyncPolicy {
+  autoCommit: boolean;
+  autoPush: boolean;
+  branch: string;
+  pathPattern: string;
+  intervalMinutes: number;
+}
+
 export interface RepositoryConnection {
   id: string;
   userId: string;
   githubRepoId: number;
   repoFullName: string;
+  description?: string;
+  primaryLanguage?: string;
+  cloneUrl?: string;
   defaultBranch: string;
   solutionPathPattern: string;
   isPrivate: boolean;
   isTargetForLeetCode: boolean;
   autoCommitEnabled: boolean;
+  category?: string;
+  permissions?: {
+    admin: boolean;
+    push: boolean;
+    pull: boolean;
+  };
+  syncPolicy?: SyncPolicy;
   lastSyncedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -184,10 +203,29 @@ export interface LeetCodeSubmissionInput {
 export interface ConnectRepositoryInput {
   repoFullName: string;
   githubRepoId: number;
+  description?: string;
+  primaryLanguage?: string;
+  cloneUrl?: string;
   defaultBranch?: string;
   isTargetForLeetCode?: boolean;
   solutionPathPattern?: string;
   autoCommitEnabled?: boolean;
+  category?: string;
+  permissions?: {
+    admin: boolean;
+    push: boolean;
+    pull: boolean;
+  };
+  syncPolicy?: SyncPolicy;
+}
+
+export interface UpdateRepositoryInput {
+  category?: string;
+  defaultBranch?: string;
+  isTargetForLeetCode?: boolean;
+  solutionPathPattern?: string;
+  autoCommitEnabled?: boolean;
+  syncPolicy?: SyncPolicy;
 }
 
 export interface AgentRegisterInput {
@@ -251,5 +289,100 @@ export interface AuditLogQuery {
   action?: string;
   startDate?: string;
   endDate?: string;
+}
+
+// --------------------------------------------------------
+// GitHub Phase 2 Diagnostics & Integration Types
+// --------------------------------------------------------
+
+export interface CommitAttributionCheck {
+  name: string;
+  passed: boolean;
+  message: string;
+  actionableFix?: string;
+}
+
+export interface CommitDiagnosticsResult {
+  commitSha: string;
+  authorEmail: string;
+  repoFullName: string;
+  branch: string;
+  isEligible: boolean;
+  status: 'ELIGIBLE' | 'INELIGIBLE' | 'WARNING';
+  checks: CommitAttributionCheck[];
+  summary: string;
+}
+
+export interface RepoHealthDiagnosticsResult {
+  repoFullName: string;
+  healthScore: number; // 0 to 100
+  hasReadme: boolean;
+  hasGitignore: boolean;
+  hasLicense: boolean;
+  licenseName?: string;
+  openIssuesCount: number;
+  daysSinceLastActivity: number;
+  branchProtection?: {
+    isProtected: boolean;
+    requiresPullRequest?: boolean;
+    enforceAdmins?: boolean;
+  };
+  secretScanResult: {
+    safe: boolean;
+    findings: string[];
+  };
+  scannedScope: string;
+  recommendations: string[];
+}
+
+export interface GitHubActivityFeed {
+  commits: Array<{
+    sha: string;
+    repo: string;
+    branch: string;
+    author: string;
+    authorEmail?: string;
+    message: string;
+    timestamp: string;
+    filesChanged: number;
+    url: string;
+  }>;
+  pullRequests: Array<{
+    number: number;
+    title: string;
+    repo: string;
+    state: 'OPEN' | 'MERGED' | 'CLOSED';
+    author: string;
+    createdAt: string;
+    url: string;
+  }>;
+  issues: Array<{
+    number: number;
+    title: string;
+    repo: string;
+    state: 'OPEN' | 'CLOSED';
+    author: string;
+    createdAt: string;
+    url: string;
+  }>;
+  branches: Array<{
+    name: string;
+    repo: string;
+    isProtected: boolean;
+    lastCommitSha: string;
+  }>;
+  releases: Array<{
+    id: number;
+    name: string;
+    tagName: string;
+    repo: string;
+    publishedAt: string;
+    url: string;
+  }>;
+  rateLimit: {
+    limit: number;
+    remaining: number;
+    reset: number;
+  };
 }
 

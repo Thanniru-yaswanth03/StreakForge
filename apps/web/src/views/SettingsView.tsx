@@ -161,21 +161,81 @@ export function SettingsView() {
               </p>
 
               {user ? (
-                <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={user.avatarUrl || 'https://avatars.githubusercontent.com/u/9919?s=200&v=4'}
-                      alt={user.username}
-                      className="w-10 h-10 rounded-full border border-theme-border"
-                    />
-                    <div>
-                      <div className="font-bold text-sm text-theme-primary">@{user.username}</div>
-                      <div className="text-xs text-theme-muted">{user.email}</div>
+                <div className="space-y-4">
+                  <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={user.avatarUrl || 'https://avatars.githubusercontent.com/u/9919?s=200&v=4'}
+                        alt={user.username}
+                        className="w-10 h-10 rounded-full border border-theme-border"
+                      />
+                      <div>
+                        <div className="font-bold text-sm text-theme-primary">@{user.username}</div>
+                        <div className="text-xs text-theme-muted">{user.email}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        Connected (OAuth 2.0)
+                      </span>
+                      <button
+                        onClick={async () => {
+                          if (confirm('Disconnect GitHub account? Stored OAuth tokens will be purged.')) {
+                            try {
+                              await api.auth.disconnect();
+                              clearStoredToken();
+                              window.location.reload();
+                            } catch (err: any) {
+                              alert(`Disconnect failed: ${err.message}`);
+                            }
+                          }
+                        }}
+                        className="text-xs text-rose-500 hover:text-rose-400 font-medium px-2 py-1 rounded hover:bg-rose-500/10 transition"
+                      >
+                        Disconnect
+                      </button>
                     </div>
                   </div>
-                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                    Connected (OAuth 2.0)
-                  </span>
+
+                  {/* Verified GitHub Emails */}
+                  <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl space-y-2">
+                    <div className="text-xs font-bold text-theme-primary uppercase tracking-wider">
+                      Verified GitHub Emails for Contribution Attribution
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                      Commits authored with these email addresses will be recognized and attributed to your GitHub contribution graph.
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {(user.verifiedEmails || [user.email]).map((em) => (
+                        <span
+                          key={em}
+                          className="font-mono text-xs px-2.5 py-1 rounded-lg bg-theme-surface border border-theme-border text-theme-secondary flex items-center gap-1.5"
+                        >
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          {em}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* GitHub Webhook Configuration */}
+                  <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl space-y-3">
+                    <div className="text-xs font-bold text-theme-primary uppercase tracking-wider">
+                      Repository Webhook Integration
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                      To receive instantaneous push and PR synchronization events from GitHub, configure a repository webhook:
+                    </p>
+                    <div className="space-y-1.5 text-xs font-mono bg-theme-surface p-3 rounded-lg border border-theme-border text-theme-secondary">
+                      <div><strong className="text-theme-primary font-sans">Payload URL:</strong> http://localhost:4000/api/v1/github/webhook</div>
+                      <div><strong className="text-theme-primary font-sans">Content type:</strong> application/json</div>
+                      <div><strong className="text-theme-primary font-sans">Secret:</strong> configured in .env (GITHUB_WEBHOOK_SECRET)</div>
+                      <div><strong className="text-theme-primary font-sans">Events:</strong> Pushes, Pull Requests, Issues, Releases</div>
+                    </div>
+                    <div className="text-[11px] text-theme-muted">
+                      Incoming events require HMAC-SHA256 signature verification (<code className="text-theme-accent">X-Hub-Signature-256</code>) and delivery deduplication.
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="p-5 bg-theme-elevated border border-theme-border rounded-xl space-y-3">
@@ -490,3 +550,4 @@ export function SettingsView() {
     </div>
   );
 }
+

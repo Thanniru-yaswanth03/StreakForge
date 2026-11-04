@@ -2,10 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env.js';
 import { User, IUserDocument } from '../models/User.js';
+import { isTokenRevoked } from '../services/authService.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: IUserDocument;
   userId?: string;
+  token?: string;
 }
 
 export async function requireAuth(
@@ -26,6 +28,18 @@ export async function requireAuth(
   }
 
   const token = authHeader.split(' ')[1];
+
+  if (isTokenRevoked(token)) {
+    res.status(401).json({
+      success: false,
+      error: {
+        code: 'TOKEN_REVOKED',
+        message: 'Session token has been revoked'
+      }
+    });
+    return;
+  }
+
   try {
     const payload = jwt.verify(token, ENV.JWT_SECRET) as { userId: string };
     const user = await User.findById(payload.userId);
@@ -43,6 +57,7 @@ export async function requireAuth(
 
     req.user = user;
     req.userId = user._id.toString();
+    req.token = token;
     next();
   } catch (error) {
     res.status(401).json({

@@ -134,3 +134,4 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
     </header>
   );
 }
+
