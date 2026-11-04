@@ -57,12 +57,17 @@ export const FORBIDDEN_FILE_PATTERNS = [
   /id_rsa/i,
   /id_ed25519/i,
   /credentials\.json$/i,
+  /secrets\.json$/i,
   /service-account.*\.json$/i,
   /client_secret.*\.json$/i,
   /\.npmrc$/i,
   /\.dockercfg$/i,
   /node_modules/i,
   /\.git/i,
+  /\.next/i,
+  /dist[\/\\]/i,
+  /build[\/\\]/i,
+  /coverage[\/\\]/i,
   /\.DS_Store$/i,
   /Thumbs\.db$/i
 ];
@@ -71,12 +76,15 @@ export const FORBIDDEN_FILE_PATTERNS = [
  * Secret tokens and API key regular expressions for content scanning.
  */
 export const HIGH_ENTROPY_SECRET_PATTERNS = [
-  /ghp_[a-zA-Z0-9]{36}/,                    // GitHub Personal Access Token
-  /gho_[a-zA-Z0-9]{36}/,                    // GitHub OAuth Token
-  /github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}/, // GitHub Fine-grained PAT
-  /AKIA[0-9A-Z]{16}/,                       // AWS Access Key ID
-  /xox[baprs]-[0-9a-zA-Z]{10,48}/,          // Slack Token
-  /AIza[0-9A-Za-z-_]{35}/                   // Google API Key
+  /ghp_[a-zA-Z0-9]{36}/,                           // GitHub Personal Access Token
+  /gho_[a-zA-Z0-9]{36}/,                           // GitHub OAuth Token
+  /github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}/,    // GitHub Fine-grained PAT
+  /AKIA[0-9A-Z]{16}/,                              // AWS Access Key ID
+  /xox[baprs]-[0-9a-zA-Z]{10,48}/,                 // Slack Token
+  /AIza[0-9A-Za-z-_]{35}/,                         // Google API Key
+  /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/,   // Private Key Block
+  /(?:postgres|postgresql|mongodb|mongodb\+srv|mysql|redis):\/\/[a-zA-Z0-9_-]+:[^@\s]+@[a-zA-Z0-9.-]+/i, // DB connection string
+  /(?:api_key|secret_key|client_secret|db_password)\s*[:=]\s*['"][a-zA-Z0-9_-]{12,}['"]/i // Explicit assignment
 ];
 
 /**

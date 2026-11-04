@@ -21,10 +21,11 @@ import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
 import { getStoredToken, clearStoredToken } from '../lib/utils';
 import { api } from '../lib/api';
+import { AgentManager } from '../components/AgentManager';
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
-  const { user, connectedRepos, submissions, journalEntries, auditLogs, refreshData } = useData();
+  const { user, connectedRepos, submissions, journalEntries, auditLogs, refreshData, agents } = useData();
 
   const [activeSection, setActiveSection] = useState<
     | 'github'
@@ -318,23 +319,10 @@ export function SettingsView() {
             </div>
           )}
 
-          {/* 4. Local Agent */}
+          {/* 4. Local Desktop Agent */}
           {activeSection === 'agent' && (
             <div className="space-y-4">
-              <h3 className="text-sm font-bold text-theme-primary flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-theme-accent" />
-                Local Desktop Agent Settings
-              </h3>
-              <p className="text-xs text-theme-muted">
-                Native Git CLI loopback daemon listening on 127.0.0.1:4545
-              </p>
-
-              <div className="p-3 bg-theme-elevated border border-theme-border rounded-lg text-xs space-y-2">
-                <div className="font-semibold text-theme-primary">CLI Pair Command Template</div>
-                <div className="p-2 bg-slate-950 text-emerald-400 font-mono text-[11px] rounded select-all">
-                  streakforge-agent pair --server http://localhost:4000 --key &lt;API_KEY&gt;
-                </div>
-              </div>
+              <AgentManager agents={agents} onRefresh={refreshData} />
             </div>
           )}
 

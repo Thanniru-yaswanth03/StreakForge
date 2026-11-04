@@ -101,12 +101,38 @@ export interface LeetCodeSubmission {
   updatedAt: string;
 }
 
+export type SyncMode = 'MANUAL' | 'APPROVAL' | 'AUTOMATIC' | 'BACKUP';
+
+export interface SyncProposal {
+  id: string;
+  repoPath: string;
+  branch: string;
+  files: string[];
+  suggestedMessage: string;
+  diffSummary: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'COMMITTED';
+  createdAt: string;
+}
+
+export interface ConflictReport {
+  hasConflict: boolean;
+  type?: 'REMOTE_AHEAD' | 'MERGE_CONFLICT' | 'DETACHED_HEAD' | 'MISSING_REMOTE' | 'SECRET_BLOCKED' | 'LARGE_FILE';
+  message?: string;
+  resolutionInstructions?: string;
+}
+
 export interface WatchedRepositoryConfig {
   path: string;
   branch: string;
   idleMinutes: number;
   autoPush: boolean;
+  mode?: SyncMode;
+  allowedBranches?: string[];
   ignorePatterns?: string[];
+  lastSyncedAt?: string;
+  lastCommitSha?: string;
+  lastError?: string;
+  nextBackupAt?: string;
 }
 
 export interface LocalAgentInstance {

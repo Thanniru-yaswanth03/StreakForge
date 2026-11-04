@@ -12,12 +12,15 @@ import {
   AlertTriangle,
   Clock,
   ShieldAlert,
-  Plus
+  Plus,
+  Laptop
 } from 'lucide-react';
 import { useData, AutomationJob } from '../context/DataContext';
+import { AgentManager } from '../components/AgentManager';
 
 export function AutomationCenterView() {
-  const { automations, toggleAutomation, deleteAutomation } = useData();
+  const { automations, toggleAutomation, deleteAutomation, agents, refreshData } = useData();
+  const [activeTab, setActiveTab] = useState<'agent' | 'rules'>('agent');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editingJob, setEditingJob] = useState<AutomationJob | null>(null);
 
@@ -67,8 +70,39 @@ export function AutomationCenterView() {
 
   return (
     <div className="space-y-6">
-      {/* Overview Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      {/* Sub-Navigation Selector */}
+      <div className="flex items-center gap-2 border-b border-theme-border pb-3">
+        <button
+          onClick={() => setActiveTab('agent')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'agent'
+              ? 'bg-theme-accent text-slate-950 shadow-xs'
+              : 'text-theme-muted hover:text-theme-primary bg-theme-surface border border-theme-border'
+          }`}
+        >
+          <Laptop className="w-3.5 h-3.5" />
+          <span>Local Desktop Agent & Git Engine</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('rules')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'rules'
+              ? 'bg-theme-accent text-slate-950 shadow-xs'
+              : 'text-theme-muted hover:text-theme-primary bg-theme-surface border border-theme-border'
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5" />
+          <span>Scheduled Rules & Jobs ({automations.length})</span>
+        </button>
+      </div>
+
+      {activeTab === 'agent' ? (
+        <AgentManager agents={agents} onRefresh={refreshData} />
+      ) : (
+        <>
+          {/* Overview Stat Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5">
           <div className="text-[11px] font-semibold text-theme-muted uppercase tracking-wider">Active Automations</div>
           <div className="text-2xl font-bold text-emerald-500 mt-1">{activeCount}</div>
@@ -232,6 +266,8 @@ export function AutomationCenterView() {
           ))}
         </div>
       </div>
+      </>
+    )}
 
       {/* Confirmation Modal for Destructive Delete Action */}
       {deleteConfirmId && (

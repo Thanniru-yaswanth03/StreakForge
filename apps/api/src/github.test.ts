@@ -175,3 +175,4 @@ describe('Phase 2 — GitHub Authentication & Integration', () => {
     });
   });
 });
+
