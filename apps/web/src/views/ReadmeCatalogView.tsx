@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileText,
   RotateCw,
@@ -33,7 +33,7 @@ export function ReadmeCatalogView() {
     repoFullName: 'Thanniru-yaswanth03/LeetCodeHustle'
   };
 
-  const fetchPreview = async () => {
+  const fetchPreview = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.catalog.preview(primaryRepo.repoFullName);
@@ -44,11 +44,11 @@ export function ReadmeCatalogView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [primaryRepo.repoFullName]);
 
   useEffect(() => {
     fetchPreview();
-  }, [primaryRepo.repoFullName]);
+  }, [fetchPreview]);
 
   const handleSyncToGitHub = async () => {
     try {
