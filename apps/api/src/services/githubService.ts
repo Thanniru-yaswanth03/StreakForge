@@ -69,37 +69,85 @@ export async function getGitHubActivity(
 ): Promise<GitHubActivityFeed> {
   const octokit = await getAuthenticatedOctokit(userId);
 
-  // Get user's connected repositories
-  const connectedRepos = await RepositoryConnection.find({
-    userId: new Types.ObjectId(userId)
-  }).limit(10);
-
-  const reposToScan: Array<{ owner: string; repo: string; fullName: string; defaultBranch: string }> = [];
-
-  if (connectedRepos.length > 0) {
-    for (const r of connectedRepos) {
-      const [owner, repo] = r.repoFullName.split('/');
-      if (owner && repo) {
-        reposToScan.push({ owner, repo, fullName: r.repoFullName, defaultBranch: r.defaultBranch });
+  // 1. Identify user's active repositories directly from GitHub live events
+  const recentActiveRepoNames = new Set<string>();
+  try {
+    const ghUser = await octokit.rest.users.getAuthenticated();
+    const eventsRes = await octokit.rest.activity.listEventsForAuthenticatedUser({
+      username: ghUser.data.login,
+      per_page: 30
+    });
+    for (const ev of eventsRes.data) {
+      if (ev.repo?.name) {
+        recentActiveRepoNames.add(ev.repo.name);
       }
     }
-  } else {
-    // If no repos explicitly connected yet, inspect top recent repositories
+  } catch (err: any) {
+    logger.warn('Failed to retrieve recent user events for active repo discovery', { err: err?.message });
+  }
+
+  // 2. Query user's connected repositories, prioritizing target repos and recently synced ones
+  const connectedRepos = await RepositoryConnection.find({
+    userId: new Types.ObjectId(userId)
+  })
+    .sort({ isTargetForLeetCode: -1, lastSyncedAt: -1, updatedAt: -1 })
+    .limit(30);
+
+  const reposToScan: Array<{ owner: string; repo: string; fullName: string; defaultBranch: string }> = [];
+  const scannedSet = new Set<string>();
+
+  // Prioritize repos with verified recent events
+  for (const full of recentActiveRepoNames) {
+    const [owner, repo] = full.split('/');
+    if (owner && repo && !scannedSet.has(full.toLowerCase())) {
+      scannedSet.add(full.toLowerCase());
+      const conn = connectedRepos.find((c) => c.repoFullName.toLowerCase() === full.toLowerCase());
+      reposToScan.push({
+        owner,
+        repo,
+        fullName: full,
+        defaultBranch: conn?.defaultBranch || 'main'
+      });
+    }
+  }
+
+  // Then add remaining connected repositories
+  if (connectedRepos.length > 0) {
+    for (const r of connectedRepos) {
+      const full = r.repoFullName;
+      if (!scannedSet.has(full.toLowerCase())) {
+        scannedSet.add(full.toLowerCase());
+        const [owner, repo] = full.split('/');
+        if (owner && repo) {
+          reposToScan.push({
+            owner,
+            repo,
+            fullName: full,
+            defaultBranch: r.defaultBranch || 'main'
+          });
+        }
+      }
+    }
+  } else if (reposToScan.length === 0) {
+    // If no repos explicitly connected or discovered, inspect top updated repositories
     try {
       const userRepos = await octokit.rest.repos.listForAuthenticatedUser({
         sort: 'updated',
         per_page: 5
       });
       for (const r of userRepos.data) {
-        reposToScan.push({
-          owner: r.owner.login,
-          repo: r.name,
-          fullName: r.full_name,
-          defaultBranch: r.default_branch
-        });
+        if (!scannedSet.has(r.full_name.toLowerCase())) {
+          scannedSet.add(r.full_name.toLowerCase());
+          reposToScan.push({
+            owner: r.owner.login,
+            repo: r.name,
+            fullName: r.full_name,
+            defaultBranch: r.default_branch
+          });
+        }
       }
-    } catch (err) {
-      logger.warn('Failed to retrieve fallback user repos for activity feed', { err });
+    } catch (err: any) {
+      logger.warn('Failed to retrieve fallback user repos for activity feed', { err: err?.message });
     }
   }
 
@@ -215,10 +263,34 @@ export async function getGitHubActivity(
     })
   );
 
-  // Sort commits descending by timestamp
-  commits.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  pullRequests.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  issues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Deduplicate commits by sha and sort descending by timestamp
+  const uniqueCommitsMap = new Map<string, typeof commits[0]>();
+  for (const c of commits) {
+    if (!uniqueCommitsMap.has(c.sha)) {
+      uniqueCommitsMap.set(c.sha, c);
+    }
+  }
+  const dedupedCommits = Array.from(uniqueCommitsMap.values());
+  dedupedCommits.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  // Deduplicate and sort pull requests and issues
+  const uniquePrsMap = new Map<number, typeof pullRequests[0]>();
+  for (const pr of pullRequests) {
+    if (!uniquePrsMap.has(pr.number)) {
+      uniquePrsMap.set(pr.number, pr);
+    }
+  }
+  const dedupedPrs = Array.from(uniquePrsMap.values());
+  dedupedPrs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const uniqueIssuesMap = new Map<number, typeof issues[0]>();
+  for (const iss of issues) {
+    if (!uniqueIssuesMap.has(iss.number)) {
+      uniqueIssuesMap.set(iss.number, iss);
+    }
+  }
+  const dedupedIssues = Array.from(uniqueIssuesMap.values());
+  dedupedIssues.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Rate limit inspection
   let rateLimit = { limit: 5000, remaining: 4950, reset: Math.floor(Date.now() / 1000) + 3600 };
@@ -234,9 +306,9 @@ export async function getGitHubActivity(
   }
 
   return {
-    commits: commits.slice((page - 1) * limit, page * limit),
-    pullRequests,
-    issues,
+    commits: dedupedCommits.slice((page - 1) * limit, page * limit),
+    pullRequests: dedupedPrs,
+    issues: dedupedIssues,
     branches,
     releases,
     rateLimit

@@ -42,11 +42,12 @@ export function GitHubActivityView() {
     try {
       setSyncing(true);
       const res = await api.github.sync();
-      setSyncStatusMsg(res.message);
-      refreshData();
-      setTimeout(() => setSyncStatusMsg(''), 4000);
+      const msg = (res as any)?.data?.message || (res as any)?.message || 'GitHub activity synchronized successfully';
+      setSyncStatusMsg(msg);
+      await refreshData();
+      setTimeout(() => setSyncStatusMsg(''), 5000);
     } catch (err: any) {
-      alert(`GitHub synchronization failed: ${err.message}`);
+      setSyncStatusMsg(`Sync failed: ${err.message || 'Error communicating with GitHub'}`);
     } finally {
       setSyncing(false);
     }
