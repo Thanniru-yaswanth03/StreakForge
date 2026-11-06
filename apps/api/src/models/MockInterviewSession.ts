@@ -61,3 +61,4 @@ MockInterviewSessionSchema.index({ userId: 1, createdAt: -1 });
 export const MockInterviewSession =
   mongoose.models.MockInterviewSession ||
   mongoose.model<IMockInterviewSessionDocument>('MockInterviewSession', MockInterviewSessionSchema);
+

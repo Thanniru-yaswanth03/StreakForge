@@ -37,8 +37,9 @@ export function PublicProfileView() {
     try {
       setLoading(true);
       const res = await api.publicProfile.get(username);
-      if (res.success && res.data) {
-        setProfile(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data && (data.username || data.totalSolved !== undefined)) {
+        setProfile(data);
       }
     } catch (err) {
       console.error('Failed to load public profile:', err);

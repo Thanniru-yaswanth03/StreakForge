@@ -42,3 +42,4 @@ const UserAchievementSchema = new Schema<IUserAchievementDocument>(
 export const UserAchievement =
   mongoose.models.UserAchievement ||
   mongoose.model<IUserAchievementDocument>('UserAchievement', UserAchievementSchema);
+

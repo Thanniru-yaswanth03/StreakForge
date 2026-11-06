@@ -45,11 +45,12 @@ export function CodingPlannerView() {
     try {
       setLoading(true);
       const res = await api.planner.get();
-      if (res.success && res.data) {
-        setPlanner(res.data);
-        const dt = res.data.dailyTarget;
+      const data = (res as any)?.data ?? res;
+      if (data && (data.dailyTarget || data.weeklyTarget)) {
+        setPlanner(data);
+        const dt = data.dailyTarget || {};
         setDailyInput((dt.easy || 0) + (dt.medium || 0) + (dt.hard || 0) || 3);
-        setWeeklyInput(res.data.weeklyTarget || 15);
+        setWeeklyInput(data.weeklyTarget || 15);
       }
     } catch (err) {
       console.error('Failed to load coding planner:', err);
@@ -69,8 +70,9 @@ export function CodingPlannerView() {
         { easy: 1, medium: Math.max(1, dailyInput - 1), hard: 0, revisionMinutes: 30 },
         weeklyInput
       );
-      if (res.success && res.data) {
-        setPlanner(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data) {
+        setPlanner(data);
         setIsEditingTargets(false);
       }
     } catch (err) {
@@ -100,8 +102,9 @@ export function CodingPlannerView() {
 
     try {
       const res = await api.planner.updateRoutines(currentRoutines);
-      if (res.success && res.data) {
-        setPlanner(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data) {
+        setPlanner(data);
         setNewRoutineTopic('');
       }
     } catch (err) {
@@ -117,8 +120,9 @@ export function CodingPlannerView() {
 
     try {
       const res = await api.planner.updateRoutines(currentRoutines);
-      if (res.success && res.data) {
-        setPlanner(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data) {
+        setPlanner(data);
       }
     } catch (err) {
       console.error('Failed to remove routine item:', err);

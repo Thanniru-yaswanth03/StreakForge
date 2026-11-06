@@ -56,10 +56,11 @@ export function KnowledgeVaultView() {
         selectedFolder === 'All' ? undefined : selectedFolder,
         searchQuery.trim() || undefined
       );
-      if (res.success && res.data) {
-        setNotes(res.data);
-        if (res.data.length > 0 && !activeNote) {
-          setActiveNote(res.data[0]);
+      const data = (res as any)?.data ?? res;
+      if (Array.isArray(data)) {
+        setNotes(data);
+        if (data.length > 0 && !activeNote) {
+          setActiveNote(data[0]);
         }
       }
     } catch (err) {
@@ -113,9 +114,10 @@ export function KnowledgeVaultView() {
           linkedProblemSlug: formSlug.trim() || undefined,
           isPinned: formPinned
         });
-        if (res.success && res.data) {
-          setNotes([res.data, ...notes]);
-          setActiveNote(res.data);
+        const note = (res as any)?.data ?? res;
+        if (note && note.id) {
+          setNotes([note, ...notes]);
+          setActiveNote(note);
           setIsCreatingNew(false);
         }
       } else if (isEditing && activeNote) {
@@ -127,9 +129,10 @@ export function KnowledgeVaultView() {
           linkedProblemSlug: formSlug.trim() || undefined,
           isPinned: formPinned
         });
-        if (res.success && res.data) {
-          setNotes(notes.map((n) => (n.id === activeNote.id ? res.data : n)));
-          setActiveNote(res.data);
+        const note = (res as any)?.data ?? res;
+        if (note && note.id) {
+          setNotes(notes.map((n) => (n.id === activeNote.id ? note : n)));
+          setActiveNote(note);
           setIsEditing(false);
         }
       }

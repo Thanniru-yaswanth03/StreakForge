@@ -32,9 +32,10 @@ export function MultiPlatformView() {
     try {
       setLoading(true);
       const res = await api.platforms.getProfiles();
-      if (res.success && res.data) {
-        setProfiles(res.data.profiles);
-        setTimeline(res.data.timeline);
+      const data = (res as any)?.data ?? res;
+      if (data && (data.profiles || data.timeline)) {
+        setProfiles(data.profiles || []);
+        setTimeline(data.timeline || []);
       }
     } catch (err) {
       console.error('Failed to load multi-platform profiles:', err);

@@ -28,8 +28,9 @@ export function CareerReadinessView() {
     try {
       setLoading(true);
       const res = await api.career.getReadiness();
-      if (res.success && res.data) {
-        setReadiness(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data && (data.overallScore !== undefined || data.components)) {
+        setReadiness(data);
       }
     } catch (err) {
       console.error('Failed to load career readiness score:', err);

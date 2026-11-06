@@ -28,8 +28,9 @@ export function PatternExplorerView() {
     try {
       setLoading(true);
       const res = await api.patterns.getOverview();
-      if (res.success && res.data) {
-        setPatterns(res.data);
+      const data = (res as any)?.data ?? res;
+      if (Array.isArray(data)) {
+        setPatterns(data);
       }
     } catch (err) {
       console.error('Failed to fetch patterns:', err);

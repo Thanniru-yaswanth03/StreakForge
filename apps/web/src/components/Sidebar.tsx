@@ -222,7 +222,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                   Streak<span className="text-[#3fb950]">Forge</span>
                 </span>
                 <span className="text-[10px] text-[#8b949e] font-mono leading-none">
-                  v2.0 Intelligence
+                  v3.0 Ecosystem
                 </span>
               </div>
             )}

@@ -34,8 +34,9 @@ export default function PublicProfilePage() {
         setLoading(true);
         setNotFound(false);
         const res = await api.publicProfile.get(username);
-        if (res.success && res.data) {
-          setProfile(res.data);
+        const data = (res as any)?.data ?? res;
+        if (data && (data.username || data.totalSolved !== undefined)) {
+          setProfile(data);
         } else {
           setNotFound(true);
         }

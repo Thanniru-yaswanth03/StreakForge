@@ -49,3 +49,4 @@ ProblemSolutionRecordSchema.index({ userId: 1, questionSlug: 1 }, { unique: true
 export const ProblemSolutionRecord =
   mongoose.models.ProblemSolutionRecord ||
   mongoose.model<IProblemSolutionRecordDocument>('ProblemSolutionRecord', ProblemSolutionRecordSchema);
+

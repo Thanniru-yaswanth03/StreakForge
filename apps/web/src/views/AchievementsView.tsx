@@ -25,8 +25,9 @@ export function AchievementsView() {
     try {
       setLoading(true);
       const res = await api.gamification.getProfile();
-      if (res.success && res.data) {
-        setProfile(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data && (data.level !== undefined || data.achievements)) {
+        setProfile(data);
       }
     } catch (err) {
       console.error('Failed to load gamification profile:', err);

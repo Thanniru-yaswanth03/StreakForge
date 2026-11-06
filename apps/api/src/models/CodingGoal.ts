@@ -79,3 +79,4 @@ const CodingGoalSchema = new Schema<ICodingGoalDocument>(
 export const CodingGoal =
   mongoose.models.CodingGoal ||
   mongoose.model<ICodingGoalDocument>('CodingGoal', CodingGoalSchema);
+

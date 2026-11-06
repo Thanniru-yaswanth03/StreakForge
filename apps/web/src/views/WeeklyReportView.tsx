@@ -27,8 +27,9 @@ export function WeeklyReportView() {
     try {
       setLoading(true);
       const res = await api.reports.getWeekly();
-      if (res.success && res.data) {
-        setReport(res.data);
+      const data = (res as any)?.data ?? res;
+      if (data && (data.problemsSolved !== undefined || data.markdownSummary)) {
+        setReport(data);
       }
     } catch (err) {
       console.error('Failed to load weekly report:', err);

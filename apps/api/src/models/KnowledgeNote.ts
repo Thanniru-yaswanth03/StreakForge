@@ -32,3 +32,4 @@ KnowledgeNoteSchema.index({ userId: 1, title: 'text', content: 'text' });
 export const KnowledgeNote =
   mongoose.models.KnowledgeNote ||
   mongoose.model<IKnowledgeNoteDocument>('KnowledgeNote', KnowledgeNoteSchema);
+

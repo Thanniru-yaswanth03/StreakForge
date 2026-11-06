@@ -41,8 +41,9 @@ export function MockInterviewView() {
     try {
       setLoading(true);
       const res = await api.interview.getSessions();
-      if (res.success && res.data) {
-        setSessions(res.data);
+      const data = (res as any)?.data ?? res;
+      if (Array.isArray(data)) {
+        setSessions(data);
       }
     } catch (err) {
       console.error('Failed to load past sessions:', err);
@@ -77,9 +78,10 @@ export function MockInterviewView() {
     try {
       setStarting(true);
       const res = await api.interview.start(selectedDifficulty, selectedTrack);
-      if (res.success && res.data) {
-        setActiveSession(res.data);
-        setSecondsRemaining(res.data.timeLimitMinutes * 60);
+      const session = (res as any)?.data ?? res;
+      if (session && (session.id || session.problems)) {
+        setActiveSession(session);
+        setSecondsRemaining((session.timeLimitMinutes || 45) * 60);
         setCurrentProblemIdx(0);
         setProblemSolvedState({});
         setProblemNotes({});
@@ -114,8 +116,9 @@ export function MockInterviewView() {
       }));
 
       const res = await api.interview.complete(activeSession.id, timeSpent, results);
-      if (res.success && res.data) {
-        setActiveSession(res.data);
+      const completed = (res as any)?.data ?? res;
+      if (completed) {
+        setActiveSession(completed);
         fetchPastSessions();
       }
     } catch (err) {
