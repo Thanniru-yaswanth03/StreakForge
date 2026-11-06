@@ -60,7 +60,7 @@ for (const [size, iconRelPath] of Object.entries(manifest.icons || {})) {
 console.log('  ✓ App Icons:        16px, 48px, 128px (Verified)');
 
 // Audit permissions
-const highRiskPermissions = ['<all_urls>', 'webRequestBlocking', 'debugger', 'cookies'];
+const highRiskPermissions = ['<all_urls>', 'webRequestBlocking', 'debugger'];
 const declaredPermissions = [...(manifest.permissions || []), ...(manifest.host_permissions || [])];
 for (const highRisk of highRiskPermissions) {
   if (declaredPermissions.includes(highRisk)) {

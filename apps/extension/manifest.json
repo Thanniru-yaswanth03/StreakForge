@@ -13,7 +13,6 @@
     "alarms",
     "activeTab",
     "notifications",
-    "cookies",
     "tabs"
   ],
   "host_permissions": [
