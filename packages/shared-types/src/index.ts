@@ -1128,7 +1128,15 @@ export interface MockInterviewSession {
   difficulty: InterviewDifficulty;
   timeLimitMinutes: number;
   timeSpentSeconds: number;
-  problems: Array<{ id: number; slug: string; title: string; difficulty: Difficulty; solved: boolean; notes?: string }>;
+  problems: Array<{
+    id: number;
+    slug: string;
+    title: string;
+    difficulty: Difficulty;
+    category?: string;
+    solved: boolean;
+    notes?: string;
+  }>;
   status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
   scorePercent: number;
   feedback: string;

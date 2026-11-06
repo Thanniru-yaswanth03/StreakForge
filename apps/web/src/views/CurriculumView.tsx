@@ -35,7 +35,8 @@ export function CurriculumView() {
     try {
       setLoading(true);
       const res = await api.study.getCurriculum(track);
-      setCurriculumData(res);
+      const data = (res as any)?.data ?? res;
+      setCurriculumData(data);
     } catch (err) {
       console.error('Failed to load curriculum:', err);
     } finally {
@@ -133,8 +134,9 @@ export function CurriculumView() {
 
       // Reconcile with authoritative server state
       const fresh = await api.study.getCurriculum(activeTrack);
-      if (fresh) {
-        setCurriculumData(fresh);
+      const data = (fresh as any)?.data ?? fresh;
+      if (data) {
+        setCurriculumData(data);
       }
     } catch (err) {
       console.error('Failed updating status:', err);

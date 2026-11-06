@@ -19,6 +19,11 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { MockInterviewSession, InterviewDifficulty } from '@streakforge/shared-types';
+import {
+  SUPPORTED_LANGUAGES,
+  SupportedLanguage,
+  getProblemBoilerplate
+} from '../lib/boilerplates';
 
 export function MockInterviewView() {
   const [activeSession, setActiveSession] = useState<MockInterviewSession | null>(null);
@@ -31,8 +36,9 @@ export function MockInterviewView() {
   // Active Session state
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
   const [currentProblemIdx, setCurrentProblemIdx] = useState<number>(0);
-  const [codeScratchpad, setCodeScratchpad] = useState<string>('# Write your solution here\ndef solution():\n    pass\n');
-  const [selectedLanguage, setSelectedLanguage] = useState<string>('python3');
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('python3');
+  const [codeScratchpad, setCodeScratchpad] = useState<string>('');
+  const [codeStore, setCodeStore] = useState<Record<string, string>>({});
   const [problemSolvedState, setProblemSolvedState] = useState<Record<string, boolean>>({});
   const [problemNotes, setProblemNotes] = useState<Record<string, string>>({});
   const [completing, setCompleting] = useState<boolean>(false);
@@ -74,6 +80,27 @@ export function MockInterviewView() {
     return () => clearInterval(interval);
   }, [activeSession, secondsRemaining]);
 
+  // Auto-hydrate boilerplate when active problem or language changes
+  useEffect(() => {
+    if (!activeSession || !activeSession.problems || activeSession.problems.length === 0) return;
+    const currentProb = activeSession.problems[currentProblemIdx];
+    if (!currentProb) return;
+
+    const key = `${currentProb.slug}__${selectedLanguage}`;
+    if (codeStore[key] !== undefined) {
+      setCodeScratchpad(codeStore[key]);
+    } else {
+      const freshBoilerplate = getProblemBoilerplate(
+        currentProb.slug,
+        currentProb.title,
+        currentProb.category || '',
+        selectedLanguage
+      );
+      setCodeStore((prev) => ({ ...prev, [key]: freshBoilerplate }));
+      setCodeScratchpad(freshBoilerplate);
+    }
+  }, [activeSession, currentProblemIdx, selectedLanguage]);
+
   const handleStartInterview = async () => {
     try {
       setStarting(true);
@@ -85,11 +112,105 @@ export function MockInterviewView() {
         setCurrentProblemIdx(0);
         setProblemSolvedState({});
         setProblemNotes({});
+        if (session.problems && session.problems.length > 0) {
+          const p0 = session.problems[0];
+          const initialCode = getProblemBoilerplate(
+            p0.slug,
+            p0.title,
+            p0.category || '',
+            selectedLanguage
+          );
+          const key = `${p0.slug}__${selectedLanguage}`;
+          setCodeStore({ [key]: initialCode });
+          setCodeScratchpad(initialCode);
+        }
       }
     } catch (err) {
       console.error('Failed to start interview:', err);
     } finally {
       setStarting(false);
+    }
+  };
+
+  const handleLanguageChange = (newLang: SupportedLanguage) => {
+    if (!activeSession || !activeSession.problems) {
+      setSelectedLanguage(newLang);
+      return;
+    }
+    const currentProb = activeSession.problems[currentProblemIdx];
+    if (!currentProb) {
+      setSelectedLanguage(newLang);
+      return;
+    }
+
+    const oldKey = `${currentProb.slug}__${selectedLanguage}`;
+    const newKey = `${currentProb.slug}__${newLang}`;
+
+    const nextCode = codeStore[newKey] ?? getProblemBoilerplate(
+      currentProb.slug,
+      currentProb.title,
+      currentProb.category || '',
+      newLang
+    );
+
+    setCodeStore((prev) => ({
+      ...prev,
+      [oldKey]: codeScratchpad,
+      [newKey]: nextCode
+    }));
+    setCodeScratchpad(nextCode);
+    setSelectedLanguage(newLang);
+  };
+
+  const handleSelectProblem = (newIdx: number) => {
+    if (!activeSession || !activeSession.problems) return;
+    const currentProb = activeSession.problems[currentProblemIdx];
+    const nextProb = activeSession.problems[newIdx];
+    if (!nextProb) return;
+
+    const oldKey = currentProb ? `${currentProb.slug}__${selectedLanguage}` : '';
+    const newKey = `${nextProb.slug}__${selectedLanguage}`;
+
+    const nextCode = codeStore[newKey] ?? getProblemBoilerplate(
+      nextProb.slug,
+      nextProb.title,
+      nextProb.category || '',
+      selectedLanguage
+    );
+
+    setCodeStore((prev) => ({
+      ...prev,
+      ...(oldKey ? { [oldKey]: codeScratchpad } : {}),
+      [newKey]: nextCode
+    }));
+    setCodeScratchpad(nextCode);
+    setCurrentProblemIdx(newIdx);
+  };
+
+  const handleResetBoilerplate = () => {
+    if (!activeSession || !activeSession.problems) return;
+    const currentProb = activeSession.problems[currentProblemIdx];
+    if (!currentProb) return;
+
+    const fresh = getProblemBoilerplate(
+      currentProb.slug,
+      currentProb.title,
+      currentProb.category || '',
+      selectedLanguage
+    );
+    const key = `${currentProb.slug}__${selectedLanguage}`;
+    setCodeStore((prev) => ({ ...prev, [key]: fresh }));
+    setCodeScratchpad(fresh);
+  };
+
+  const handleCodeChange = (val: string) => {
+    setCodeScratchpad(val);
+    if (activeSession && activeSession.problems) {
+      const currentProb = activeSession.problems[currentProblemIdx];
+      if (currentProb) {
+        const key = `${currentProb.slug}__${selectedLanguage}`;
+        setCodeStore((prev) => ({ ...prev, [key]: val }));
+      }
     }
   };
 
@@ -392,7 +513,7 @@ export function MockInterviewView() {
                 return (
                   <button
                     key={p.slug}
-                    onClick={() => setCurrentProblemIdx(idx)}
+                    onClick={() => handleSelectProblem(idx)}
                     className={`px-3 py-1.5 text-xs rounded-lg font-medium transition flex items-center gap-1.5 ${
                       isSelected
                         ? 'bg-[#21262d] text-[#58a6ff] border border-[#58a6ff]/30'
@@ -488,21 +609,33 @@ export function MockInterviewView() {
                   Solution Scratchpad
                 </span>
               </div>
-              <select
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="px-2 py-1 bg-[#0d1117] border border-[#30363d] rounded text-xs text-[#f0f6fc] font-mono focus:outline-none"
-              >
-                <option value="python3">Python 3</option>
-                <option value="java">Java</option>
-                <option value="cpp">C++</option>
-                <option value="typescript">TypeScript</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetBoilerplate}
+                  title="Reset code to fresh language starter boilerplate"
+                  className="px-2 py-1 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded text-[11px] text-[#8b949e] hover:text-[#f0f6fc] flex items-center gap-1 transition"
+                >
+                  <RotateCw className="w-3 h-3" />
+                  <span>Reset Starter</span>
+                </button>
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
+                  className="px-2.5 py-1 bg-[#0d1117] border border-[#30363d] rounded text-xs text-[#f0f6fc] font-mono focus:outline-none focus:border-[#58a6ff]"
+                >
+                  {SUPPORTED_LANGUAGES.map((lang) => (
+                    <option key={lang.id} value={lang.id}>
+                      {lang.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <textarea
               value={codeScratchpad}
-              onChange={(e) => setCodeScratchpad(e.target.value)}
+              onChange={(e) => handleCodeChange(e.target.value)}
               rows={18}
               placeholder="Draft your algorithmic code here..."
               className="w-full p-3.5 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-[#f0f6fc] font-mono leading-relaxed focus:outline-none focus:border-[#58a6ff]"
