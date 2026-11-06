@@ -35,17 +35,20 @@ export function createApp(): Express {
       origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps, curl, extension background scripts)
         if (!origin) return callback(null, true);
+
         const isAllowed = allowedOrigins.some((allowed) => {
+          if (allowed === '*' || origin === allowed) return true;
           if (allowed.includes('*')) {
-            const prefix = allowed.replace('*', '');
-            return origin.startsWith(prefix);
+            const regexStr = '^' + allowed.split('*').map(s => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('.*') + '$';
+            return new RegExp(regexStr).test(origin);
           }
-          return origin === allowed;
+          return false;
         });
+
         if (isAllowed) return callback(null, true);
 
         if (process.env.NODE_ENV === 'production') {
-          return callback(new Error('CORS origin access denied by security policy'), false);
+          return callback(null, false);
         }
         callback(null, true); // Permissive in development
       },
