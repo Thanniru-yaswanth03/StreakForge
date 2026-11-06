@@ -41,6 +41,18 @@ export interface IUserDocument extends Document {
   };
   leetcodeUsername?: string;
   leetcodeStats?: ILeetCodeUserStats;
+  bio?: string;
+  codeforcesUsername?: string;
+  codechefUsername?: string;
+  isPublicProfile: boolean;
+  publicProfileSettings: {
+    showStreak: boolean;
+    showHeatmap: boolean;
+    showWeaknesses: boolean;
+    showBadges: boolean;
+    showSolutions: boolean;
+  };
+  gamificationEnabled: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +75,18 @@ const UserSchema = new Schema<IUserDocument>(
     },
     leetcodeUsername: { type: String, default: 'yash1th2k4' },
     leetcodeStats: { type: Schema.Types.Mixed, default: null },
+    bio: { type: String, default: 'Full-stack builder & algorithm practitioner.' },
+    codeforcesUsername: { type: String, default: '' },
+    codechefUsername: { type: String, default: '' },
+    isPublicProfile: { type: Boolean, default: true, index: true },
+    publicProfileSettings: {
+      showStreak: { type: Boolean, default: true },
+      showHeatmap: { type: Boolean, default: true },
+      showWeaknesses: { type: Boolean, default: true },
+      showBadges: { type: Boolean, default: true },
+      showSolutions: { type: Boolean, default: true }
+    },
+    gamificationEnabled: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true }
   },
   { timestamps: true }

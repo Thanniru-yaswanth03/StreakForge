@@ -22,7 +22,13 @@ import {
   FileText,
   Award,
   Clock,
-  Layers
+  Layers,
+  Briefcase,
+  Trophy,
+  Target,
+  Network,
+  Globe,
+  Timer
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
@@ -57,29 +63,15 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
 
   const navGroups: NavGroup[] = [
     {
-      title: 'Activity & Telemetry',
+      title: 'Overview',
       items: [
         { id: 'overview', label: 'Overview', icon: Flame, badge: `${currentStreak}d` },
-        {
-          id: 'intelligence',
-          label: 'Learning Intelligence',
-          icon: Brain,
-          badge: '2.0',
-          badgeColor: 'bg-[#a371f7]/15 text-[#a371f7] border-[#a371f7]/30'
-        },
-        {
-          id: 'leetcode',
-          label: 'LeetCode Activity',
-          icon: Code2,
-          badge: totalLeetCode,
-          badgeColor: 'bg-[#238636]/20 text-[#3fb950] border-[#238636]/40'
-        },
-        { id: 'github', label: 'GitHub Activity', icon: GitBranch, badge: '409' },
-        { id: 'calendar', label: 'Streak Calendar', icon: Calendar, badge: '365' }
+        { id: 'calendar', label: 'Streak Calendar', icon: Calendar, badge: '365' },
+        { id: 'reports', label: 'Weekly Report', icon: FileText, badge: 'New' }
       ]
     },
     {
-      title: 'Interview & Preparation',
+      title: 'Learning & DSA',
       items: [
         {
           id: 'curriculum',
@@ -95,14 +87,90 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
           badge: 'SRS',
           badgeColor: 'bg-[#e3b341]/15 text-[#e3b341] border-[#e3b341]/30'
         },
-        { id: 'catalog', label: 'README Catalog', icon: FileText, badge: 'Auto' },
+        {
+          id: 'patterns',
+          label: 'Pattern Explorer',
+          icon: Network,
+          badge: '16',
+          badgeColor: 'bg-[#238636]/15 text-[#3fb950] border-[#238636]/30'
+        },
+        {
+          id: 'vault',
+          label: 'Knowledge Vault',
+          icon: FileText
+        },
+        {
+          id: 'intelligence',
+          label: 'Learning Intelligence',
+          icon: Brain,
+          badge: '2.0',
+          badgeColor: 'bg-[#a371f7]/15 text-[#a371f7] border-[#a371f7]/30'
+        }
+      ]
+    },
+    {
+      title: 'Productivity',
+      items: [
+        {
+          id: 'planner',
+          label: 'Coding Planner',
+          icon: Target,
+          badge: 'Sprint'
+        },
+        {
+          id: 'mock',
+          label: 'Mock Interviews',
+          icon: Timer,
+          badge: 'Timed'
+        }
+      ]
+    },
+    {
+      title: 'Integrations',
+      items: [
+        {
+          id: 'platforms',
+          label: 'Multi-Platform Sync',
+          icon: Globe,
+          badge: 'GH/LC/CF',
+          badgeColor: 'bg-[#388bfd]/15 text-[#58a6ff] border-[#388bfd]/30'
+        },
+        {
+          id: 'leetcode',
+          label: 'LeetCode Activity',
+          icon: Code2,
+          badge: totalLeetCode,
+          badgeColor: 'bg-[#238636]/20 text-[#3fb950] border-[#238636]/40'
+        },
+        { id: 'github', label: 'GitHub Activity', icon: GitBranch, badge: '409' },
+        { id: 'catalog', label: 'README Catalog', icon: Layers, badge: 'Auto' },
+        { id: 'repos', label: 'Repositories', icon: FolderGit2, badge: connectedRepos.length || 1 }
+      ]
+    },
+    {
+      title: 'Profile & Career',
+      items: [
+        { id: 'profile', label: 'Public Profile', icon: Globe },
+        {
+          id: 'career',
+          label: 'Career Readiness',
+          icon: Briefcase,
+          badge: 'Score',
+          badgeColor: 'bg-[#58a6ff]/15 text-[#58a6ff] border-[#58a6ff]/30'
+        },
+        {
+          id: 'achievements',
+          label: 'XP & Levels',
+          icon: Trophy,
+          badge: 'XP',
+          badgeColor: 'bg-[#bc8cff]/15 text-[#bc8cff] border-[#bc8cff]/30'
+        },
         { id: 'badges', label: 'Profile Badges', icon: Award, badge: 'SVG' }
       ]
     },
     {
-      title: 'Platform & Config',
+      title: 'Settings',
       items: [
-        { id: 'repos', label: 'Repositories', icon: FolderGit2, badge: connectedRepos.length || 1 },
         {
           id: 'automation',
           label: 'Automations',

@@ -957,4 +957,238 @@ export interface LearningIntelligenceSummary {
   };
 }
 
+// ========================================================
+// StreakForge 3.0 — Domain Contracts & Types
+// ========================================================
+
+export type PeriodType = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface ConsistencyMetrics {
+  consistencyScore: number;
+  streakDays: number;
+  longestStreakDays: number;
+  activeDaysPastYear: number;
+  weeklyAverageSolves: number;
+  mostProductiveDay: string;
+  activityCadence: Array<{
+    label: string;
+    count: number;
+    genuineCommits: number;
+    leetCodeSolves: number;
+    codeforcesSolves: number;
+  }>;
+  trend: 'UPWARD' | 'STABLE' | 'NEEDS_MOMENTUM';
+}
+
+export type TopicMasteryStatus = 'STRONG' | 'MODERATE' | 'WEAK' | 'CRITICAL_WEAK';
+
+export interface TopicPerformance {
+  topic: string;
+  attempted: number;
+  solved: number;
+  accuracy: number;
+  failedAttempts: number;
+  needsRevisionCount: number;
+  status: TopicMasteryStatus;
+  color: string;
+}
+
+export interface ProblemRecommendation {
+  id: number;
+  slug: string;
+  title: string;
+  difficulty: Difficulty;
+  category: string;
+  pattern: string;
+  reason: string;
+  sourceTrack: string;
+}
+
+export interface WeaknessReport {
+  topics: TopicPerformance[];
+  weakestTopics: string[];
+  recommendations: ProblemRecommendation[];
+  overallAccuracyPercent: number;
+}
+
+export interface RoutineItem {
+  dayOfWeek: string;
+  focusTopics: string[];
+  targetCount: number;
+  revisionMinutes: number;
+}
+
+export interface CodingGoal {
+  id?: string;
+  userId?: string;
+  dailyTarget: { easy: number; medium: number; hard: number; revisionMinutes: number };
+  weeklyTarget: number;
+  studyRoutines: RoutineItem[];
+  completedToday: { easy: number; medium: number; hard: number; total: number; revisionCount: number };
+  completedThisWeek: number;
+  weekStartDate: string;
+}
+
+export type PlatformType = 'github' | 'leetcode' | 'codeforces' | 'codechef' | 'hackerrank';
+
+export interface PlatformProfile {
+  platform: PlatformType;
+  handle: string;
+  connected: boolean;
+  rating?: number;
+  rank?: string;
+  totalSolved?: number;
+  lastSyncedAt?: string;
+  avatarUrl?: string;
+}
+
+export interface UnifiedActivityItem {
+  id: string;
+  platform: PlatformType;
+  title: string;
+  subtitle?: string;
+  timestamp: string;
+  url?: string;
+  type: 'COMMIT' | 'SOLVE' | 'CONTEST';
+  metadata?: Record<string, any>;
+}
+
+export interface PublicDeveloperProfile {
+  username: string;
+  name?: string;
+  bio?: string;
+  avatarUrl?: string;
+  githubHandle?: string;
+  leetcodeHandle?: string;
+  codeforcesHandle?: string;
+  currentStreak: number;
+  longestStreak: number;
+  totalSolved: number;
+  difficultyDistribution: { easy: number; medium: number; hard: number };
+  topSkills: Array<{ topic: string; count: number; level: string }>;
+  badges: Array<{ id: string; name: string; icon: string; unlockedAt: string }>;
+  recentActivity: Array<{ date: string; title: string; platform: string }>;
+  publicUrl: string;
+}
+
+export interface AchievementItem {
+  id: string;
+  key: string;
+  title: string;
+  description: string;
+  category: 'STREAK' | 'DSA' | 'COMMITS' | 'MASTERY' | 'INTERVIEW';
+  icon: string;
+  xpReward: number;
+  unlocked: boolean;
+  unlockedAt?: string;
+  progress: number;
+  target: number;
+}
+
+export interface GamificationProfile {
+  level: number;
+  currentXp: number;
+  nextLevelXp: number;
+  levelProgressPercent: number;
+  rankTitle: string;
+  totalAchievementsUnlocked: number;
+  achievements: AchievementItem[];
+  recentXpGains: Array<{ timestamp: string; action: string; xp: number }>;
+}
+
+export interface SolutionApproach {
+  id: string;
+  name: string;
+  timeComplexity: string;
+  spaceComplexity: string;
+  language: string;
+  code: string;
+  explanation: string;
+  tradeoffs: string;
+  isOptimal: boolean;
+}
+
+export interface ProblemSolutionRecord {
+  id: string;
+  questionSlug: string;
+  questionTitle: string;
+  difficulty: Difficulty;
+  approaches: SolutionApproach[];
+  optimalTimeComplexity: string;
+  optimalSpaceComplexity: string;
+  patterns: string[];
+  lastUpdated: string;
+}
+
+export type InterviewDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | 'RANDOM';
+
+export interface MockInterviewSession {
+  id: string;
+  track: string;
+  difficulty: InterviewDifficulty;
+  timeLimitMinutes: number;
+  timeSpentSeconds: number;
+  problems: Array<{ id: number; slug: string; title: string; difficulty: Difficulty; solved: boolean; notes?: string }>;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
+  scorePercent: number;
+  feedback: string;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface KnowledgeNote {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  folder: string;
+  linkedProblemSlug?: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WeeklyReport {
+  weekNumber: number;
+  startDate: string;
+  endDate: string;
+  problemsSolved: number;
+  problemsAttempted: number;
+  gitCommits: number;
+  streakMaintained: boolean;
+  activeDaysCount: number;
+  topFocusTopic: string;
+  weaknessesTackled: string[];
+  srsRevisionsCompleted: number;
+  goalCompletionPercent: number;
+  deltaPreviousWeek: { solves: number; commits: number };
+  markdownSummary: string;
+}
+
+export interface PatternItem {
+  name: string;
+  description: string;
+  problemCount: number;
+  solvedCount: number;
+  masteryLevel: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  typicalTimeComplexity: string;
+  coreTechnique: string;
+  exampleProblems: Array<{ title: string; slug: string; difficulty: Difficulty }>;
+}
+
+export interface CareerReadinessScore {
+  overallScore: number;
+  tier: 'READY_FOR_SCREEN' | 'INTERVIEW_READY' | 'COMPETITIVE' | 'FOUNDATIONAL';
+  components: {
+    dsaCurriculumCoverage: { score: number; max: 35; details: string };
+    spacedRepetitionRetention: { score: number; max: 20; details: string };
+    codingConsistency: { score: number; max: 20; details: string };
+    mockInterviewPerformance: { score: number; max: 15; details: string };
+    githubPortfolioCompleteness: { score: number; max: 10; details: string };
+  };
+  recommendedNextActions: string[];
+  disclaimer: string;
+}
+
+
 

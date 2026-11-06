@@ -380,5 +380,102 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ repo })
       })
+  },
+  // StreakForge 3.0 Modules
+  consistency: {
+    getMetrics: (period: 'daily' | 'weekly' | 'monthly' | 'yearly' = 'weekly') =>
+      apiFetch<any>(`/analytics/consistency?period=${period}`)
+  },
+  weakness: {
+    getReport: () =>
+      apiFetch<any>('/learning/weaknesses')
+  },
+  planner: {
+    get: () =>
+      apiFetch<any>('/planner'),
+    updateTargets: (dailyTarget: any, weeklyTarget: number) =>
+      apiFetch<any>('/planner/targets', {
+        method: 'POST',
+        body: JSON.stringify({ dailyTarget, weeklyTarget })
+      }),
+    updateRoutines: (studyRoutines: any[]) =>
+      apiFetch<any>('/planner/routines', {
+        method: 'POST',
+        body: JSON.stringify({ studyRoutines })
+      })
+  },
+  platforms: {
+    getProfiles: () =>
+      apiFetch<any>('/platforms/profiles'),
+    connect: (platform: string, handle: string) =>
+      apiFetch<any>('/platforms/connect', {
+        method: 'POST',
+        body: JSON.stringify({ platform, handle })
+      })
+  },
+  gamification: {
+    getProfile: () =>
+      apiFetch<any>('/gamification/profile')
+  },
+  solutions: {
+    get: (slug: string) =>
+      apiFetch<any>(`/solutions/${slug}`),
+    addApproach: (slug: string, approach: any) =>
+      apiFetch<any>(`/solutions/${slug}/approaches`, {
+        method: 'POST',
+        body: JSON.stringify(approach)
+      })
+  },
+  interview: {
+    start: (difficulty: string = 'MEDIUM', track: string = 'Blind 75') =>
+      apiFetch<any>('/interview/start', {
+        method: 'POST',
+        body: JSON.stringify({ difficulty, track })
+      }),
+    complete: (sessionId: string, timeSpentSeconds: number, problemResults: any[]) =>
+      apiFetch<any>('/interview/complete', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, timeSpentSeconds, problemResults })
+      }),
+    getSessions: () =>
+      apiFetch<any>('/interview/sessions')
+  },
+  vault: {
+    list: (tag?: string, folder?: string, search?: string) => {
+      const params = new URLSearchParams();
+      if (tag) params.append('tag', tag);
+      if (folder) params.append('folder', folder);
+      if (search) params.append('search', search);
+      const q = params.toString();
+      return apiFetch<any>(`/vault/notes${q ? `?${q}` : ''}`);
+    },
+    create: (note: { title: string; content: string; tags?: string[]; folder?: string; linkedProblemSlug?: string; isPinned?: boolean }) =>
+      apiFetch<any>('/vault/notes', {
+        method: 'POST',
+        body: JSON.stringify(note)
+      }),
+    update: (id: string, note: any) =>
+      apiFetch<any>(`/vault/notes/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(note)
+      }),
+    delete: (id: string) =>
+      apiFetch<any>(`/vault/notes/${id}`, { method: 'DELETE' })
+  },
+  reports: {
+    getWeekly: () =>
+      apiFetch<any>('/reports/weekly')
+  },
+  patterns: {
+    getOverview: () =>
+      apiFetch<any>('/patterns/overview')
+  },
+  career: {
+    getReadiness: () =>
+      apiFetch<any>('/career/readiness')
+  },
+  publicProfile: {
+    get: (username: string) =>
+      apiFetch<any>(`/public/u/${username}`)
   }
 };

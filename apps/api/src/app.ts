@@ -16,6 +16,7 @@ import { notificationRoutes } from './routes/notificationRoutes.js';
 import { badgeRouter } from './routes/badgeRoutes.js';
 import { studyRouter } from './routes/studyRoutes.js';
 import { catalogRouter } from './routes/catalogRoutes.js';
+import { streakForge3Router } from './routes/streakForge3Routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp(): Express {
@@ -134,6 +135,7 @@ export function createApp(): Express {
   app.use('/api/v1/badge', badgeRouter);
   app.use('/api/v1/study', studyRouter);
   app.use('/api/v1/catalog', catalogRouter);
+  app.use('/api/v1', streakForge3Router);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {

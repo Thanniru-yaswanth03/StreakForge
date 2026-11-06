@@ -43,7 +43,16 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
     calendar: 'Streak Calendar',
     repos: 'Connected Repositories',
     automation: 'Automations',
-    settings: 'Settings'
+    settings: 'Settings',
+    planner: 'Personal Coding Planner',
+    vault: 'DSA Knowledge Vault',
+    patterns: 'Canonical Pattern Recognition',
+    mock: 'Mock Interview Practice Arena',
+    career: 'Career Readiness Dashboard',
+    achievements: 'XP & Developer Achievements',
+    reports: 'Weekly Developer Report',
+    platforms: 'Multi-Platform Sync (GH, LC, CF)',
+    profile: 'Public Developer Profile'
   };
 
   const primaryTargetRepo = connectedRepos.find((r) => r.isTargetForLeetCode) || {

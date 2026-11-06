@@ -19,6 +19,15 @@ import { CurriculumView } from '../views/CurriculumView';
 import { RevisionQueueView } from '../views/RevisionQueueView';
 import { ReadmeCatalogView } from '../views/ReadmeCatalogView';
 import { ProfileBadgesView } from '../views/ProfileBadgesView';
+import { CodingPlannerView } from '../views/CodingPlannerView';
+import { KnowledgeVaultView } from '../views/KnowledgeVaultView';
+import { PatternExplorerView } from '../views/PatternExplorerView';
+import { MockInterviewView } from '../views/MockInterviewView';
+import { CareerReadinessView } from '../views/CareerReadinessView';
+import { AchievementsView } from '../views/AchievementsView';
+import { WeeklyReportView } from '../views/WeeklyReportView';
+import { MultiPlatformView } from '../views/MultiPlatformView';
+import { PublicProfileView } from '../views/PublicProfileView';
 import { SyncToast } from '../components/SyncToast';
 import { useData } from '../context/DataContext';
 
@@ -42,6 +51,24 @@ export default function DashboardPage() {
         return <ReadmeCatalogView />;
       case 'badges':
         return <ProfileBadgesView />;
+      case 'planner':
+        return <CodingPlannerView />;
+      case 'vault':
+        return <KnowledgeVaultView />;
+      case 'patterns':
+        return <PatternExplorerView />;
+      case 'mock':
+        return <MockInterviewView />;
+      case 'career':
+        return <CareerReadinessView />;
+      case 'achievements':
+        return <AchievementsView />;
+      case 'reports':
+        return <WeeklyReportView />;
+      case 'platforms':
+        return <MultiPlatformView />;
+      case 'profile':
+        return <PublicProfileView />;
       case 'github':
         return <GitHubActivityView />;
       case 'leetcode':
