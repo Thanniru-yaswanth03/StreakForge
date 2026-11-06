@@ -167,6 +167,18 @@ export class StreakEngine {
   }
 
   /**
+   * Generic streak computation across snapshots in a given timezone
+   */
+  public static calculateStreak(
+    snapshots: Array<{ date: string }>,
+    timezone: string = 'UTC'
+  ): StreakMetric {
+    const todayStr = this.formatDateInTimezone(new Date(), timezone);
+    const dates = snapshots.map((s) => s.date);
+    return this.computeStreakFromDates(dates, todayStr);
+  }
+
+  /**
    * 1. GitHub Contributions Streak
    * Only includes verified GitHub commits, pull requests, and issues.
    */

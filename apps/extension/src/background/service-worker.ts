@@ -23,10 +23,126 @@ async function updateActionBadge(): Promise<void> {
   }
 }
 
+/**
+ * Synchronizes user authentication profile, target repository, and submission history from StreakForge API
+ */
+async function syncWithBackend(authToken: string, serverUrl: string = 'http://localhost:4000') {
+  const base = serverUrl.replace(/\/+$/, '');
+
+  // 1. Fetch user profile
+  let userProfile = undefined;
+  try {
+    const userRes = await fetch(`${base}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    if (userRes.ok) {
+      const uJson = await userRes.json();
+      if (uJson.data?.user) {
+        userProfile = {
+          username: uJson.data.user.username,
+          email: uJson.data.user.email,
+          avatarUrl: uJson.data.user.avatarUrl
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[StreakForge Worker] Failed to fetch user profile:', err);
+  }
+
+  // 2. Fetch connected repositories to find LeetCode target
+  let targetRepoFullName: string | undefined = undefined;
+  try {
+    const reposRes = await fetch(`${base}/api/v1/repos`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    if (reposRes.ok) {
+      const rJson = await reposRes.json();
+      const connected: any[] = rJson.data?.connected || [];
+      const target = connected.find((r) => r.isTargetForLeetCode);
+      if (target) {
+        targetRepoFullName = target.repoFullName;
+      } else {
+        targetRepoFullName = '';
+      }
+    }
+  } catch (err) {
+    console.warn('[StreakForge Worker] Failed to fetch repositories:', err);
+  }
+
+  // 3. Fetch submissions history
+  let mappedHistory: any[] = [];
+  try {
+    const histRes = await fetch(`${base}/api/v1/sync/leetcode/history?limit=100`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    if (histRes.ok) {
+      const hJson = await histRes.json();
+      const submissions = Array.isArray(hJson.data) ? hJson.data : (hJson.data?.items || []);
+      mappedHistory = submissions.map((sub: any) => ({
+        submissionId: sub.submissionId || String(sub._id),
+        questionId: String(sub.questionId),
+        questionTitle: sub.questionTitle,
+        questionSlug: sub.questionSlug,
+        difficulty: sub.difficulty,
+        language: sub.language,
+        code: sub.code || '',
+        runtimeMs: sub.runtimeMs || 0,
+        runtimePercentile: sub.runtimePercentile || 0,
+        memoryBytes: sub.memoryBytes || 0,
+        memoryPercentile: sub.memoryPercentile || 0,
+        verdict: 'Accepted',
+        topicTags: sub.topicTags || [],
+        submittedAt: sub.submittedAt || new Date().toISOString(),
+        state: 'SYNCED',
+        commitSha: sub.githubCommitSha,
+        commitUrl: sub.githubCommitUrl,
+        filePath: sub.filePath
+      }));
+    }
+  } catch (err) {
+    console.warn('[StreakForge Worker] Failed to fetch submissions history:', err);
+  }
+
+  // 4. Update configuration and storage
+  const updatePayload: Partial<import('../shared/types').ExtensionConfig> = {
+    authToken,
+    serverUrl: base
+  };
+  if (userProfile) updatePayload.userProfile = userProfile;
+  if (targetRepoFullName !== undefined) updatePayload.targetRepoFullName = targetRepoFullName;
+
+  const updatedCfg = await StorageManager.updateConfig(updatePayload);
+
+  // Always replace synced history with authentic backend records
+  await StorageManager.setSyncedHistory(mappedHistory);
+
+  return { config: updatedCfg, historyCount: mappedHistory.length };
+}
+
 // 1. Message Dispatcher
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
   (async () => {
     try {
+      if (message.type === 'AUTO_PAIR_TOKEN') {
+        const result = await syncWithBackend(message.payload.token, message.payload.serverUrl);
+        await updateActionBadge();
+        sendResponse({ success: true, ...result });
+        return;
+      }
+
+      if (message.type === 'SYNC_FROM_BACKEND') {
+        const cfg = await StorageManager.getConfig();
+        if (!cfg.authToken) {
+          sendResponse({ success: false, error: 'Not authenticated with StreakForge.' });
+          return;
+        }
+        const result = await syncWithBackend(cfg.authToken, cfg.serverUrl);
+        await SyncManager.processPendingQueue();
+        await updateActionBadge();
+        sendResponse({ success: true, ...result });
+        return;
+      }
+
       if (message.type === 'LEETCODE_SUBMISSION_DETECTED') {
         const result = await SyncManager.processSubmission(message.payload);
         await updateActionBadge();
@@ -41,6 +157,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
       }
 
       if (message.type === 'FORCE_SYNC_PENDING') {
+        const cfg = await StorageManager.getConfig();
+        if (cfg.authToken) {
+          await syncWithBackend(cfg.authToken, cfg.serverUrl);
+        }
         await SyncManager.processPendingQueue();
         await updateActionBadge();
         sendResponse({ success: true });

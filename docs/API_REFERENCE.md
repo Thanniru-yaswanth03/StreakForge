@@ -681,3 +681,95 @@ All errors return consistent JSON:
 - **Headers**: `Authorization: Bearer <JWT>`
 - **Description**: Downloads report as RFC 4180 compliant CSV (with proper header headers `Content-Disposition: attachment; filename="streakforge-report-weekly-....csv"` and escaped strings) or structured JSON.
 
+---
+
+## 11. Dynamic SVG Profile Badges (Public Endpoints)
+
+### 11.1 Dynamic Profile Streak & Solved Badge
+- **Endpoint**: `GET /badge/streak.svg?user=:username&theme=:theme`
+- **Authentication**: None (Publicly accessible for GitHub README embedding)
+- **Query Parameters**:
+  - `user` (string, required): GitHub username or LeetCode username
+  - `theme` (string, optional): `dark` (default), `minimal`, `light`, `terminal`, `gradient`
+- **Response Headers**:
+  - `Content-Type: image/svg+xml; charset=utf-8`
+  - `Cache-Control: public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600`
+  - `ETag: "<md5-hash>"`
+- **Response**: Valid scalable vector graphics badge rendering verified streak days, all-time record, total solves, difficulty breakdown, and last activity timestamp.
+- **Example Embed Code**:
+```markdown
+[![StreakForge Stats](http://localhost:4000/api/v1/badge/streak.svg?user=Thanniru-yaswanth03&theme=dark)](https://github.com/Thanniru-yaswanth03)
+```
+
+---
+
+## 12. Interview Study Curricula Endpoints
+
+### 12.1 Get Curriculum Progress & Problem List
+- **Endpoint**: `GET /study/curriculum/:track`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **URL Parameters**:
+  - `track`: `blind75` | `neetcode150` | `topInterview150`
+- **Description**: Returns curriculum metadata, completion percentage, difficulty breakdown, category distribution, and all problem items with authentic LeetCode solve reconciliation.
+
+### 12.2 Update Problem Study Status
+- **Endpoint**: `POST /study/status`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**:
+```json
+{
+  "questionSlug": "two-sum",
+  "status": "SOLVED",
+  "userNotes": "HashMap single-pass approach O(N) time O(N) space."
+}
+```
+
+---
+
+## 13. Spaced Repetition (SRS) Engine Endpoints
+
+### 13.1 Record SuperMemo-2 Recall Review
+- **Endpoint**: `POST /study/review`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**:
+```json
+{
+  "questionSlug": "lru-cache",
+  "rating": "GOOD",
+  "userNotes": "Doubly linked list + hash map. Guard node edges."
+}
+```
+- **Ratings**: `AGAIN` (resets to 1 day), `HARD` (1.2x), `GOOD` (standard ease factor), `EASY` (bonus factor).
+
+### 13.2 Get Spaced Repetition Review Queue
+- **Endpoint**: `GET /study/revision-queue`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Returns active queue segmented into `dueToday`, `overdue`, and `upcoming` (next 7 days), plus total mastered problems.
+
+---
+
+## 14. GitHub README Auto-Catalog & Learning Intelligence
+
+### 14.1 Preview README Catalog Diff
+- **Endpoint**: `GET /catalog/preview?repo=owner/repo`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Previews structured markdown solutions table inside `<!-- STREAKFORGE:START -->` ... `<!-- STREAKFORGE:END -->` delimiters without modifying repository files.
+
+### 14.2 Sync Catalog to GitHub Repository
+- **Endpoint**: `POST /catalog/sync`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**: `{ "repo": "owner/repo" }`
+- **Description**: Commits updated catalog table directly to target repository default branch via GitHub REST API and records rollback snapshot.
+
+### 14.3 Rollback README Catalog
+- **Endpoint**: `POST /catalog/rollback`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Body**: `{ "repo": "owner/repo" }`
+- **Description**: Reverts README to previous snapshot state.
+
+### 14.4 Get Consolidated Learning Intelligence
+- **Endpoint**: `GET /study/intelligence`
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Description**: Returns cross-domain analytics: authentic streak stability, curriculum completion rates, 14 algorithmic domain proficiency ratings (`STRONG`, `GROWING`, `NEEDS_FOCUS`), and SRS retention statistics.
+
+

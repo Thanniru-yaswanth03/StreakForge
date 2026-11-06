@@ -7,7 +7,8 @@ import { Account } from '../models/Account.js';
 import { User } from '../models/User.js';
 import { decryptToken } from '../utils/crypto.js';
 import { processLeetCodeSubmission } from './syncService.js';
-import { diagnoseRepositoryHealth, getGitHubActivity } from './githubService.js';
+import { diagnoseRepositoryHealth, getGitHubActivity, syncGitHubContributions } from './githubService.js';
+import { syncLeetCodeUserStats } from './leetcodeService.js';
 import { ReminderService } from './reminderService.js';
 import { getStreakOverview } from './streakService.js';
 import { createNotification } from './notificationService.js';
@@ -271,20 +272,23 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
       userId: new Types.ObjectId(userId)
     });
 
-    let totalCommitsSynced = 0;
     try {
-      const feed = await getGitHubActivity(userId, 1, 30);
-      totalCommitsSynced = feed.commits.length;
-    } catch (err: any) {
-      logger.warn(`Failed syncing activity feed: ${err.message}`);
-    }
+      const syncResult = await syncGitHubContributions(userId);
 
-    return {
-      success: true,
-      summary: `Synced GitHub activity: ${totalCommitsSynced} commits verified across ${repos.length} repositories.`,
-      data: { totalCommitsSynced },
-      durationMs: Date.now() - startTime
-    };
+      return {
+        success: true,
+        summary: `Harvester synchronized ${syncResult.totalContributions} GitHub contributions across ${syncResult.activeDays} days. Verified streak: ${syncResult.currentStreak} days.`,
+        data: syncResult,
+        durationMs: Date.now() - startTime
+      };
+    } catch (err: any) {
+      logger.warn(`Failed syncing GitHub contributions: ${err.message}`);
+      return {
+        success: false,
+        summary: `GitHub sync error: ${err.message}`,
+        durationMs: Date.now() - startTime
+      };
+    }
   },
 
   /**
@@ -293,6 +297,13 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
   LEETCODE_HISTORY_SYNC: async (userId, payload) => {
     const startTime = Date.now();
     logger.info(`[Handler:LEETCODE_HISTORY_SYNC] Running history sync for user ${userId}`, { payload });
+
+    let lcStats: any = null;
+    try {
+      lcStats = await syncLeetCodeUserStats(userId);
+    } catch (err: any) {
+      logger.warn(`Failed scraping LeetCode profile in history sync: ${err.message}`);
+    }
 
     const totalSubmissions = await LeetCodeSubmission.countDocuments({
       userId: new Types.ObjectId(userId)
@@ -303,10 +314,14 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
       syncStatus: 'PENDING'
     });
 
+    const statSummary = lcStats
+      ? `Profile @${lcStats.username}: ${lcStats.totalSolved} solved (${lcStats.easySolved}E/${lcStats.mediumSolved}M/${lcStats.hardSolved}H), rank #${lcStats.ranking || 'N/A'}.`
+      : '';
+
     return {
       success: true,
-      summary: `Synchronized LeetCode submission history (${totalSubmissions} tracked, ${pending} pending export).`,
-      data: { totalSubmissions, pendingExport: pending },
+      summary: `Synchronized LeetCode submission history (${totalSubmissions} tracked, ${pending} pending export). ${statSummary}`,
+      data: { totalSubmissions, pendingExport: pending, leetCodeStats: lcStats },
       durationMs: Date.now() - startTime
     };
   },

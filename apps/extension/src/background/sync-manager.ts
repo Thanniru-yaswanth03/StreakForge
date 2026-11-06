@@ -165,7 +165,7 @@ export class SyncManager {
     const subKey = generateSubmissionKey(userId, current.submissionId, repo);
     const dupCheck = await DuplicateRegistry.isDuplicate(subKey);
 
-    if (dupCheck.isDuplicate) {
+    if (dupCheck.isDuplicate && !config.allowMultipleSubmissions) {
       // Idempotent: Transition to EXPORT_PENDING then directly to SYNCED
       const tExpPending = SubmissionStateMachine.transition(
         current,
@@ -240,13 +240,35 @@ export class SyncManager {
       // Append to synced history
       await StorageManager.appendSyncedHistory(current);
 
-      // Send browser notification if enabled
+      // Broadcast on-screen notification to open browser tabs (visible directly on user screen)
+      if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+        chrome.tabs.query({}, (tabs) => {
+          for (const tab of tabs) {
+            if (tab.id) {
+              chrome.tabs.sendMessage(tab.id, {
+                type: 'SHOW_ON_SCREEN_SYNC_TOAST',
+                payload: {
+                  title: current.questionTitle,
+                  language: current.language,
+                  difficulty: current.difficulty,
+                  commitSha: current.commitSha,
+                  commitUrl: current.commitUrl,
+                  repo: config.targetRepoFullName || 'GitHub',
+                  filePath: current.filePath
+                }
+              }).catch(() => {});
+            }
+          }
+        });
+      }
+
+      // Send system tray notification if enabled
       if (config.notifyOnSuccess && typeof chrome !== 'undefined' && chrome.notifications) {
         chrome.notifications.create({
           type: 'basic',
           iconUrl: 'icons/icon-48.png',
-          title: 'StreakForge LeetCode Sync',
-          message: `Exported: ${current.questionTitle} (${current.language})`
+          title: 'StreakForge • Solution Synced to GitHub',
+          message: `Exported ${current.questionTitle} (${current.language}) to ${config.targetRepoFullName || 'GitHub'}`
         });
       }
     } else {

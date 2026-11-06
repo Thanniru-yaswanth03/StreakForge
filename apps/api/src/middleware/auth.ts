@@ -29,6 +29,20 @@ export async function requireAuth(
 
   const token = authHeader.split(' ')[1];
 
+  let payload: { userId: string; jti?: string };
+  try {
+    payload = jwt.verify(token, ENV.JWT_SECRET) as { userId: string; jti?: string };
+  } catch (err) {
+    res.status(401).json({
+      success: false,
+      error: {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid or expired authentication token'
+      }
+    });
+    return;
+  }
+
   if (isTokenRevoked(token)) {
     res.status(401).json({
       success: false,
@@ -41,7 +55,6 @@ export async function requireAuth(
   }
 
   try {
-    const payload = jwt.verify(token, ENV.JWT_SECRET) as { userId: string };
     const user = await User.findById(payload.userId);
 
     if (!user || !user.isActive) {

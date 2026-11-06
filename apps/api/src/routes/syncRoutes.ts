@@ -4,6 +4,7 @@ import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { LeetCodeSubmissionInputSchema } from '@streakforge/validation';
 import { processLeetCodeSubmission } from '../services/syncService.js';
+import { getOrRefreshLeetCodeStats, syncLeetCodeUserStats } from '../services/leetcodeService.js';
 import { LeetCodeSubmission } from '../models/LeetCodeSubmission.js';
 
 export const syncRouter: Router = Router();
@@ -15,6 +16,12 @@ syncRouter.post(
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
       const result = await processLeetCodeSubmission(req.userId!, req.body);
+
+      // Automatically re-sync live LeetCode stats and contribution snapshots on accepted submission
+      syncLeetCodeUserStats(req.userId!).catch((err) => {
+        console.warn('[SyncRouter] Background LeetCode profile re-sync error:', err);
+      });
+
       res.status(201).json({
         success: true,
         data: result
@@ -45,9 +52,18 @@ syncRouter.get(
         .skip((page - 1) * limit)
         .limit(limit);
 
+      const mapped = items.map((doc) => {
+        const obj = doc.toObject();
+        return {
+          ...obj,
+          id: doc._id.toString(),
+          _id: doc._id.toString()
+        };
+      });
+
       res.json({
         success: true,
-        data: items,
+        data: mapped,
         meta: {
           page,
           limit,
@@ -106,6 +122,47 @@ syncRouter.post(
       res.json({
         success: true,
         data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/v1/sync/leetcode/profile-stats
+ * Retrieve authentic scraped LeetCode profile stats (ranking, total solved, breakdown)
+ */
+syncRouter.get(
+  '/leetcode/profile-stats',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const stats = await getOrRefreshLeetCodeStats(req.userId!);
+      res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/sync/leetcode/profile-stats/refresh
+ * Force immediate scrape and sync of LeetCode user profile stats
+ */
+syncRouter.post(
+  '/leetcode/profile-stats/refresh',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const username = (req.body?.username as string) || undefined;
+      const stats = await syncLeetCodeUserStats(req.userId!, username);
+      res.json({
+        success: true,
+        data: stats
       });
     } catch (error) {
       next(error);

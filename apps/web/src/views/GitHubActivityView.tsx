@@ -23,7 +23,7 @@ import { api } from '../lib/api';
 import type { CommitDiagnosticsResult } from '@streakforge/shared-types';
 
 export function GitHubActivityView() {
-  const { githubActivity, overview, connectedRepos, refreshData, isLoading } = useData();
+  const { user, githubActivity, overview, connectedRepos, submissions, refreshData, isLoading } = useData();
   const [activeTab, setActiveTab] = useState<'commits' | 'repos' | 'prs' | 'diagnostics' | 'sync'>('commits');
 
   // Attribution Diagnostic Tool State
@@ -36,6 +36,7 @@ export function GitHubActivityView() {
   // Sync state
   const [syncing, setSyncing] = useState<boolean>(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string>('');
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const handleTriggerSync = async () => {
     try {
@@ -48,6 +49,18 @@ export function GitHubActivityView() {
       alert(`GitHub synchronization failed: ${err.message}`);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleRetryFailedSync = async (id: string) => {
+    try {
+      setRetryingId(id);
+      await api.sync.retry(id);
+      await refreshData();
+    } catch (err: any) {
+      console.warn('Retry failed:', err?.message || err);
+    } finally {
+      setRetryingId(null);
     }
   };
 
@@ -71,16 +84,16 @@ export function GitHubActivityView() {
     }
   };
 
-  const failedSyncs = [
-    {
-      id: 'f-1',
-      problemTitle: 'Word Ladder II',
-      repo: connectedRepos[0]?.repoFullName || 'octocat/leetcode-solutions',
-      error: 'GitHub API rate limit exceeded. Exponential backoff active.',
-      timestamp: 'Yesterday at 16:30',
+  const failedSyncs = submissions
+    .filter((s) => s.syncStatus === 'FAILED')
+    .map((s) => ({
+      id: s.id || s.submissionId,
+      problemTitle: s.questionTitle,
+      repo: connectedRepos[0]?.repoFullName || 'Configured Repository',
+      error: s.syncErrorMessage || 'Synchronization encountered error',
+      timestamp: new Date(s.submittedAt).toLocaleString(),
       canRetry: true
-    }
-  ];
+    }));
 
   return (
     <div className="space-y-6">
@@ -125,7 +138,7 @@ export function GitHubActivityView() {
             <GitCommit className="w-4 h-4 text-indigo-500" />
           </div>
           <div className="text-2xl font-bold text-theme-primary mt-2">
-            {githubActivity.totalCommits || overview?.totalGitCommitsTracked || 164}
+            {githubActivity.totalCommits || overview?.totalGitCommitsTracked || 0}
           </div>
           <div className="text-xs text-theme-muted mt-1">Across all monitored repositories</div>
         </div>
@@ -141,26 +154,26 @@ export function GitHubActivityView() {
           <div className="text-xs text-theme-muted mt-1">Configured for synchronization</div>
         </div>
 
-        <div className="bg-theme-surface border border-theme-border rounded-xl p-4">
-          <div className="flex items-center justify-between text-xs text-theme-muted font-medium uppercase tracking-wider">
-            <span>Pull Requests</span>
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5">
+          <div className="flex items-center justify-between text-[11px] text-theme-muted font-medium uppercase tracking-wider">
+            <span>Pull Requests &amp; Issues</span>
             <GitPullRequest className="w-4 h-4 text-purple-500" />
           </div>
-          <div className="text-2xl font-bold text-theme-primary mt-2">
-            {githubActivity.pullRequests.length}
+          <div className="text-2xl font-bold text-theme-primary mt-1 tabular-nums">
+            {githubActivity.pullRequests.length + githubActivity.issues.length}
           </div>
-          <div className="text-xs text-theme-muted mt-1">Across active target projects</div>
+          <div className="text-[10px] text-theme-muted mt-0.5">{githubActivity.pullRequests.length} PRs • {githubActivity.issues.length} Issues</div>
         </div>
 
-        <div className="bg-theme-surface border border-theme-border rounded-xl p-4">
-          <div className="flex items-center justify-between text-xs text-theme-muted font-medium uppercase tracking-wider">
-            <span>API Rate Limit</span>
-            <ShieldAlert className="w-4 h-4 text-amber-500" />
+        <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5">
+          <div className="flex items-center justify-between text-[11px] text-theme-muted font-medium uppercase tracking-wider">
+            <span>Sync Status</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-2xl font-bold text-theme-primary mt-2">
-            {githubActivity.rateLimit ? `${githubActivity.rateLimit.remaining} / ${githubActivity.rateLimit.limit}` : '4950 / 5000'}
+          <div className="text-2xl font-bold text-emerald-500 mt-1">
+            Healthy
           </div>
-          <div className="text-xs text-theme-muted mt-1">Remaining REST calls this hour</div>
+          <div className="text-[10px] text-theme-muted mt-0.5">Automated cursor active</div>
         </div>
       </div>
 
@@ -200,50 +213,60 @@ export function GitHubActivityView() {
           </div>
 
           <div className="divide-y divide-theme-border">
-            {githubActivity.recentCommits.map((c) => (
-              <div
-                key={c.sha}
-                className="p-4 hover:bg-theme-elevated/40 transition flex items-center justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded">
-                      {c.sha.slice(0, 7)}
-                    </span>
-                    <span className="text-xs font-semibold text-theme-primary truncate">
-                      {c.message}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px] text-theme-muted mt-1.5">
-                    <span>repo: {c.repo}</span>
-                    <span>branch: {c.branch}</span>
-                    <span>{c.filesChanged} files changed</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 flex-shrink-0 text-right">
-                  <span className="text-xs text-theme-muted font-mono hidden sm:inline">{c.timestamp}</span>
-
-                  <button
-                    onClick={() => handleRunCommitDiagnostics(c.repo, c.sha, c.branch)}
-                    disabled={diagLoading}
-                    className="px-2.5 py-1 bg-theme-elevated hover:bg-theme-surface text-theme-secondary hover:text-theme-primary rounded-md border border-theme-border text-[11px] font-medium transition"
-                  >
-                    Diagnose
-                  </button>
-
-                  <a
-                    href={`https://github.com/octocat/${c.repo}/commit/${c.sha}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 hover:bg-theme-elevated text-theme-muted hover:text-theme-accent rounded-md transition"
-                    title="View on GitHub"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
+            {githubActivity.recentCommits.length === 0 ? (
+              <div className="py-12 text-center text-theme-muted text-xs flex flex-col items-center justify-center gap-2">
+                <FolderGit2 className="w-8 h-8 text-theme-muted opacity-40 mb-1" />
+                <span className="font-semibold text-theme-primary">No commits detected in connected repositories</span>
+                <p className="max-w-md text-[11px] text-theme-muted">
+                  Commits will appear automatically as you push code to your verified default branches or when solutions are exported from LeetCode.
+                </p>
               </div>
-            ))}
+            ) : (
+              githubActivity.recentCommits.map((c) => (
+                <div
+                  key={c.sha}
+                  className="p-4 hover:bg-theme-elevated/40 transition flex items-center justify-between gap-4"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded">
+                        {c.sha.slice(0, 7)}
+                      </span>
+                      <span className="text-xs font-semibold text-theme-primary truncate">
+                        {c.message}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-theme-muted mt-1.5">
+                      <span>repo: {c.repo}</span>
+                      <span>branch: {c.branch}</span>
+                      <span>{c.filesChanged} files changed</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                    <span className="text-xs text-theme-muted font-mono hidden sm:inline">{c.timestamp}</span>
+
+                    <button
+                      onClick={() => handleRunCommitDiagnostics(c.repo, c.sha, c.branch)}
+                      disabled={diagLoading}
+                      className="px-2.5 py-1 bg-theme-elevated hover:bg-theme-surface text-theme-secondary hover:text-theme-primary rounded-md border border-theme-border text-[11px] font-medium transition"
+                    >
+                      Diagnose
+                    </button>
+
+                    <a
+                      href={c.repo.includes('/') ? `https://github.com/${c.repo}/commit/${c.sha}` : `https://github.com/${user?.username || 'Thanniru-yaswanth03'}/${c.repo}/commit/${c.sha}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-1.5 hover:bg-theme-elevated text-theme-muted hover:text-theme-accent rounded-md transition"
+                      title="View on GitHub"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
@@ -526,29 +549,40 @@ export function GitHubActivityView() {
               Submissions that encountered API rate limits or branch protection during automated export
             </p>
 
-            <div className="space-y-2.5">
-              {failedSyncs.map((f) => (
-                <div
-                  key={f.id}
-                  className="p-3.5 bg-rose-500/5 border border-rose-500/20 rounded-xl flex items-center justify-between gap-4"
-                >
-                  <div>
-                    <div className="font-bold text-sm text-theme-primary">{f.problemTitle}</div>
-                    <div className="text-xs text-rose-500 mt-0.5">{f.error}</div>
-                    <div className="text-[11px] text-theme-muted mt-1">
-                      {f.repo} • {f.timestamp}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => alert('Retrying sync cursor update with backoff...')}
-                    className="px-3 py-1.5 bg-theme-accent text-slate-950 font-semibold text-xs rounded-lg transition hover:opacity-90 shadow-xs flex-shrink-0"
-                  >
-                    Retry Export
-                  </button>
+            {failedSyncs.length === 0 ? (
+              <div className="p-8 text-center bg-theme-elevated rounded-xl border border-dashed border-theme-border my-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                <div className="text-sm font-semibold text-theme-primary">All Synchronizations Operational</div>
+                <div className="text-xs text-theme-muted mt-1">
+                  Zero failed exports recorded. All accepted submissions are properly synced.
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {failedSyncs.map((f) => (
+                  <div
+                    key={f.id}
+                    className="p-3.5 bg-rose-500/5 border border-rose-500/20 rounded-xl flex items-center justify-between gap-4"
+                  >
+                    <div>
+                      <div className="font-bold text-sm text-theme-primary">{f.problemTitle}</div>
+                      <div className="text-xs text-rose-500 mt-0.5">{f.error}</div>
+                      <div className="text-[11px] text-theme-muted mt-1">
+                        {f.repo} • {f.timestamp}
+                      </div>
+                    </div>
+
+                    <button
+                      disabled={retryingId === f.id}
+                      onClick={() => handleRetryFailedSync(f.id)}
+                      className="px-3 py-1.5 bg-theme-accent text-slate-950 font-semibold text-xs rounded-lg transition hover:opacity-90 shadow-xs flex-shrink-0 disabled:opacity-50"
+                    >
+                      {retryingId === f.id ? 'Retrying...' : 'Retry Export'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -16,9 +16,18 @@ export const repoRouter: Router = Router();
 
 repoRouter.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
   try {
-    const connected = await RepositoryConnection.find({
+    const rawConnected = await RepositoryConnection.find({
       userId: new Types.ObjectId(req.userId)
     }).sort({ createdAt: -1 });
+
+    const connected = rawConnected.map((r) => {
+      const obj = r.toObject();
+      return {
+        ...obj,
+        id: r._id.toString(),
+        _id: r._id.toString()
+      };
+    });
 
     // Fetch user's repositories from GitHub via Octokit with full metadata
     let githubAvailable: any[] = [];
@@ -150,14 +159,11 @@ repoRouter.patch(
   validateBody(UpdateRepositoryInputSchema),
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
-      const repoId = String(req.params.id);
-      if (!Types.ObjectId.isValid(repoId)) {
-        res.status(404).json({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Repository connection not found' }
-        });
-        return;
-      }
+      const repoParam = decodeURIComponent(String(req.params.id));
+      const repoFilter = Types.ObjectId.isValid(repoParam)
+        ? { _id: new Types.ObjectId(repoParam), userId: new Types.ObjectId(req.userId) }
+        : { repoFullName: repoParam, userId: new Types.ObjectId(req.userId) };
+
       const {
         category,
         defaultBranch,
@@ -183,7 +189,7 @@ repoRouter.patch(
       if (syncPolicy !== undefined) updateData.syncPolicy = syncPolicy;
 
       const connection = await RepositoryConnection.findOneAndUpdate(
-        { _id: new Types.ObjectId(repoId), userId: new Types.ObjectId(req.userId) },
+        repoFilter,
         { $set: updateData },
         { new: true }
       );
@@ -206,7 +212,11 @@ repoRouter.patch(
 
       res.json({
         success: true,
-        data: connection
+        data: {
+          ...connection.toObject(),
+          id: connection._id.toString(),
+          _id: connection._id.toString()
+        }
       });
     } catch (error) {
       next(error);
@@ -219,18 +229,12 @@ repoRouter.delete(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
-      const repoId = String(req.params.id);
-      if (!Types.ObjectId.isValid(repoId)) {
-        res.status(404).json({
-          success: false,
-          error: { code: 'NOT_FOUND', message: 'Repository connection not found' }
-        });
-        return;
-      }
-      const connection = await RepositoryConnection.findOneAndDelete({
-        _id: new Types.ObjectId(repoId),
-        userId: new Types.ObjectId(req.userId)
-      });
+      const repoParam = decodeURIComponent(String(req.params.id));
+      const repoFilter = Types.ObjectId.isValid(repoParam)
+        ? { _id: new Types.ObjectId(repoParam), userId: new Types.ObjectId(req.userId) }
+        : { repoFullName: repoParam, userId: new Types.ObjectId(req.userId) };
+
+      const connection = await RepositoryConnection.findOneAndDelete(repoFilter);
 
       if (!connection) {
         res.status(404).json({

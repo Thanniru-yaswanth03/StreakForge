@@ -243,6 +243,13 @@ export class SchedulerService {
       metadata: { ruleId, jobId: job.jobId }
     });
 
+    // Execute immediately so the user sees instant results and real impact
+    try {
+      await JobQueueService.processJob(job);
+    } catch (e: any) {
+      logger.warn('[Scheduler] Immediate job execution error:', { error: e?.message || String(e) });
+    }
+
     return { job, isDuplicate };
   }
 
@@ -275,11 +282,58 @@ export class SchedulerService {
    * Lists all automation rules for user.
    */
   public static async getRules(userId: string) {
-    const rules = await AutomationRule.find({
+    let rules = await AutomationRule.find({
       userId: new Types.ObjectId(userId)
     })
       .sort({ createdAt: -1 })
       .lean();
+
+    if (rules.length === 0) {
+      const defaultRules: CreateRuleInput[] = [
+        {
+          name: 'LeetCode Solution Auto-Export',
+          description: 'Instantly commits and pushes verified accepted solutions to your GitHub target repo with zero manual copy-pasting.',
+          type: 'LEETCODE_EXPORT',
+          triggerType: 'EVENT',
+          schedule: 'every 15m'
+        },
+        {
+          name: 'Daily Coding Streak Sentinel',
+          description: 'Evaluates daily coding activity at 8:00 PM and ensures your verified streak is protected before midnight.',
+          type: 'DAILY_REMINDERS',
+          triggerType: 'CRON',
+          schedule: '0 20 * * *'
+        },
+        {
+          name: 'GitHub Repository Activity Harvester',
+          description: 'Synchronizes authentic commits, pull requests, and merges across all connected repositories into your contribution calendar.',
+          type: 'GITHUB_ACTIVITY_SYNC',
+          triggerType: 'CRON',
+          schedule: 'every 1h'
+        },
+        {
+          name: 'Repository Health & Security Guardian',
+          description: 'Scans connected repositories for clean branch policies, secret leak risks, and synchronization health.',
+          type: 'REPO_HEALTH_CHECK',
+          triggerType: 'CRON',
+          schedule: '0 2 * * *'
+        }
+      ];
+
+      for (const d of defaultRules) {
+        try {
+          await SchedulerService.createRule(userId, d);
+        } catch {
+          // ignore seed errors
+        }
+      }
+
+      rules = await AutomationRule.find({
+        userId: new Types.ObjectId(userId)
+      })
+        .sort({ createdAt: 1 })
+        .lean();
+    }
 
     return rules.map((r) => ({
       id: (r as any)._id.toString(),

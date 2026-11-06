@@ -1,6 +1,15 @@
 # StreakForge End-User Guide & Operational Manual
 
-Welcome to **StreakForge**! This guide walks you through using the StreakForge web dashboard, Chrome extension, and local companion agent to maintain authentic coding records across GitHub and LeetCode.
+Welcome to **StreakForge**! This guide walks you through using the StreakForge web dashboard and Chrome extension to maintain authentic coding records across GitHub and LeetCode, with an optional desktop agent for advanced local git monitoring.
+
+## Primary Architecture Overview
+
+StreakForge is designed around two primary components:
+1. **StreakForge Web Application** (Primary): Full dashboard, GitHub authentication and OAuth/PAT synchronization, repository management, streak calendar, analytics, and automation rules.
+2. **StreakForge Chrome Extension** (Primary): Automatic LeetCode problem detection, accepted solution extraction from Monaco editor, direct GitHub exports, and compact quick stats.
+3. **StreakForge Desktop Agent** (Optional Advanced): Optional background CLI daemon for watching local workstation Git folders on disk, pre-commit secret scanning, and offline commit queues.
+
+> **Zero-Fabrication Guarantee**: Every commit, problem submission, and streak event represents authentic, verified developer activity. Fake commits and unearned streaks are strictly prohibited by system architecture.
 
 ---
 
@@ -55,7 +64,9 @@ StreakForge LeetCode Sync operates entirely via genuine event observation:
 
 ---
 
-## 4. Local Desktop Companion Agent
+## 4. Optional Advanced Feature: Local Desktop Companion Agent
+
+> **Optional Power-User Tool**: You do **not** need to install or run the desktop agent for standard StreakForge functionality. The Web Dashboard and Chrome Extension provide 100% of the tools needed to synchronize LeetCode solutions to GitHub and calculate verified streaks. The desktop agent is only needed if you want automatic local Git repository workspace monitoring on your workstation.
 
 The desktop agent monitors your computer's local development workspaces and executes genuine Git operations according to configured policies.
 
@@ -139,3 +150,4 @@ If you wish to stop using StreakForge:
    - Disconnect repository mappings.
    - Invalidate all active JWT sessions.
    - Log an audit event.
+

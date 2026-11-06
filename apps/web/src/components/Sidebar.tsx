@@ -4,21 +4,25 @@ import React, { useState, useEffect } from 'react';
 import {
   Flame,
   GitBranch,
-  CheckCircle2,
+  Code2,
+  Calendar,
   FolderGit2,
   Bot,
-  Calendar,
-  BarChart3,
-  BookOpen,
-  Bell,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   Sun,
   Moon,
-  Laptop,
+  ChevronLeft,
+  ChevronRight,
   X,
-  ShieldCheck
+  ExternalLink,
+  ShieldCheck,
+  Zap,
+  BookOpen,
+  Brain,
+  FileText,
+  Award,
+  Clock,
+  Layers
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
@@ -30,37 +34,91 @@ interface SidebarProps {
   onMobileClose: () => void;
 }
 
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string | number;
+  badgeColor?: string;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
 export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { theme, setTheme, effectiveTheme } = useTheme();
-  const { notifications, isDemoMode } = useData();
+  const { effectiveTheme, toggleTheme } = useTheme();
+  const { user, overview, leetcodeStats, connectedRepos } = useData();
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const totalLeetCode = leetcodeStats?.totalSolved ?? 32;
+  const currentStreak = overview?.currentStreak ?? 2;
 
-  const navigationItems = [
-    { id: 'overview', label: 'Overview', icon: Flame, shortcut: 'O' },
-    { id: 'github', label: 'GitHub Activity', icon: GitBranch, shortcut: 'G' },
-    { id: 'leetcode', label: 'LeetCode Activity', icon: CheckCircle2, shortcut: 'L' },
-    { id: 'repos', label: 'Repository Manager', icon: FolderGit2, shortcut: 'R' },
-    { id: 'automation', label: 'Automation Center', icon: Bot, shortcut: 'A' },
-    { id: 'calendar', label: 'Streak Calendar', icon: Calendar, shortcut: 'C' },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3, shortcut: 'N' },
-    { id: 'journal', label: 'Activity Journal', icon: BookOpen, shortcut: 'J' },
+  const navGroups: NavGroup[] = [
     {
-      id: 'notifications',
-      label: 'Notifications',
-      icon: Bell,
-      badge: unreadCount > 0 ? unreadCount : undefined,
-      shortcut: 'B'
+      title: 'Activity & Telemetry',
+      items: [
+        { id: 'overview', label: 'Overview', icon: Flame, badge: `${currentStreak}d` },
+        {
+          id: 'intelligence',
+          label: 'Learning Intelligence',
+          icon: Brain,
+          badge: '2.0',
+          badgeColor: 'bg-[#a371f7]/15 text-[#a371f7] border-[#a371f7]/30'
+        },
+        {
+          id: 'leetcode',
+          label: 'LeetCode Activity',
+          icon: Code2,
+          badge: totalLeetCode,
+          badgeColor: 'bg-[#238636]/20 text-[#3fb950] border-[#238636]/40'
+        },
+        { id: 'github', label: 'GitHub Activity', icon: GitBranch, badge: '409' },
+        { id: 'calendar', label: 'Streak Calendar', icon: Calendar, badge: '365' }
+      ]
     },
-    { id: 'settings', label: 'Settings', icon: Settings, shortcut: 'S' }
+    {
+      title: 'Interview & Preparation',
+      items: [
+        {
+          id: 'curriculum',
+          label: 'Study Curricula',
+          icon: BookOpen,
+          badge: 'Blind 75',
+          badgeColor: 'bg-[#388bfd]/15 text-[#58a6ff] border-[#388bfd]/30'
+        },
+        {
+          id: 'revision',
+          label: 'Revision Queue',
+          icon: Clock,
+          badge: 'SRS',
+          badgeColor: 'bg-[#e3b341]/15 text-[#e3b341] border-[#e3b341]/30'
+        },
+        { id: 'catalog', label: 'README Catalog', icon: FileText, badge: 'Auto' },
+        { id: 'badges', label: 'Profile Badges', icon: Award, badge: 'SVG' }
+      ]
+    },
+    {
+      title: 'Platform & Config',
+      items: [
+        { id: 'repos', label: 'Repositories', icon: FolderGit2, badge: connectedRepos.length || 1 },
+        {
+          id: 'automation',
+          label: 'Automations',
+          icon: Bot,
+          badge: '4',
+          badgeColor: 'bg-[#58a6ff]/15 text-[#58a6ff] border-[#58a6ff]/30'
+        },
+        { id: 'settings', label: 'Settings', icon: Settings }
+      ]
+    }
   ];
 
-  // Global keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle sidebar with '['
-      if (e.key === '[' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      if (e.key === '[') {
         e.preventDefault();
         setIsCollapsed((prev) => !prev);
       }
@@ -78,130 +136,145 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
   };
 
   const navContent = (
-    <div className="flex flex-col h-full justify-between select-none">
-      {/* Brand & Top Bar */}
-      <div>
-        <div className="h-16 px-4 flex items-center justify-between border-b border-theme-border">
+    <div className="flex flex-col h-full justify-between select-none bg-[#0d1117] border-r border-[#30363d]/80">
+      {/* Top: Brand Header */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="h-14 px-4 flex items-center justify-between border-b border-[#30363d] bg-[#010409]">
           <div
             onClick={() => handleSelect('overview')}
-            className="flex items-center gap-2.5 cursor-pointer overflow-hidden group"
+            className="flex items-center gap-2.5 cursor-pointer group py-1"
           >
-            <div className="w-8 h-8 rounded-lg bg-theme-accent text-slate-950 flex items-center justify-center font-bold text-sm flex-shrink-0 transition-transform group-hover:scale-105">
-              SF
+            {/* Green Flame Shield */}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2ea043] to-[#238636] border border-white/20 flex items-center justify-center text-white shadow-[0_2px_10px_rgba(35,134,54,0.4)] group-hover:scale-105 group-hover:shadow-[0_4px_16px_rgba(46,160,67,0.6)] transition-all">
+              <Flame className="w-4 h-4 fill-white text-white" />
             </div>
             {!isCollapsed && (
-              <div className="flex flex-col min-w-0">
-                <span className="font-bold text-sm tracking-tight text-theme-primary truncate">
-                  StreakForge
+              <div className="flex flex-col">
+                <span className="font-bold text-sm tracking-tight text-[#f0f6fc]">
+                  Streak<span className="text-[#3fb950]">Forge</span>
                 </span>
-                <span className="text-[10px] text-theme-muted tracking-wider uppercase font-semibold truncate">
-                  Authentic Sync
+                <span className="text-[10px] text-[#8b949e] font-mono leading-none">
+                  v2.0 Intelligence
                 </span>
               </div>
             )}
           </div>
 
-          {/* Mobile close button */}
           <button
             onClick={onMobileClose}
-            className="lg:hidden p-1.5 text-theme-muted hover:text-theme-primary rounded-lg transition"
+            className="lg:hidden p-1.5 text-[#8b949e] hover:text-[#f0f6fc] hover:bg-[#21262d] rounded-md transition"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Demo Mode Notice */}
-        {isDemoMode && !isCollapsed && (
-          <div className="mx-3 mt-3 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-md text-[11px] text-amber-500 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-            <span className="font-medium">Dev Preview Mode</span>
-          </div>
-        )}
+        {/* Navigation Groups */}
+        <div className="p-2 space-y-4">
+          {navGroups.map((group, gIdx) => (
+            <div key={gIdx} className="space-y-0.5">
+              {!isCollapsed && (
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#7d8590]">
+                  {group.title}
+                </div>
+              )}
 
-        {/* Nav Items */}
-        <nav className="p-2 space-y-0.5 mt-2" aria-label="Main Navigation">
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleSelect(item.id)}
-                title={isCollapsed ? `${item.label} (${item.shortcut})` : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all relative group ${
-                  isActive
-                    ? 'bg-theme-accent-subtle text-theme-accent font-semibold shadow-sm'
-                    : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
-                }`}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-theme-accent rounded-r" />
-                )}
-                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-theme-accent' : 'text-theme-muted group-hover:text-theme-primary'}`} />
-                {!isCollapsed && (
-                  <span className="truncate flex-1 text-left">{item.label}</span>
-                )}
-                {!isCollapsed && item.badge && (
-                  <span className="bg-theme-accent text-slate-950 font-bold text-[10px] px-1.5 py-0.2 rounded-full">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelect(item.id)}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 relative group cursor-pointer ${
+                      isActive
+                        ? 'bg-[#21262d] text-[#f0f6fc] font-semibold border border-[#30363d] shadow-[0_2px_8px_rgba(0,0,0,0.35)]'
+                        : 'text-[#c9d1d9] hover:text-[#f0f6fc] hover:bg-[#161b22] hover:border-[#30363d]/60 border border-transparent'
+                    }`}
+                  >
+                    {/* Active Left Indicator */}
+                    {isActive && (
+                      <span className="absolute left-0 top-1 bottom-1 w-1 bg-[#2ea043] rounded-r shadow-[0_0_8px_rgba(46,160,67,0.8)]" />
+                    )}
+
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon
+                        className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                          isActive ? 'text-[#3fb950]' : 'text-[#8b949e] group-hover:text-[#f0f6fc]'
+                        }`}
+                      />
+                      {!isCollapsed && (
+                        <span className="truncate text-left text-xs">{item.label}</span>
+                      )}
+                    </div>
+
+                    {!isCollapsed && item.badge !== undefined && (
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full border flex-shrink-0 transition-all ${
+                          item.badgeColor || 'bg-[#21262d] text-[#8b949e] border-[#30363d]'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Footer Controls: Theme & Collapse */}
-      <div className="p-3 border-t border-theme-border space-y-2">
-        {/* Theme Picker */}
-        {!isCollapsed ? (
-          <div className="flex items-center justify-between p-1.5 bg-theme-elevated rounded-lg text-xs">
-            <span className="text-[11px] text-theme-muted font-medium ml-1">Theme</span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setTheme('light')}
-                title="Light Theme"
-                className={`p-1 rounded ${theme === 'light' ? 'bg-theme-surface text-theme-primary shadow-xs' : 'text-theme-muted hover:text-theme-primary'}`}
-              >
-                <Sun className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setTheme('dark')}
-                title="Dark Theme"
-                className={`p-1 rounded ${theme === 'dark' ? 'bg-theme-surface text-theme-primary shadow-xs' : 'text-theme-muted hover:text-theme-primary'}`}
-              >
-                <Moon className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setTheme('system')}
-                title="System Theme"
-                className={`p-1 rounded ${theme === 'system' ? 'bg-theme-surface text-theme-primary shadow-xs' : 'text-theme-muted hover:text-theme-primary'}`}
-              >
-                <Laptop className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setTheme(effectiveTheme === 'dark' ? 'light' : 'dark')}
-            title="Toggle theme"
-            className="w-full flex items-center justify-center p-2 rounded-lg text-theme-muted hover:text-theme-primary hover:bg-theme-elevated"
-          >
-            {effectiveTheme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          </button>
-        )}
-
-        {/* Desktop Collapse Button */}
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="hidden lg:flex w-full items-center justify-center gap-2 p-1.5 text-xs text-theme-muted hover:text-theme-primary hover:bg-theme-elevated rounded-lg transition"
-          title="Toggle Sidebar ([)"
+      {/* Bottom: User Card & Collapser */}
+      <div className="p-3 border-t border-[#30363d] space-y-2 bg-[#161b22]/40">
+        <div
+          onClick={() => handleSelect('settings')}
+          className="flex items-center gap-2.5 p-2 rounded-md hover:bg-[#21262d] border border-transparent hover:border-[#30363d] cursor-pointer transition-all group"
+          title="Account Settings"
         >
-          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          {!isCollapsed && <span className="text-[11px]">Collapse sidebar</span>}
-        </button>
+          <div className="relative">
+            <img
+              src={user?.avatarUrl || 'https://avatars.githubusercontent.com/u/121496542?v=4'}
+              alt={user?.username || 'user'}
+              width={26}
+              height={26}
+              style={{ width: 26, height: 26, maxWidth: 26, maxHeight: 26, objectFit: 'cover' }}
+              className="w-6 h-6 rounded-full border border-[#30363d] flex-shrink-0 group-hover:border-[#58a6ff] transition-colors"
+            />
+            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#238636] ring-1 ring-[#0d1117]" />
+          </div>
+
+          {!isCollapsed && (
+            <div className="truncate flex-1 text-left">
+              <div className="text-xs font-bold text-[#f0f6fc] truncate group-hover:text-[#58a6ff] transition-colors">
+                @{user?.username || 'Thanniru-yaswanth03'}
+              </div>
+              <div className="text-[10px] text-[#3fb950] font-mono flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-[#3fb950]" />
+                <span>Verified Contributor</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-1">
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d]"
+            title={effectiveTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          >
+            {effectiveTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="hidden lg:flex p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d] text-xs font-mono"
+            title="Toggle sidebar [ ]"
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -210,26 +283,29 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
     <>
       {/* Desktop Persistent Sidebar */}
       <aside
-        className={`hidden lg:block fixed inset-y-0 left-0 bg-theme-surface border-r border-theme-border z-30 transition-all duration-200 ${
-          isCollapsed ? 'w-16' : 'w-60'
+        className={`hidden lg:block fixed left-0 top-0 bottom-0 z-40 transition-all duration-200 ${
+          isCollapsed ? 'w-16' : 'w-56'
         }`}
       >
         {navContent}
       </aside>
 
-      {/* Mobile Drawer Overlay */}
+      {/* Mobile Slide-Over Backdrop */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
-            onClick={onMobileClose}
-          />
-          <aside className="relative w-64 max-w-[80vw] bg-theme-surface border-r border-theme-border shadow-2xl z-10 flex flex-col h-full animate-in slide-in-from-left duration-200">
-            {navContent}
-          </aside>
-        </div>
+        <div
+          onClick={onMobileClose}
+          className="lg:hidden fixed inset-0 bg-black/70 backdrop-blur-xs z-50 transition-opacity animate-in fade-in"
+        />
       )}
+
+      {/* Mobile Slide-Over Drawer */}
+      <div
+        className={`lg:hidden fixed top-0 bottom-0 left-0 w-72 z-50 transition-transform duration-300 ease-in-out ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {navContent}
+      </div>
     </>
   );
 }
-

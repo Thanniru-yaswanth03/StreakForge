@@ -4,51 +4,167 @@
 
 @layer base {
   :root {
-    --bg-primary: #f8fafc;
-    --bg-secondary: #ffffff;
-    --bg-tertiary: #f1f5f9;
-    --border-subtle: #e2e8f0;
-    --border-strong: #cbd5e1;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #64748b;
-    --accent: #10b981;
-    --accent-hover: #059669;
-    --accent-subtle: #ecfdf5;
-    --accent-text: #065f46;
-    --danger: #ef4444;
-    --danger-subtle: #fef2f2;
-    --warning: #f59e0b;
-    --warning-subtle: #fffbeb;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eaeef2;
+    --border-subtle: #d0d7de;
+    --border-strong: #afb8c1;
+    --text-primary: #1f2328;
+    --text-secondary: #656d76;
+    --text-muted: #8c959f;
+    --accent: #1f883d;
+    --accent-hover: #1a7f37;
+    --accent-subtle: rgba(31, 136, 61, 0.12);
+    --accent-text: #1a7f37;
+    --danger: #cf222e;
+    --danger-subtle: rgba(207, 34, 46, 0.12);
+    --warning: #9a6700;
+    --warning-subtle: rgba(154, 103, 0, 0.12);
+    --link: #0969da;
   }
 
   .dark {
-    --bg-primary: #090d16;
-    --bg-secondary: #0f172a;
-    --bg-tertiary: #1e293b;
-    --border-subtle: #1e293b;
-    --border-strong: #334155;
-    --text-primary: #f8fafc;
-    --text-secondary: #cbd5e1;
-    --text-muted: #94a3b8;
-    --accent: #10b981;
-    --accent-hover: #34d399;
-    --accent-subtle: rgba(16, 185, 129, 0.12);
-    --accent-text: #6ee7b7;
-    --danger: #f87171;
-    --danger-subtle: rgba(239, 68, 68, 0.15);
-    --warning: #fbbf24;
-    --warning-subtle: rgba(245, 158, 11, 0.15);
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border-subtle: #30363d;
+    --border-strong: #8b949e;
+    --text-primary: #f0f6fc;
+    --text-secondary: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #238636;
+    --accent-hover: #2ea043;
+    --accent-subtle: rgba(46, 160, 67, 0.15);
+    --accent-text: #3fb950;
+    --danger: #f85149;
+    --danger-subtle: rgba(248, 81, 73, 0.15);
+    --warning: #d29922;
+    --warning-subtle: rgba(210, 153, 34, 0.15);
+    --link: #58a6ff;
   }
 }
 
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: -0.011em;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  letter-spacing: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: rgba(56, 139, 253, 0.35);
+  color: #ffffff;
+}
+
+/* Tabular figures for numbers & metrics */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Premium GitHub Glossy Card */
+.github-glossy-card {
+  position: relative;
+  background: rgba(22, 27, 34, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(48, 54, 61, 0.9);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.github-glossy-card:hover {
+  border-color: rgba(88, 166, 255, 0.45);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(88, 166, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  transform: translateY(-1.5px);
+}
+
+/* GitHub-style action button (Glossy Green) */
+.btn-primary, .github-glossy-button-primary {
+  position: relative;
+  background: linear-gradient(180deg, #2ea043 0%, #238636 100%);
+  color: #ffffff;
+  border: 1px solid rgba(240, 246, 252, 0.15);
+  border-radius: 6px;
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 2px 6px rgba(0, 0, 0, 0.35), 0 0 12px rgba(35, 134, 54, 0.25);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+.btn-primary:hover, .github-glossy-button-primary:hover {
+  background: linear-gradient(180deg, #3fb950 0%, #2ea043 100%);
+  border-color: rgba(240, 246, 252, 0.25);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 4px 16px rgba(46, 160, 67, 0.45), 0 0 20px rgba(63, 185, 80, 0.3);
+  transform: translateY(-1px);
+}
+.btn-primary:active, .github-glossy-button-primary:active {
+  transform: translateY(0px) scale(0.98);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* GitHub-style secondary action button (Glossy Dark) */
+.btn-secondary, .github-glossy-button-secondary {
+  position: relative;
+  background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-weight: 500;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 4px rgba(0, 0, 0, 0.25);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+.btn-secondary:hover, .github-glossy-button-secondary:hover {
+  background: linear-gradient(180deg, #30363d 0%, #21262d 100%);
+  border-color: #8b949e;
+  color: #f0f6fc;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 14px rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+}
+.btn-secondary:active, .github-glossy-button-secondary:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+/* GitHub Authentic Pill Badge */
+.github-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(110, 118, 129, 0.18);
+  border: 1px solid rgba(240, 246, 252, 0.12);
+  color: #f0f6fc;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 20px;
+  padding: 2px 8px;
+  line-height: 1.4;
+}
+
+/* Shimmer animation for glossy badges & headers */
+@keyframes github-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: github-shimmer 2.5s infinite;
+}
+
+/* Glow utilities */
+.glow-green {
+  box-shadow: 0 0 20px rgba(35, 134, 54, 0.45);
+}
+.glow-blue {
+  box-shadow: 0 0 20px rgba(88, 166, 255, 0.35);
+}
+
+/* Subtle hairline borders */
+.hairline-border {
+  border: 1px solid var(--border-subtle);
 }
 
 /* Custom scrollbars */
@@ -60,9 +176,9 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
+  background: #30363d;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: #8b949e;
 }

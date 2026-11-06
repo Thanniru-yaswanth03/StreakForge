@@ -126,3 +126,4 @@ This guide provides practical diagnostic procedures and resolutions for common i
   1. Navigate to **Settings** on the dashboard.
   2. Confirm that **Primary Timezone** matches your physical location (e.g. `America/Chicago` instead of `UTC`).
   3. Click **Recalculate Streaks**: StreakForge will re-index all historical activity records against your configured timezone's calendar days.
+

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
-import { getStoredToken, clearStoredToken } from '../lib/utils';
+import { getStoredToken, setStoredToken, clearStoredToken } from '../lib/utils';
 import { api } from '../lib/api';
 import { AgentManager } from '../components/AgentManager';
 
@@ -44,6 +44,11 @@ export function SettingsView() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
 
+  // PAT connection state
+  const [patInput, setPatInput] = useState('');
+  const [patLoading, setPatLoading] = useState(false);
+  const [patError, setPatError] = useState('');
+
   // Preference fields
   const [timezone, setTimezone] = useState(user?.timezone || 'UTC');
   const [streakGoal, setStreakGoal] = useState(user?.streakGoalPerDay || 1);
@@ -60,6 +65,23 @@ export function SettingsView() {
     navigator.clipboard.writeText(token);
     setCopiedToken(true);
     setTimeout(() => setCopiedToken(false), 2000);
+  };
+
+  const handleConnectPAT = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patInput.trim()) return;
+    try {
+      setPatLoading(true);
+      setPatError('');
+      const res = await api.auth.connectWithPAT(patInput.trim());
+      setStoredToken(res.token);
+      await refreshData();
+      window.location.reload();
+    } catch (err: any) {
+      setPatError(err.message || 'Authentication failed. Please verify your token.');
+    } finally {
+      setPatLoading(false);
+    }
   };
 
   const handleSavePreferences = async (e: React.FormEvent) => {
@@ -108,16 +130,24 @@ export function SettingsView() {
     window.location.reload();
   };
 
-  const sections = [
+  const coreSections = [
     { id: 'github', label: 'GitHub Account', icon: Github },
     { id: 'extension', label: 'LeetCode Extension', icon: KeyRound },
-    { id: 'repos', label: 'Connected Repositories', icon: FolderGit2 },
-    { id: 'agent', label: 'Local Agent', icon: Terminal },
-    { id: 'automation', label: 'Automation Preferences', icon: Bot },
+    { id: 'repos', label: 'Target Repositories', icon: FolderGit2 },
+    { id: 'automation', label: 'Automation Rules', icon: Bot },
     { id: 'notifications', label: 'Notification Settings', icon: Bell },
-    { id: 'privacy', label: 'Privacy & Security', icon: Shield },
     { id: 'theme', label: 'Theme & Display', icon: Palette },
+    { id: 'privacy', label: 'Privacy & Security', icon: Shield },
     { id: 'export', label: 'Data Export', icon: Download },
+  ];
+
+  const advancedSections: {
+    id: string;
+    label: string;
+    icon: any;
+    badge?: string;
+    danger?: boolean;
+  }[] = [
     { id: 'danger', label: 'Account Deletion', icon: Trash2, danger: true }
   ];
 
@@ -125,27 +155,67 @@ export function SettingsView() {
     <div className="space-y-6 max-w-5xl">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Navigation List */}
-        <div className="md:col-span-1 space-y-1">
-          {sections.map((s) => {
-            const Icon = s.icon;
-            const isActive = activeSection === s.id;
-            return (
-              <button
-                key={s.id}
-                onClick={() => setActiveSection(s.id as any)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
-                  isActive
-                    ? 'bg-theme-accent-subtle text-theme-accent font-semibold shadow-xs'
-                    : s.danger
-                    ? 'text-rose-500 hover:bg-rose-500/10'
-                    : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
-                }`}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{s.label}</span>
-              </button>
-            );
-          })}
+        <div className="md:col-span-1 space-y-4">
+          <div>
+            <div className="text-[10px] font-bold text-theme-muted uppercase tracking-wider px-3 mb-1.5">
+              Core Settings
+            </div>
+            <div className="space-y-1">
+              {coreSections.map((s) => {
+                const Icon = s.icon;
+                const isActive = activeSection === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveSection(s.id as any)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
+                      isActive
+                        ? 'bg-theme-accent-subtle text-theme-accent font-semibold shadow-xs'
+                        : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-theme-border">
+            <div className="text-[10px] font-bold text-theme-muted uppercase tracking-wider px-3 mb-1.5">
+              Advanced &amp; Optional
+            </div>
+            <div className="space-y-1">
+              {advancedSections.map((s) => {
+                const Icon = s.icon;
+                const isActive = activeSection === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveSection(s.id as any)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition ${
+                      isActive
+                        ? 'bg-theme-accent-subtle text-theme-accent font-semibold shadow-xs'
+                        : s.danger
+                        ? 'text-rose-500 hover:bg-rose-500/10'
+                        : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-elevated'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{s.label}</span>
+                    </div>
+                    {s.badge && (
+                      <span className="text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded bg-theme-surface border border-theme-border text-theme-muted">
+                        {s.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Section Content */}
@@ -168,6 +238,9 @@ export function SettingsView() {
                       <img
                         src={user.avatarUrl || 'https://avatars.githubusercontent.com/u/9919?s=200&v=4'}
                         alt={user.username}
+                        width={40}
+                        height={40}
+                        style={{ width: 40, height: 40, maxWidth: 40, maxHeight: 40, objectFit: 'cover' }}
                         className="w-10 h-10 rounded-full border border-theme-border"
                       />
                       <div>
@@ -196,6 +269,50 @@ export function SettingsView() {
                         Disconnect
                       </button>
                     </div>
+                  </div>
+
+                  {/* Reconnect / Update GitHub PAT */}
+                  <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl space-y-3" id="settings-pat">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold text-theme-primary uppercase tracking-wider flex items-center gap-1.5">
+                        <KeyRound className="w-3.5 h-3.5 text-theme-accent" />
+                        Update GitHub Access Token / PAT
+                      </div>
+                      <a
+                        href="https://github.com/settings/tokens/new?scopes=repo,read:user,user:email&description=StreakForge"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-theme-accent hover:underline font-semibold"
+                      >
+                        Generate New Token &rarr;
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                      If your GitHub session expired or returned &quot;Bad credentials&quot;, generate a Personal Access Token with <code className="text-theme-accent">repo</code> scope and paste it below to restore synchronization immediately.
+                    </p>
+                    <form onSubmit={handleConnectPAT} className="space-y-2 pt-1">
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          value={patInput}
+                          onChange={(e) => setPatInput(e.target.value)}
+                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          className="flex-1 bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs font-mono text-theme-primary focus:outline-none focus:border-theme-accent"
+                        />
+                        <button
+                          type="submit"
+                          disabled={patLoading || !patInput.trim()}
+                          className="px-4 py-2 bg-theme-accent text-slate-950 font-bold text-xs rounded-lg transition hover:opacity-95 shadow-xs disabled:opacity-50 shrink-0 cursor-pointer"
+                        >
+                          {patLoading ? 'Verifying...' : 'Update Token'}
+                        </button>
+                      </div>
+                      {patError && (
+                        <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-xs">
+                          {patError}
+                        </div>
+                      )}
+                    </form>
                   </div>
 
                   {/* Verified GitHub Emails */}
@@ -239,17 +356,78 @@ export function SettingsView() {
                   </div>
                 </div>
               ) : (
-                <div className="p-5 bg-theme-elevated border border-theme-border rounded-xl space-y-3">
-                  <div className="text-xs text-theme-secondary">
-                    Connect your GitHub account to enable automated, verified solution commits.
+                <div className="space-y-4">
+                  {/* Method 1: Connect with Personal Access Token (PAT) */}
+                  <div className="p-5 bg-theme-elevated border border-theme-border rounded-xl space-y-3">
+                    <div>
+                      <div className="text-xs font-bold text-theme-primary uppercase tracking-wider flex items-center gap-1.5">
+                        <KeyRound className="w-3.5 h-3.5 text-theme-accent" />
+                        Option 1: Connect via Personal Access Token (Instant)
+                      </div>
+                      <p className="text-[11px] text-theme-muted mt-0.5">
+                        The easiest and most reliable way to connect your real GitHub account. Generates instant authenticated access without configuring an OAuth Application.
+                      </p>
+                    </div>
+
+                    <form onSubmit={handleConnectPAT} className="space-y-3 pt-1">
+                      <div>
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <label className="text-theme-secondary font-medium">GitHub Personal Access Token (classic or fine-grained)</label>
+                          <a
+                            href="https://github.com/settings/tokens/new?scopes=repo,read:user,user:email&description=StreakForge"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-theme-accent hover:underline font-semibold"
+                          >
+                            Generate Token on GitHub &rarr;
+                          </a>
+                        </div>
+                        <input
+                          type="password"
+                          value={patInput}
+                          onChange={(e) => setPatInput(e.target.value)}
+                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs font-mono text-theme-primary focus:outline-none focus:border-theme-accent"
+                        />
+                        <p className="text-[10px] text-theme-muted mt-1">
+                          Required scopes: <code className="text-theme-accent">repo</code> (for writing solution commits) and <code className="text-theme-accent">read:user</code> (for profile info).
+                        </p>
+                      </div>
+
+                      {patError && (
+                        <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-lg text-xs">
+                          {patError}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={patLoading || !patInput.trim()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-theme-accent text-slate-950 font-bold text-xs rounded-lg transition hover:opacity-95 shadow-xs disabled:opacity-50"
+                      >
+                        <Github className="w-4 h-4" />
+                        <span>{patLoading ? 'Connecting to GitHub...' : 'Connect Real GitHub Account'}</span>
+                      </button>
+                    </form>
                   </div>
-                  <a
-                    href="http://localhost:4000/api/v1/auth/github"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-theme-accent text-slate-950 font-semibold text-xs rounded-lg transition hover:opacity-95 shadow-xs"
-                  >
-                    <Github className="w-4 h-4" />
-                    <span>Authorize with GitHub</span>
-                  </a>
+
+                  {/* Method 2: Connect via OAuth App */}
+                  <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl space-y-2">
+                    <div className="text-xs font-bold text-theme-primary uppercase tracking-wider flex items-center gap-1.5">
+                      <Github className="w-3.5 h-3.5 text-theme-secondary" />
+                      Option 2: Connect via GitHub OAuth Application
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                      Requires registering an OAuth App under GitHub Settings &rarr; Developer settings &rarr; OAuth Apps with callback <code className="text-theme-accent">http://localhost:4000/api/v1/auth/github/callback</code>.
+                    </p>
+                    <a
+                      href="http://localhost:4000/api/v1/auth/github"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-theme-surface hover:bg-theme-border border border-theme-border text-theme-primary font-semibold text-xs rounded-lg transition shadow-xs mt-1"
+                    >
+                      <Github className="w-3.5 h-3.5" />
+                      <span>Authorize via OAuth App</span>
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
@@ -316,13 +494,6 @@ export function SettingsView() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* 4. Local Desktop Agent */}
-          {activeSection === 'agent' && (
-            <div className="space-y-4">
-              <AgentManager agents={agents} onRefresh={refreshData} />
             </div>
           )}
 

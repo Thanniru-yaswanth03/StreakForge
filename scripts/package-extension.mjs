@@ -101,3 +101,4 @@ console.log(`  Location:  ${zipPath}`);
 console.log(`  Size:      ${(stats.size / 1024).toFixed(1)} KB (${stats.size} bytes)`);
 console.log(`  SHA-256:   ${sha256}`);
 console.log('--------------------------------------------------------');
+

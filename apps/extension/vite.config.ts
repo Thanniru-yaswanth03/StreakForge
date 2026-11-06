@@ -11,7 +11,9 @@ export default defineConfig({
         popup: path.resolve(__dirname, 'index.html'),
         options: path.resolve(__dirname, 'options.html'),
         'service-worker': path.resolve(__dirname, 'src/background/service-worker.ts'),
-        'leetcode-observer': path.resolve(__dirname, 'src/content/leetcode-observer.ts')
+        'leetcode-observer': path.resolve(__dirname, 'src/content/leetcode-observer.ts'),
+        'leetcode-interceptor': path.resolve(__dirname, 'src/content/leetcode-interceptor.ts'),
+        'web-bridge': path.resolve(__dirname, 'src/content/web-bridge.ts')
       },
       output: {
         entryFileNames: (chunkInfo) => {
@@ -20,6 +22,12 @@ export default defineConfig({
           }
           if (chunkInfo.name === 'leetcode-observer') {
             return 'src/content/leetcode-observer.js';
+          }
+          if (chunkInfo.name === 'leetcode-interceptor') {
+            return 'src/content/leetcode-interceptor.js';
+          }
+          if (chunkInfo.name === 'web-bridge') {
+            return 'src/content/web-bridge.js';
           }
           return 'assets/[name]-[hash].js';
         },

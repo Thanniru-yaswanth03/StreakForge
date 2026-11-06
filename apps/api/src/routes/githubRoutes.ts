@@ -9,7 +9,8 @@ import {
   getGitHubActivity,
   diagnoseCommitAttribution,
   diagnoseRepositoryHealth,
-  handleGitHubWebhook
+  handleGitHubWebhook,
+  syncGitHubContributions
 } from '../services/githubService.js';
 import { RepositoryConnection } from '../models/RepositoryConnection.js';
 import { Types } from 'mongoose';
@@ -129,13 +130,11 @@ githubRouter.post(
 
 /**
  * POST /api/v1/github/sync
- * Manually trigger activity sync cursor refresh across connected repositories
+ * Manually trigger authentic GitHub activity sync (GraphQL contributions calendar + repo commits)
  */
 githubRouter.post('/sync', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
   try {
-    const repos = await RepositoryConnection.find({
-      userId: new Types.ObjectId(req.userId)
-    });
+    const syncResult = await syncGitHubContributions(req.userId!);
 
     const now = new Date();
     await RepositoryConnection.updateMany(
@@ -148,13 +147,14 @@ githubRouter.post('/sync', requireAuth, async (req: AuthenticatedRequest, res: R
       component: 'API',
       action: 'GITHUB_SYNC_TRIGGERED',
       status: 'SUCCESS',
-      description: `Manual GitHub activity sync triggered for ${repos.length} connected repositories`
+      description: `Synchronized ${syncResult.totalContributions} GitHub contributions across ${syncResult.activeDays} days`
     });
 
     res.json({
       success: true,
       data: {
-        message: `Synchronized ${repos.length} repositories`,
+        message: `Synchronized ${syncResult.totalContributions} GitHub contributions (${syncResult.activeDays} active days)`,
+        ...syncResult,
         syncedAt: now.toISOString()
       }
     });

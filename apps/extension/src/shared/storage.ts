@@ -13,9 +13,12 @@ export const DEFAULT_CONFIG: ExtensionConfig = {
   autoSyncEnabled: true,
   targetRepoFullName: '',
   targetBranch: 'main',
-  folderStructureTemplate: 'leetcode-solutions/{Language}/{Topic}/{id}_{slug}{ext}',
+  folderStructureTemplate: 'solutions/{difficulty}/{id}-{slug}',
   archiveFailedSubmissionsLocally: true,
-  notifyOnSuccess: true
+  notifyOnSuccess: true,
+  exportNewOnly: false,
+  allowMultipleSubmissions: true,
+  addSolutionComments: true
 };
 
 export class StorageManager {
@@ -61,6 +64,12 @@ export class StorageManager {
     filtered.unshift(sub);
     if (typeof chrome !== 'undefined' && chrome.storage?.local) {
       await chrome.storage.local.set({ syncedHistory: filtered.slice(0, 100) });
+    }
+  }
+
+  public static async setSyncedHistory(history: DetectedSubmission[]): Promise<void> {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      await chrome.storage.local.set({ syncedHistory: history.slice(0, 100) });
     }
   }
 

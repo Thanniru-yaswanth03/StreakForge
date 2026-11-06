@@ -69,8 +69,8 @@ export function Navbar({ user, activeTab, onTabChange, currentStreak }: NavbarPr
 
         {/* User Badge / Streak */}
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 px-3 py-1 rounded-full text-amber-400">
-            <Flame className="w-4 h-4 animate-pulse text-amber-400" />
+          <div className="flex items-center gap-2 bg-[#238636]/15 border border-[#238636]/30 px-3 py-1 rounded-full text-[#3fb950]">
+            <Flame className="w-4 h-4 text-[#3fb950]" />
             <span className="text-xs font-bold tracking-tight">{currentStreak} Day Streak</span>
           </div>
 
@@ -83,6 +83,9 @@ export function Navbar({ user, activeTab, onTabChange, currentStreak }: NavbarPr
               <img
                 src={user.avatarUrl || 'https://avatars.githubusercontent.com/u/9919?s=200&v=4'}
                 alt={user.username}
+                width={32}
+                height={32}
+                style={{ width: 32, height: 32, maxWidth: 32, maxHeight: 32, objectFit: 'cover' }}
                 className="w-8 h-8 rounded-full border border-slate-700 object-cover"
               />
               <button

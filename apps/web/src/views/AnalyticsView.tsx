@@ -97,16 +97,29 @@ export function AnalyticsView() {
     { hour: '22:00', actions: 9 }
   ];
 
-  // Day of week distribution
-  const dayOfWeekData = [
-    { day: 'Mon', count: 28 },
-    { day: 'Tue', count: 34 },
-    { day: 'Wed', count: 31 },
-    { day: 'Thu', count: 38 },
-    { day: 'Fri', count: 26 },
-    { day: 'Sat', count: 18 },
-    { day: 'Sun', count: 21 }
-  ];
+  // Dynamic Day of week distribution computed from authentic heatmap activity for selected date range
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayCounts: Record<string, number> = { Sun: 0, Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0 };
+  const targetDays =
+    dateRange === '7d'
+      ? heatmap.slice(-7)
+      : dateRange === '30d'
+      ? heatmap.slice(-30)
+      : dateRange === '90d'
+      ? heatmap.slice(-90)
+      : heatmap;
+
+  targetDays.forEach((d) => {
+    const dayName = dayNames[new Date(d.date + 'T00:00:00').getDay()];
+    if (dayName) {
+      dayCounts[dayName] = (dayCounts[dayName] || 0) + (d.count || 0);
+    }
+  });
+
+  const dayOfWeekData = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({
+    day,
+    count: dayCounts[day] || 0
+  }));
 
   // LeetCode Difficulty Distribution
   const diffColors = { Easy: '#10b981', Medium: '#f59e0b', Hard: '#ef4444' };

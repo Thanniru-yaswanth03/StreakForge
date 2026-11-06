@@ -8,13 +8,39 @@ import {
   verifyOAuthState,
   exchangeGitHubCode,
   revokeSessionToken,
-  disconnectGitHubAccount
+  disconnectGitHubAccount,
+  getOrCreateDevUser,
+  connectGitHubWithPAT
 } from '../services/authService.js';
 import { User } from '../models/User.js';
+import { logger } from '../utils/logger.js';
 
 export const authRouter: Router = Router();
 
-authRouter.get('/github', (_req, res: Response) => {
+authRouter.get('/github', async (_req, res: Response, next) => {
+  // If GitHub OAuth credentials are dummy placeholders in development, use dev bypass
+  const isDummyClient =
+    !ENV.GITHUB_CLIENT_ID ||
+    ENV.GITHUB_CLIENT_ID === 'dummy_client_id' ||
+    ENV.GITHUB_CLIENT_ID === 'your_github_client_id_here';
+
+  if (isDummyClient && ENV.NODE_ENV !== 'production') {
+    logger.info('[Auth] GITHUB_CLIENT_ID not configured; entering Developer Bypass mode');
+    try {
+      const { token } = await getOrCreateDevUser();
+      res.cookie('streakforge_token', token, {
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+        sameSite: 'lax'
+      });
+      res.redirect(`${ENV.WEB_APP_URL}/auth/callback?token=${token}`);
+      return;
+    } catch (err) {
+      next(err);
+      return;
+    }
+  }
+
   const scopes = ['repo', 'read:user', 'user:email'].join(' ');
   const state = generateOAuthState();
   const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${ENV.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(
@@ -49,12 +75,56 @@ authRouter.get('/github/callback', async (req, res: Response, next) => {
 
   try {
     const { token, user } = await exchangeGitHubCode(code, state);
-    // If request accepts HTML (direct browser redirect), redirect to frontend with token
-    if (req.headers.accept?.includes('text/html')) {
-      res.redirect(`${ENV.WEB_APP_URL}/auth/callback?token=${token}`);
+
+    res.cookie('streakforge_token', token, {
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+      sameSite: 'lax'
+    });
+
+    if (req.headers.accept === 'application/json') {
+      res.json({
+        success: true,
+        data: {
+          token,
+          user: {
+            id: user._id,
+            username: user.username,
+            name: user.name,
+            email: user.email,
+            verifiedEmails: user.verifiedEmails,
+            avatarUrl: user.avatarUrl,
+            timezone: user.timezone
+          }
+        }
+      });
       return;
     }
 
+    res.redirect(`${ENV.WEB_APP_URL}/auth/callback?token=${token}`);
+    return;
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/github/pat', async (req: AuthenticatedRequest, res: Response, next) => {
+  const { pat } = req.body;
+  if (!pat || typeof pat !== 'string') {
+    res.status(400).json({
+      success: false,
+      error: { code: 'INVALID_TOKEN', message: 'GitHub Personal Access Token is required' }
+    });
+    return;
+  }
+
+  try {
+    const { token, user } = await connectGitHubWithPAT(pat);
+    res.cookie('streakforge_token', token, {
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+      sameSite: 'lax'
+    });
     res.json({
       success: true,
       data: {
@@ -70,14 +140,17 @@ authRouter.get('/github/callback', async (req, res: Response, next) => {
         }
       }
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'AUTH_FAILED', message: error.message || 'GitHub Authentication failed' }
+    });
   }
 });
 
-authRouter.post('/logout', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+authRouter.post('/logout', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   if (req.token) {
-    revokeSessionToken(req.token);
+    await revokeSessionToken(req.token);
   }
   res.json({
     success: true,
@@ -89,7 +162,7 @@ authRouter.post('/disconnect', requireAuth, async (req: AuthenticatedRequest, re
   try {
     await disconnectGitHubAccount(req.userId!);
     if (req.token) {
-      revokeSessionToken(req.token);
+      await revokeSessionToken(req.token);
     }
     res.json({
       success: true,
@@ -116,6 +189,8 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Respon
         timezone: user.timezone,
         streakGoalPerDay: user.streakGoalPerDay,
         notificationPreferences: user.notificationPreferences,
+        leetcodeUsername: user.leetcodeUsername || 'yash1th03',
+        leetcodeStats: user.leetcodeStats,
         createdAt: user.createdAt
       }
     }

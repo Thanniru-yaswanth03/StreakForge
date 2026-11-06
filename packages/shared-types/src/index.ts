@@ -12,6 +12,30 @@ export type AuditComponent = 'API' | 'EXTENSION' | 'AGENT' | 'WEB';
 
 export type AuditStatus = 'SUCCESS' | 'FAILURE' | 'WARNING' | 'INFO';
 
+export interface LeetCodeUserStats {
+  username: string;
+  realName?: string;
+  ranking?: number;
+  userAvatar?: string;
+  reputation?: number;
+  aboutMe?: string;
+  countryName?: string;
+  totalSolved: number;
+  easySolved: number;
+  mediumSolved: number;
+  hardSolved: number;
+  totalSubmissions: number;
+  acceptanceRate: number;
+  totalActiveDays?: number;
+  maxStreak?: number;
+  submissionCalendar?: string;
+  badgesCount?: number;
+  easyTotal?: number;
+  mediumTotal?: number;
+  hardTotal?: number;
+  lastSyncedAt: string;
+}
+
 export interface User {
   id: string;
   githubId: string;
@@ -27,6 +51,8 @@ export interface User {
     email: boolean;
     streakWarningHoursBefore: number;
   };
+  leetcodeUsername?: string;
+  leetcodeStats?: LeetCodeUserStats;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +116,7 @@ export interface LeetCodeSubmission {
   memoryBytes: number;
   memoryPercentile: number;
   status: 'Accepted';
+  topicTags?: string[];
   submittedAt: string;
   syncStatus: SyncStatus;
   githubCommitSha?: string;
@@ -799,4 +826,135 @@ export interface DeveloperReport {
     total: number;
   }>;
 }
+
+// ========================================================
+// StreakForge 2.0 — Intelligence & Learning Ecosystem Types
+// ========================================================
+
+export type CurriculumTrackId = 'blind75' | 'neetcode150' | 'topInterview150';
+
+export interface CurriculumProblem {
+  id: number;
+  slug: string;
+  title: string;
+  difficulty: Difficulty;
+  category: string;
+  order: number;
+  leetcodeUrl: string;
+}
+
+export type StudyProblemStatus =
+  | 'NOT_STARTED'
+  | 'ATTEMPTED'
+  | 'SOLVED'
+  | 'NEEDS_REVISION'
+  | 'MASTERED';
+
+export type SrsRating = 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
+
+export interface StudyProgressItem {
+  id: string;
+  userId: string;
+  problemId: number;
+  questionSlug: string;
+  title: string;
+  difficulty: Difficulty;
+  category: string;
+  curricula: CurriculumTrackId[];
+  status: StudyProblemStatus;
+  userNotes?: string;
+  repetitionLevel: number;
+  easeFactor: number;
+  intervalDays: number;
+  lastReviewedAt?: string;
+  nextReviewDate: string;
+  history: Array<{
+    reviewedAt: string;
+    rating: SrsRating;
+    intervalDays: number;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RevisionQueueSummary {
+  dueToday: StudyProgressItem[];
+  overdue: StudyProgressItem[];
+  upcoming: StudyProgressItem[];
+  totalMastered: number;
+  totalNeedsRevision: number;
+  totalSolved: number;
+}
+
+export interface CatalogItem {
+  number: number;
+  title: string;
+  difficulty: Difficulty;
+  topics: string[];
+  language: string;
+  solutionPath: string;
+  githubUrl: string;
+  lastSyncedAt?: string;
+}
+
+export interface CatalogPreview {
+  repoFullName: string;
+  branch: string;
+  totalCount: number;
+  items: CatalogItem[];
+  markdownPreview: string;
+  currentContentSha?: string;
+  lastSyncedAt?: string;
+}
+
+export interface CatalogSyncResult {
+  success: boolean;
+  repoFullName: string;
+  commitSha: string;
+  commitUrl: string;
+  itemsCataloged: number;
+  syncedAt: string;
+}
+
+export type BadgeTheme = 'minimal' | 'dark' | 'light' | 'terminal' | 'gradient';
+
+export interface BadgeOptions {
+  user: string;
+  theme?: BadgeTheme;
+  showRank?: boolean;
+  showDifficulty?: boolean;
+  showStreak?: boolean;
+  width?: number;
+}
+
+export interface LearningIntelligenceSummary {
+  totalSolvedLeetCode: number;
+  authenticStreakDays: number;
+  longestStreakDays: number;
+  curriculumProgress: {
+    blind75: { solved: number; total: number; percentage: number };
+    neetcode150: { solved: number; total: number; percentage: number };
+    topInterview150: { solved: number; total: number; percentage: number };
+  };
+  topicStrengths: Array<{
+    topic: string;
+    solved: number;
+    total: number;
+    accuracyPercent: number;
+    status: 'STRONG' | 'GROWING' | 'NEEDS_FOCUS';
+  }>;
+  srsHealth: {
+    dueTodayCount: number;
+    overdueCount: number;
+    masteredCount: number;
+    retentionRatePercent: number;
+  };
+  catalogStatus: {
+    repoFullName: string;
+    totalSolutionsCataloged: number;
+    lastCatalogSyncedAt?: string;
+    isFresh: boolean;
+  };
+}
+
 

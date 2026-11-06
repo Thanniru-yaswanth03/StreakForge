@@ -59,7 +59,23 @@ const RepositoryConnectionSchema = new Schema<IRepositoryConnectionDocument>(
     },
     lastSyncedAt: { type: Date }
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: Record<string, any>) => {
+        ret.id = ret._id?.toString?.() || ret._id;
+        return ret;
+      }
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: Record<string, any>) => {
+        ret.id = ret._id?.toString?.() || ret._id;
+        return ret;
+      }
+    }
+  }
 );
 
 RepositoryConnectionSchema.index({ userId: 1, repoFullName: 1 }, { unique: true });

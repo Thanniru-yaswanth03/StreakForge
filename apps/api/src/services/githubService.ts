@@ -5,6 +5,9 @@ import { ENV } from '../config/env.js';
 import { Account } from '../models/Account.js';
 import { User } from '../models/User.js';
 import { RepositoryConnection } from '../models/RepositoryConnection.js';
+import { DailyActivitySnapshot } from '../models/DailyActivitySnapshot.js';
+import { ActivityRecord } from '../models/ActivityRecord.js';
+import { getStreakOverview } from './streakService.js';
 import { decryptToken } from '../utils/crypto.js';
 import { logAuditEvent } from './auditService.js';
 import { logger } from '../utils/logger.js';
@@ -675,3 +678,282 @@ export async function handleGitHubWebhook(
 
   return { status: 'PROCESSED', message: `Event ${event} recorded successfully` };
 }
+
+export interface GitHubSyncResult {
+  totalContributions: number;
+  activeDays: number;
+  commitsRecorded: number;
+  currentStreak: number;
+  longestStreak: number;
+}
+
+/**
+ * Synchronize authentic GitHub contribution calendar and connected repository commits.
+ * Ingests daily contribution counts into DailyActivitySnapshot and granular ActivityRecords,
+ * and updates user's verified streaks.
+ */
+export async function syncGitHubContributions(userId: string): Promise<GitHubSyncResult> {
+  const octokit = await getAuthenticatedOctokit(userId);
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found');
+
+  const ghUser = await octokit.rest.users.getAuthenticated();
+  const login = ghUser.data.login;
+
+  // 1. Query GitHub GraphQL API for authentic 365-day contribution calendar
+  const gqlRes: any = await octokit.graphql(
+    `
+    query($login: String!) {
+      user(login: $login) {
+        contributionsCollection {
+          contributionCalendar {
+            totalContributions
+            weeks {
+              contributionDays {
+                date
+                contributionCount
+              }
+            }
+          }
+        }
+      }
+    }
+  `,
+    { login }
+  );
+
+  const cal = gqlRes?.user?.contributionsCollection?.contributionCalendar;
+  const totalContributions = cal?.totalContributions || 0;
+  const weeks = cal?.weeks || [];
+
+  let activeDays = 0;
+  let commitsRecorded = 0;
+
+  // 2. Ingest daily contribution counts into DailyActivitySnapshot and ActivityRecord
+  for (const week of weeks) {
+    for (const day of week.contributionDays || []) {
+      if (day.contributionCount > 0) {
+        activeDays++;
+        commitsRecorded += day.contributionCount;
+
+        // Upsert DailyActivitySnapshot
+        const existing = await DailyActivitySnapshot.findOne({
+          userId: new Types.ObjectId(userId),
+          date: day.date
+        });
+
+        if (existing) {
+          existing.gitCommitCount = Math.max(existing.gitCommitCount || 0, day.contributionCount);
+          existing.github = existing.github || { commits: 0, prs: 0, issues: 0, reposContributedTo: [] };
+          existing.github.commits = Math.max(existing.github.commits || 0, day.contributionCount);
+          existing.streakMaintained = true;
+          existing.githubStreakEligible = true;
+          existing.overallStreakEligible = true;
+          existing.totalActivities =
+            existing.gitCommitCount +
+            (existing.leetCodeCount || 0) +
+            (existing.localDev?.sessions || 0);
+          await existing.save();
+        } else {
+          await DailyActivitySnapshot.create({
+            userId: new Types.ObjectId(userId),
+            date: day.date,
+            gitCommitCount: day.contributionCount,
+            github: {
+              commits: day.contributionCount,
+              prs: 0,
+              issues: 0,
+              reposContributedTo: []
+            },
+            leetCodeCount: 0,
+            leetcode: {
+              submissions: 0,
+              accepted: 0,
+              uniqueProblems: 0,
+              languages: []
+            },
+            localDev: {
+              sessions: 0,
+              filesChanged: 0,
+              minutesTracked: 0
+            },
+            maintenance: {
+              backups: 0,
+              verifications: 0
+            },
+            totalActivities: day.contributionCount,
+            streakMaintained: true,
+            githubStreakEligible: true,
+            overallStreakEligible: true
+          });
+        }
+
+        // Idempotent audit ActivityRecord for each active day
+        const eventId = `${userId}:GITHUB:GITHUB_COMMIT:calendar-${day.date}`;
+        await ActivityRecord.updateOne(
+          { userId: new Types.ObjectId(userId), id: eventId },
+          {
+            $set: {
+              userId: new Types.ObjectId(userId),
+              id: eventId,
+              category: 'GITHUB',
+              eventType: 'GITHUB_COMMIT',
+              source: 'GITHUB',
+              timestamp: new Date(`${day.date}T12:00:00Z`),
+              date: day.date,
+              reference: `github-contribution-calendar:${day.date}`,
+              verificationStatus: 'VERIFIED',
+              metadata: {
+                commitCount: day.contributionCount,
+                source: 'GraphQL contributionCalendar'
+              }
+            }
+          },
+          { upsert: true }
+        );
+      }
+    }
+  }
+
+  // 3. Fetch detailed recent commits from connected repositories (especially the LeetCode target repo)
+  const connectedRepos = await RepositoryConnection.find({
+    userId: new Types.ObjectId(userId)
+  });
+
+  for (const conn of connectedRepos) {
+    const [owner, repo] = conn.repoFullName.split('/');
+    if (owner && repo) {
+      try {
+        const repoCommits = await octokit.rest.repos.listCommits({
+          owner,
+          repo,
+          per_page: 30
+        });
+
+        for (const c of repoCommits.data) {
+          const cDate = c.commit.author?.date || c.commit.committer?.date;
+          if (!cDate) continue;
+          const dateStr = cDate.slice(0, 10);
+          const commitEventId = `${userId}:GITHUB:GITHUB_COMMIT:${c.sha}`;
+
+          await ActivityRecord.updateOne(
+            { userId: new Types.ObjectId(userId), id: commitEventId },
+            {
+              $set: {
+                userId: new Types.ObjectId(userId),
+                id: commitEventId,
+                category: 'GITHUB',
+                eventType: 'GITHUB_COMMIT',
+                source: 'GITHUB',
+                timestamp: new Date(cDate),
+                date: dateStr,
+                reference: `${conn.repoFullName}#${c.sha.slice(0, 7)}`,
+                verificationStatus: 'VERIFIED',
+                metadata: {
+                  sha: c.sha,
+                  repo: conn.repoFullName,
+                  message: c.commit.message,
+                  url: c.html_url,
+                  author: c.commit.author?.name || c.author?.login
+                }
+              }
+            },
+            { upsert: true }
+          );
+        }
+      } catch (err: any) {
+        logger.warn(`Failed to fetch individual commits for repo ${conn.repoFullName}: ${err.message}`);
+      }
+    }
+  }
+
+  // 4. Compute updated streaks
+  const overview = await getStreakOverview(userId);
+
+  logger.info(
+    `[GitHubSync] Successfully synchronized ${totalContributions} GitHub contributions across ${activeDays} days for user ${user.username}. Current streak: ${overview.currentStreak}`
+  );
+
+  return {
+    totalContributions,
+    activeDays,
+    commitsRecorded,
+    currentStreak: overview.currentStreak,
+    longestStreak: overview.longestStreak
+  };
+}
+
+/**
+ * Read file contents and SHA from GitHub repo
+ */
+export async function getFile(
+  userId: string | Types.ObjectId,
+  repoFullName: string,
+  filePath: string,
+  ref: string = 'main'
+): Promise<{ content: string; sha: string }> {
+  const octokit = await getAuthenticatedOctokit(userId.toString());
+  const [owner, repo] = repoFullName.split('/');
+  const res = await octokit.rest.repos.getContent({
+    owner,
+    repo,
+    path: filePath,
+    ref
+  });
+  if ('content' in res.data && typeof res.data.content === 'string') {
+    const decoded = Buffer.from(res.data.content, 'base64').toString('utf-8');
+    return { content: decoded, sha: res.data.sha };
+  }
+  throw new Error(`Path ${filePath} is not a valid file or is a directory`);
+}
+
+/**
+ * Commit a file update or creation directly to GitHub
+ */
+export async function createOrUpdateFile(
+  userId: string | Types.ObjectId,
+  repoFullName: string,
+  filePath: string,
+  content: string,
+  message: string,
+  sha?: string,
+  branch: string = 'main'
+): Promise<{ commitSha: string; commitUrl: string }> {
+  const octokit = await getAuthenticatedOctokit(userId.toString());
+  const [owner, repo] = repoFullName.split('/');
+
+  const user = await User.findById(userId);
+  const author = {
+    name: user?.name || user?.username || 'StreakForge Bot',
+    email: user?.email || 'streakforge@local'
+  };
+
+  const res = await octokit.rest.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path: filePath,
+    message,
+    content: Buffer.from(content, 'utf-8').toString('base64'),
+    branch,
+    sha,
+    author
+  });
+
+  return {
+    commitSha: res.data.commit.sha || '',
+    commitUrl: res.data.commit.html_url || `https://github.com/${owner}/${repo}/commit/${res.data.commit.sha}`
+  };
+}
+
+export const GitHubService = {
+  getAuthenticatedOctokit,
+  getGitHubActivity,
+  diagnoseCommitAttribution,
+  diagnoseRepositoryHealth,
+  verifyWebhookSignature,
+  handleGitHubWebhook,
+  syncGitHubContributions,
+  getFile,
+  createOrUpdateFile
+};
+

@@ -1,11 +1,14 @@
 # StreakForge Installation & Setup Manual
 
-This document provides step-by-step instructions for installing and configuring all four core StreakForge subsystems:
+This document provides step-by-step instructions for installing and configuring StreakForge:
 
-1. **Central API Server** (`apps/api`)
-2. **Web Dashboard** (`apps/web`)
-3. **LeetCode Sync Chrome Extension** (`apps/extension`)
-4. **Local Desktop Companion Agent** (`apps/desktop-agent`)
+### Primary System Components (Required for Standard Usage)
+1. **Central API Server** (`apps/api`): Central authentication, token encryption, scheduler & verification engine.
+2. **Web Dashboard** (`apps/web`): Main developer workspace, streak calendar, repository management & analytics.
+3. **LeetCode Sync Chrome Extension** (`apps/extension`): Manifest V3 extension capturing accepted solutions from LeetCode.
+
+### Optional Advanced Component (Power Users Only)
+4. **Local Desktop Companion Agent** (`apps/desktop-agent`): Optional daemon for monitoring local workstation Git folders on disk. *Not required for standard LeetCode &rarr; GitHub synchronization.*
 
 ---
 
@@ -91,7 +94,9 @@ StreakForge LeetCode Sync connects your browser directly to your target reposito
 
 ---
 
-## 4. Local Desktop Companion Agent Installation
+## 4. (Optional) Local Desktop Companion Agent Installation
+
+> **Note**: This step is completely optional. For 95% of developers, the **Web Dashboard** and **Chrome Extension** provide everything needed for automated LeetCode capture, GitHub solution exports, and verified streak tracking. Only install this if you wish to monitor local Git folders on this workstation.
 
 The desktop companion agent monitors your local repositories and executes safe Git operations. It runs entirely in user-space and **does not require administrator privileges**.
 
@@ -187,3 +192,4 @@ Inspect container logs:
 ```bash
 docker-compose -f infrastructure/docker/docker-compose.yml logs -f
 ```
+

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="sf-grad-1" x1="4" y1="28" x2="20" y2="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#10B981" />
+    </linearGradient>
+    <linearGradient id="sf-grad-2" x1="12" y1="28" x2="28" y2="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#34D399" />
+    </linearGradient>
+  </defs>
+  <!-- Base Geometry: Dual Interconnected Kinetic Nodes -->
+  <!-- Left Chevron / Version Control Stream -->
+  <path
+    d="M 6 19.5 L 12.5 13 L 17 17.5 L 10.5 24 L 6 19.5 Z"
+    fill="url(#sf-grad-1)"
+  />
+  <path
+    d="M 12.5 13 L 19 6.5 L 23.5 11 L 17 17.5 L 12.5 13 Z"
+    fill="url(#sf-grad-2)"
+  />
+  <!-- Top Forward Node -->
+  <path
+    d="M 19 6.5 L 24 6.5 L 26 8.5 L 23.5 11 L 19 6.5 Z"
+    fill="#6EE7B7"
+  />
+  <!-- Synchronizing Loop Loopback / Verification Stream -->
+  <path
+    d="M 26 12.5 L 19.5 19 L 15 14.5 L 21.5 8 L 26 12.5 Z"
+    fill="url(#sf-grad-2)"
+    opacity="0.95"
+  />
+  <path
+    d="M 19.5 19 L 13 25.5 L 8.5 21 L 15 14.5 L 19.5 19 Z"
+    fill="url(#sf-grad-1)"
+  />
+  <!-- Bottom Forward Node -->
+  <path
+    d="M 13 25.5 L 8 25.5 L 6 23.5 L 8.5 21 L 13 25.5 Z"
+    fill="#047857"
+  />
+  <!-- Center Precision Knockout (creates kinetic depth) -->
+  <rect x="14.5" y="14.5" width="3" height="3" rx="0.75" transform="rotate(45 16 16)" fill="#090D16" />
+</svg>

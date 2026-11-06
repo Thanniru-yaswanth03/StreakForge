@@ -92,3 +92,4 @@ Examples:
 ## 6. Security Vulnerability Reporting
 
 If you discover a security vulnerability or privilege escalation vector, please **do not** open a public issue. Follow our responsible disclosure guidelines outlined in [SECURITY.md](SECURITY.md).
+

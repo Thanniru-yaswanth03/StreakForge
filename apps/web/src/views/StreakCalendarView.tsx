@@ -97,15 +97,15 @@ export function StreakCalendarView() {
   const getCellColor = (level: number) => {
     switch (level) {
       case 1:
-        return 'bg-emerald-950 border border-emerald-800/40 text-emerald-200';
+        return 'bg-[#0e4429] border border-[#0e4429] text-emerald-200';
       case 2:
-        return 'bg-emerald-700 border border-emerald-600/50 text-white';
+        return 'bg-[#006d32] border border-[#006d32] text-white';
       case 3:
-        return 'bg-emerald-500 border border-emerald-400/50 text-slate-950';
+        return 'bg-[#26a641] border border-[#26a641] text-slate-950';
       case 4:
-        return 'bg-emerald-400 border border-emerald-300 text-slate-950 shadow-xs shadow-emerald-400/20';
+        return 'bg-[#39d353] border border-[#39d353] text-slate-950 shadow-xs shadow-emerald-400/20';
       default:
-        return 'bg-theme-elevated border border-theme-border/60 hover:border-theme-muted';
+        return 'bg-[#161b22] border border-[#21262d]/60 hover:border-slate-500';
     }
   };
 
@@ -245,11 +245,11 @@ export function StreakCalendarView() {
             <span>Activity Intensity:</span>
             <span>Less</span>
             <div className="flex items-center gap-1">
-              <div className="w-2.5 h-2.5 rounded-xs bg-theme-elevated border border-theme-border" />
-              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-950 border border-emerald-800/40" />
-              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-700 border border-emerald-600/50" />
-              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-500 border border-emerald-400/50" />
-              <div className="w-2.5 h-2.5 rounded-xs bg-emerald-400 border border-emerald-300" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-[#161b22] border border-[#21262d]/60" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-[#0e4429]" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-[#006d32]" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-[#26a641]" />
+              <div className="w-2.5 h-2.5 rounded-xs bg-[#39d353]" />
             </div>
             <span>More</span>
           </div>

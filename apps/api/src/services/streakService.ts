@@ -229,18 +229,28 @@ export async function getStreakOverview(
     }
   }
 
-  // Difficulty distribution
+  // Difficulty distribution from authentic LeetCode stats, with fallback to exported solutions
   const submissions = await LeetCodeSubmission.find({
     userId: new Types.ObjectId(userId.toString()),
     status: 'Accepted'
   });
 
-  const diffCount = { Easy: 0, Medium: 0, Hard: 0 };
-  for (const sub of submissions) {
-    if (sub.difficulty in diffCount) {
-      diffCount[sub.difficulty]++;
+  const diffCount = {
+    Easy: user?.leetcodeStats?.easySolved ?? 0,
+    Medium: user?.leetcodeStats?.mediumSolved ?? 0,
+    Hard: user?.leetcodeStats?.hardSolved ?? 0
+  };
+
+  if (diffCount.Easy === 0 && diffCount.Medium === 0 && diffCount.Hard === 0) {
+    for (const sub of submissions) {
+      if (sub.difficulty in diffCount) {
+        diffCount[sub.difficulty as keyof typeof diffCount]++;
+      }
     }
   }
+
+  const authenticTotalSolved =
+    user?.leetcodeStats?.totalSolved ?? (submissions.length > 0 ? submissions.length : totalLeetCodeAccepted);
 
   // Trailing 7 days consistency percent
   const snapMap = new Map<string, boolean>();
@@ -266,7 +276,7 @@ export async function getStreakOverview(
     weeklyConsistencyPercent: weeklyConsistency,
     weeklyActivityScore,
     streakDeadlineHoursLeft: StreakEngine.getHoursUntilMidnight(tz),
-    totalLeetCodeSolved: submissions.length || totalLeetCodeAccepted,
+    totalLeetCodeSolved: authenticTotalSolved,
     totalGitCommitsTracked: totalGitCommits,
     difficultyDistribution: diffCount,
     githubStreak,
@@ -276,9 +286,9 @@ export async function getStreakOverview(
       githubCommits: totalGitCommits,
       githubPRs: totalPRs,
       githubIssues: totalIssues,
-      leetCodeTotalSubmissions: totalLeetCodeSubmissions,
-      leetCodeAccepted: totalLeetCodeAccepted,
-      leetCodeUniqueProblems: Math.max(submissions.length, totalUniqueProblems),
+      leetCodeTotalSubmissions: user?.leetcodeStats?.totalSubmissions ?? totalLeetCodeSubmissions,
+      leetCodeAccepted: authenticTotalSolved,
+      leetCodeUniqueProblems: authenticTotalSolved,
       localSessions: totalLocalSessions,
       maintenanceBackups: totalBackups
     }

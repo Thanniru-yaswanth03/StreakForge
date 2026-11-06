@@ -1,6 +1,7 @@
 import { API_BASE_URL, getStoredToken } from './utils';
 import type {
   User,
+  LeetCodeUserStats,
   AnalyticsOverview,
   HeatmapDay,
   RepositoryConnection,
@@ -127,6 +128,11 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 export const api = {
   auth: {
     getMe: () => apiFetch<{ user: User }>('/auth/me'),
+    connectWithPAT: (pat: string) =>
+      apiFetch<{ token: string; user: User }>('/auth/github/pat', {
+        method: 'POST',
+        body: JSON.stringify({ pat })
+      }),
     updatePreferences: (prefs: any) =>
       apiFetch('/auth/preferences', {
         method: 'PATCH',
@@ -213,6 +219,13 @@ export const api = {
     retry: (id: string) =>
       apiFetch(`/sync/leetcode/${id}/retry`, {
         method: 'POST'
+      }),
+    getProfileStats: () =>
+      apiFetch<LeetCodeUserStats>('/sync/leetcode/profile-stats'),
+    refreshProfileStats: (username?: string) =>
+      apiFetch<LeetCodeUserStats>('/sync/leetcode/profile-stats/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ username })
       })
   },
   agent: {
@@ -335,5 +348,37 @@ export const api = {
       apiFetch<{ message: string }>(`/notifications/${id}`, { method: 'DELETE' }),
     clearAll: () =>
       apiFetch<{ deletedCount: number }>('/notifications', { method: 'DELETE' })
+  },
+  study: {
+    getCurriculum: (track: string = 'blind75') =>
+      apiFetch<any>(`/study/curriculum/${track}`),
+    updateStatus: (questionSlug: string, status: string, userNotes?: string) =>
+      apiFetch<any>('/study/status', {
+        method: 'POST',
+        body: JSON.stringify({ questionSlug, status, userNotes })
+      }),
+    recordReview: (questionSlug: string, rating: string, userNotes?: string) =>
+      apiFetch<any>('/study/review', {
+        method: 'POST',
+        body: JSON.stringify({ questionSlug, rating, userNotes })
+      }),
+    getRevisionQueue: () =>
+      apiFetch<any>('/study/revision-queue'),
+    getIntelligence: () =>
+      apiFetch<any>('/study/intelligence')
+  },
+  catalog: {
+    preview: (repo?: string) =>
+      apiFetch<any>(`/catalog/preview${repo ? `?repo=${encodeURIComponent(repo)}` : ''}`),
+    sync: (repo?: string) =>
+      apiFetch<any>('/catalog/sync', {
+        method: 'POST',
+        body: JSON.stringify({ repo })
+      }),
+    rollback: (repo?: string) =>
+      apiFetch<any>('/catalog/rollback', {
+        method: 'POST',
+        body: JSON.stringify({ repo })
+      })
   }
 };

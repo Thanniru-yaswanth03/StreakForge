@@ -89,6 +89,9 @@ export interface ExtensionConfig {
   folderStructureTemplate: string;
   archiveFailedSubmissionsLocally: boolean;
   notifyOnSuccess: boolean;
+  exportNewOnly?: boolean;
+  allowMultipleSubmissions?: boolean;
+  addSolutionComments?: boolean;
   userProfile?: {
     username: string;
     email: string;
@@ -138,6 +141,16 @@ export type ExtensionMessage =
     }
   | {
       type: 'GET_SYNC_STATUS';
+    }
+  | {
+      type: 'AUTO_PAIR_TOKEN';
+      payload: {
+        token: string;
+        serverUrl?: string;
+      };
+    }
+  | {
+      type: 'SYNC_FROM_BACKEND';
     }
   | {
       type: 'UPDATE_CONFIG';

@@ -12,11 +12,20 @@
     "storage",
     "alarms",
     "activeTab",
-    "notifications"
+    "notifications",
+    "cookies",
+    "tabs"
   ],
   "host_permissions": [
     "https://leetcode.com/*",
     "https://leetcode.cn/*",
+    "https://*.streakforge.dev/*",
+    "https://streakforge.dev/*",
+    "https://*.onrender.com/*",
+    "https://*.railway.app/*",
+    "https://*.trycloudflare.com/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
     "http://localhost:4000/*",
     "http://127.0.0.1:4000/*"
   ],
@@ -40,13 +49,39 @@
   "content_scripts": [
     {
       "matches": [
-        "https://leetcode.com/problems/*",
-        "https://leetcode.cn/problems/*"
+        "https://leetcode.com/*",
+        "https://leetcode.cn/*"
+      ],
+      "js": [
+        "src/content/leetcode-interceptor.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://leetcode.com/*",
+        "https://leetcode.cn/*"
       ],
       "js": [
         "src/content/leetcode-observer.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.streakforge.dev/*",
+        "https://streakforge.dev/*",
+        "https://*.onrender.com/*",
+        "https://*.railway.app/*",
+        "https://*.trycloudflare.com/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "js": [
+        "src/content/web-bridge.js"
+      ],
+      "run_at": "document_start"
     }
   ]
 }

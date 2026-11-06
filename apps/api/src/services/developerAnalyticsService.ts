@@ -292,21 +292,12 @@ export class DeveloperAnalyticsService {
     // Consistency metrics
     const user = await User.findById(userId).lean();
     const tz = user?.timezone || 'UTC';
-    const todayStr = StreakEngine.formatDateInTimezone(new Date(), tz);
     const snapshots = await DailyActivitySnapshot.find({
       userId: userObjectId,
-      $or: [{ 'leetcode.accepted': { $gt: 0 } }, { leetCodeCount: { $gt: 0 } }]
+      'breakdown.leetCodeAccepted': { $gt: 0 }
     }).lean();
 
-    const streakMetrics = StreakEngine.calculateLeetCodeStreak(
-      snapshots.map((s) => ({
-        date: s.date,
-        leetcode: s.leetcode,
-        leetCodeCount: s.leetCodeCount
-      })),
-      todayStr
-    );
-    const currentStreakDays = streakMetrics.currentStreak;
+    const currentStreakDays = StreakEngine.calculateStreak(snapshots, tz).currentStreak;
     const weeklyAverage = Math.round((uniqueProblemsSolved / 4) * 10) / 10;
     const monthlyAverage = Math.round((uniqueProblemsSolved / 1.5) * 10) / 10;
 
@@ -657,20 +648,6 @@ export class DeveloperAnalyticsService {
       total: s.totalActivities || 0
     }));
 
-    const overallStreak = StreakEngine.calculateOverallStreak(
-      snapshots.map((s) => ({
-        date: s.date,
-        github: s.github,
-        leetcode: s.leetcode,
-        localDev: s.localDev,
-        maintenance: s.maintenance,
-        gitCommitCount: s.gitCommitCount,
-        leetCodeCount: s.leetCodeCount,
-        streakMaintained: s.streakMaintained
-      })),
-      endStr
-    );
-
     return {
       period,
       title,
@@ -695,7 +672,7 @@ export class DeveloperAnalyticsService {
           snapshots.length > 0
             ? Math.round((activeDaysCount / snapshots.length) * 100)
             : 100,
-        longestStreak: overallStreak.longestStreak,
+        longestStreak: StreakEngine.calculateStreak(snapshots, tz).longestStreak,
         topLanguages: topLanguages.length > 0 ? topLanguages : [{ name: 'TypeScript', count: 1, percentage: 100 }],
         topRepositories: topRepositories.length > 0 ? topRepositories : [{ name: 'primary-workspace', count: 1, percentage: 100 }]
       },

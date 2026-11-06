@@ -13,6 +13,9 @@ import { analyticsRouter } from './routes/analyticsRoutes.js';
 import { auditRouter } from './routes/auditRoutes.js';
 import { automationRoutes } from './routes/automationRoutes.js';
 import { notificationRoutes } from './routes/notificationRoutes.js';
+import { badgeRouter } from './routes/badgeRoutes.js';
+import { studyRouter } from './routes/studyRoutes.js';
+import { catalogRouter } from './routes/catalogRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 export function createApp(): Express {
@@ -128,6 +131,9 @@ export function createApp(): Express {
   app.use('/api/v1/audit', auditRouter);
   app.use('/api/v1/automations', automationRoutes);
   app.use('/api/v1/notifications', notificationRoutes);
+  app.use('/api/v1/badge', badgeRouter);
+  app.use('/api/v1/study', studyRouter);
+  app.use('/api/v1/catalog', catalogRouter);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {

@@ -83,3 +83,4 @@ if (Test-Path $configDir) {
 Write-Host "`n========================================================" -ForegroundColor Green
 Write-Host "   StreakForge Desktop Agent uninstalled successfully!   " -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
+

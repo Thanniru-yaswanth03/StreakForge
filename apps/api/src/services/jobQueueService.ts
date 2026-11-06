@@ -442,7 +442,8 @@ export class JobQueueService {
         idempotencyKey: j.idempotencyKey,
         workerId: j.workerId,
         progress: j.progress,
-        result: j.result
+        result: j.result,
+        resultSummary: (j.result as any)?.summary || (j.payload as any)?.summary || 'Execution completed.'
       })),
       total,
       page,

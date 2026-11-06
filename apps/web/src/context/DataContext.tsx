@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type {
   User,
+  LeetCodeUserStats,
   AnalyticsOverview,
   HeatmapDay,
   RepositoryConnection,
@@ -11,7 +12,7 @@ import type {
   AuditLog
 } from '@streakforge/shared-types';
 import { api } from '../lib/api';
-import { getStoredToken } from '../lib/utils';
+import { getStoredToken, clearStoredToken } from '../lib/utils';
 
 export interface AutomationJob {
   id: string;
@@ -110,9 +111,11 @@ interface DataContextValue {
   journalEntries: JournalEntry[];
   notifications: NotificationItem[];
   githubActivity: GitHubActivityData;
+  leetcodeStats: LeetCodeUserStats | null;
   isLoading: boolean;
   isDemoMode: boolean;
   refreshData: () => Promise<void>;
+  refreshLeetCodeStats: (usernameOverride?: string) => Promise<void>;
   updateJournalNote: (date: string, note: string) => void;
   toggleAutomation: (id: string) => void;
   deleteAutomation: (id: string) => void;
@@ -360,8 +363,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>(DEMO_NOTIFICATIONS);
   const [githubActivity, setGithubActivity] = useState<GitHubActivityData>(DEMO_GITHUB_ACTIVITY);
+  const [leetcodeStats, setLeetcodeStats] = useState<LeetCodeUserStats | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+
+  const refreshLeetCodeStats = useCallback(async (usernameOverride?: string) => {
+    try {
+      const stats = await api.sync.refreshProfileStats(usernameOverride);
+      setLeetcodeStats(stats);
+    } catch (err) {
+      console.warn('Failed refreshing LeetCode stats:', err);
+    }
+  }, []);
 
   // Generate 365-day heatmap
   const generateInitialHeatmap = useCallback(() => {
@@ -402,7 +415,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setIsLoading(true);
-      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes, rulesRes, notifsRes] =
+      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes, rulesRes, notifsRes, lcStatsRes] =
         await Promise.allSettled([
           api.auth.getMe(),
           api.analytics.getOverview(),
@@ -413,14 +426,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           api.audit.getLogs(1, 100),
           api.github.getActivity(1, 20),
           api.automations.getRules(),
-          api.notifications.list(1, 50)
+          api.notifications.list(1, 50),
+          api.sync.getProfileStats()
         ]);
 
       if (meRes.status === 'fulfilled') {
         setUser(meRes.value.user);
+        if (meRes.value.user.leetcodeStats) {
+          setLeetcodeStats(meRes.value.user.leetcodeStats);
+        }
         setIsDemoMode(false);
       } else {
+        setUser(null);
         setIsDemoMode(true);
+        clearStoredToken();
+      }
+
+      if (lcStatsRes.status === 'fulfilled') {
+        setLeetcodeStats(lcStatsRes.value);
       }
 
       if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value);
@@ -479,44 +502,78 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
-      if (ghActRes.status === 'fulfilled' && ghActRes.value.commits.length > 0) {
-        const gh = ghActRes.value;
-        setGithubActivity((prev) => ({
-          ...prev,
-          totalCommits: gh.commits.length,
-          recentCommits: gh.commits.map((c) => ({
-            sha: c.sha,
-            repo: c.repo,
-            branch: c.branch,
-            author: c.author,
-            message: c.message,
-            timestamp: new Date(c.timestamp).toLocaleString(),
-            filesChanged: c.filesChanged
-          })),
-          pullRequests: gh.pullRequests.map((p) => ({
-            number: p.number,
-            title: p.title,
-            repo: p.repo,
-            state: p.state,
-            author: p.author,
-            createdAt: new Date(p.createdAt).toLocaleDateString()
-          })),
-          issues: gh.issues.map((i) => ({
-            number: i.number,
-            title: i.title,
-            repo: i.repo,
-            state: i.state,
-            author: i.author,
-            createdAt: new Date(i.createdAt).toLocaleDateString()
-          })),
-          branches: gh.branches.map((b) => ({
-            name: b.name,
-            repo: b.repo,
-            isProtected: b.isProtected,
-            lastCommitSha: b.lastCommitSha
-          })),
-          rateLimit: gh.rateLimit
-        }));
+      if (meRes.status === 'fulfilled') {
+        if (ghActRes.status === 'fulfilled' && ghActRes.value.commits.length > 0) {
+          const gh = ghActRes.value;
+          setGithubActivity({
+            totalCommits: gh.commits.length,
+            recentCommits: gh.commits.map((c) => ({
+              sha: c.sha,
+              repo: c.repo,
+              branch: c.branch,
+              author: c.author,
+              message: c.message,
+              timestamp: new Date(c.timestamp).toLocaleString(),
+              filesChanged: c.filesChanged
+            })),
+            repositories: reposRes.status === 'fulfilled' ? reposRes.value.connected.map((r) => ({
+              name: r.repoFullName.split('/')[1] || r.repoFullName,
+              fullName: r.repoFullName,
+              stars: 0,
+              forks: 0,
+              activeBranch: r.defaultBranch,
+              lastCommitTime: r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleString() : 'Recently',
+              isPrivate: false
+            })) : [],
+            pullRequests: gh.pullRequests.map((p) => ({
+              number: p.number,
+              title: p.title,
+              repo: p.repo,
+              state: p.state,
+              author: p.author,
+              createdAt: new Date(p.createdAt).toLocaleDateString()
+            })),
+            issues: gh.issues.map((i) => ({
+              number: i.number,
+              title: i.title,
+              repo: i.repo,
+              state: i.state,
+              author: i.author,
+              createdAt: new Date(i.createdAt).toLocaleDateString()
+            })),
+            branches: gh.branches.map((b) => ({
+              name: b.name,
+              repo: b.repo,
+              isProtected: b.isProtected,
+              lastCommitSha: b.lastCommitSha
+            })),
+            rateLimit: gh.rateLimit
+          });
+        } else {
+          // Zero-Fabrication: Never show mock demo commits to authenticated users
+          const userRepos = reposRes.status === 'fulfilled' ? reposRes.value.connected : [];
+          setGithubActivity({
+            totalCommits: overviewRes.status === 'fulfilled' ? (overviewRes.value?.totalGitCommitsTracked || 0) : 0,
+            recentCommits: [],
+            repositories: userRepos.map((r) => ({
+              name: r.repoFullName.split('/')[1] || r.repoFullName,
+              fullName: r.repoFullName,
+              stars: 0,
+              forks: 0,
+              activeBranch: r.defaultBranch,
+              lastCommitTime: r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleString() : 'Recently',
+              isPrivate: false
+            })),
+            branches: userRepos.map((r) => ({
+              name: r.defaultBranch,
+              repo: r.repoFullName.split('/')[1] || r.repoFullName,
+              isProtected: true,
+              lastCommitSha: 'HEAD'
+            })),
+            pullRequests: [],
+            issues: []
+          });
+        }
       }
     } catch {
       setIsDemoMode(true);
@@ -552,6 +609,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     refreshData();
+
+    const handleSyncEvent = (event: MessageEvent) => {
+      if (event.data?.type === 'STREAKFORGE_LIVE_SYNC_COMPLETED') {
+        refreshData();
+      }
+    };
+    window.addEventListener('message', handleSyncEvent);
+    return () => window.removeEventListener('message', handleSyncEvent);
   }, [refreshData]);
 
   const updateJournalNote = (date: string, note: string) => {
@@ -646,9 +711,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         journalEntries,
         notifications,
         githubActivity,
+        leetcodeStats,
         isLoading,
         isDemoMode,
         refreshData,
+        refreshLeetCodeStats,
         updateJournalNote,
         toggleAutomation,
         deleteAutomation,

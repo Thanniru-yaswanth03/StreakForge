@@ -12,14 +12,16 @@ interface SubmissionsTableProps {
 
 export function SubmissionsTable({ submissions, onRefresh }: SubmissionsTableProps) {
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleRetry = async (id: string) => {
     try {
       setRetryingId(id);
+      setErrorMsg(null);
       await api.sync.retry(id);
       onRefresh();
     } catch (err: any) {
-      alert(`Retry failed: ${err.message}`);
+      setErrorMsg(err.message || 'Retry failed');
     } finally {
       setRetryingId(null);
     }
@@ -67,12 +69,12 @@ export function SubmissionsTable({ submissions, onRefresh }: SubmissionsTablePro
                 </td>
               </tr>
             ) : (
-              submissions.map((sub) => (
-                <tr key={sub.id} className="hover:bg-slate-800/30 transition">
+              submissions.map((sub, idx) => (
+                <tr key={sub.id || (sub as any)._id || sub.submissionId || `sub-${idx}`} className="hover:bg-slate-800/30 transition">
                   <td className="px-5 py-4">
                     <div className="font-semibold text-white">{sub.questionTitle}</div>
-                    <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                      #{sub.questionId} • {new Date(sub.submittedAt).toLocaleDateString()}
+                    <div className="text-[11px] text-slate-500 font-mono mt-0.5" suppressHydrationWarning>
+                      #{sub.questionId} • {new Date(sub.submittedAt).toLocaleDateString('en-US')}
                     </div>
                   </td>
 

@@ -189,81 +189,86 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {connected.map((repo) => (
-              <div
-                key={repo.id}
-                className="bg-theme-elevated border border-theme-border rounded-xl p-4 flex flex-col justify-between gap-3 transition hover:border-theme-accent/40"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-bold text-sm text-theme-primary truncate">
-                        {repo.repoFullName}
-                      </div>
-                      <div className="flex items-center gap-2 text-[11px] text-theme-muted mt-0.5">
-                        <span className="font-mono text-indigo-400">branch: {repo.defaultBranch}</span>
-                        {repo.primaryLanguage && <span>• {repo.primaryLanguage}</span>}
-                      </div>
-                    </div>
+            {connected.map((repo, idx) => {
+              const repoKey = repo.id || (repo as any)._id || repo.repoFullName || `conn-repo-${idx}`;
+              const repoId = repo.id || (repo as any)._id || repo.repoFullName;
 
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-theme-accent-subtle text-theme-accent border border-theme-accent/20">
-                        {repo.category || 'General'}
-                      </span>
-                      {repo.isTargetForLeetCode && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                          LeetCode Target
+              return (
+                <div
+                  key={repoKey}
+                  className="bg-theme-elevated border border-theme-border rounded-xl p-4 flex flex-col justify-between gap-3 transition hover:border-theme-accent/40"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-theme-primary truncate">
+                          {repo.repoFullName}
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-theme-muted mt-0.5">
+                          <span className="font-mono text-indigo-400">branch: {repo.defaultBranch}</span>
+                          {repo.primaryLanguage && <span>• {repo.primaryLanguage}</span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-theme-accent-subtle text-theme-accent border border-theme-accent/20">
+                          {repo.category || 'General'}
                         </span>
-                      )}
+                        {repo.isTargetForLeetCode && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                            LeetCode Target
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {repo.description && (
+                      <p className="text-xs text-theme-secondary mt-2 line-clamp-2">
+                        {repo.description}
+                      </p>
+                    )}
+
+                    <div className="mt-3 p-2 bg-theme-surface rounded-lg text-[11px] font-mono text-theme-secondary space-y-1">
+                      <div className="truncate">Pattern: {repo.solutionPathPattern}</div>
+                      <div className="flex items-center justify-between text-theme-muted">
+                        <span>Auto-commit: {repo.syncPolicy?.autoCommit ? 'Enabled' : 'Disabled'}</span>
+                        <span>Push: {repo.syncPolicy?.autoPush ? 'Enabled' : 'Disabled'}</span>
+                      </div>
                     </div>
                   </div>
 
-                  {repo.description && (
-                    <p className="text-xs text-theme-secondary mt-2 line-clamp-2">
-                      {repo.description}
-                    </p>
-                  )}
-
-                  <div className="mt-3 p-2 bg-theme-surface rounded-lg text-[11px] font-mono text-theme-secondary space-y-1">
-                    <div className="truncate">Pattern: {repo.solutionPathPattern}</div>
-                    <div className="flex items-center justify-between text-theme-muted">
-                      <span>Auto-commit: {repo.syncPolicy?.autoCommit ? 'Enabled' : 'Disabled'}</span>
-                      <span>Push: {repo.syncPolicy?.autoPush ? 'Enabled' : 'Disabled'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-theme-border flex items-center justify-between text-xs">
-                  <button
-                    onClick={() => handleRunDiagnostics(repo.repoFullName)}
-                    disabled={isDiagnosing && diagnosingRepoName === repo.repoFullName}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface hover:bg-theme-elevated text-theme-secondary hover:text-theme-primary rounded-lg border border-theme-border font-medium text-[11px] transition"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>{isDiagnosing && diagnosingRepoName === repo.repoFullName ? 'Scanning...' : 'Health Scan'}</span>
-                  </button>
-
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`https://github.com/${repo.repoFullName}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-1.5 text-theme-muted hover:text-theme-primary transition rounded"
-                      title="View on GitHub"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
+                  <div className="pt-3 border-t border-theme-border flex items-center justify-between text-xs">
                     <button
-                      onClick={() => handleDisconnect(repo.id, repo.repoFullName)}
-                      className="p-1.5 text-rose-500/80 hover:text-rose-400 hover:bg-rose-500/10 rounded transition"
-                      title="Disconnect repository"
+                      onClick={() => handleRunDiagnostics(repo.repoFullName)}
+                      disabled={isDiagnosing && diagnosingRepoName === repo.repoFullName}
+                      className="flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface hover:bg-theme-elevated text-theme-secondary hover:text-theme-primary rounded-lg border border-theme-border font-medium text-[11px] transition"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>{isDiagnosing && diagnosingRepoName === repo.repoFullName ? 'Scanning...' : 'Health Scan'}</span>
                     </button>
+
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`https://github.com/${repo.repoFullName}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1.5 text-theme-muted hover:text-theme-primary transition rounded"
+                        title="View on GitHub"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        onClick={() => handleDisconnect(repoId, repo.repoFullName)}
+                        className="p-1.5 text-rose-500/80 hover:text-rose-400 hover:bg-rose-500/10 rounded transition"
+                        title="Disconnect repository"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -292,8 +297,8 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
                   className="w-full px-3 py-2 bg-theme-elevated border border-theme-border rounded-lg text-theme-primary text-xs focus:outline-none focus:border-theme-accent"
                 >
                   <option value="">Select a repository...</option>
-                  {githubAvailable.map((r) => (
-                    <option key={r.id} value={r.fullName}>
+                  {githubAvailable.map((r, idx) => (
+                    <option key={r.id || r.fullName || `opt-${idx}`} value={r.fullName}>
                       {r.fullName} {r.isPrivate ? '(Private)' : ''} {r.primaryLanguage ? `[${r.primaryLanguage}]` : ''}
                     </option>
                   ))}
@@ -430,13 +435,14 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
           </div>
 
           <div className="divide-y divide-theme-border border border-theme-border rounded-xl overflow-hidden max-h-96 overflow-y-auto">
-            {githubAvailable.map((repo) => {
+            {githubAvailable.map((repo, idx) => {
               const isConnected = connected.some((c) => c.repoFullName === repo.fullName);
               const isSelected = selectedRepos.includes(repo.fullName);
+              const itemKey = repo.id || repo.fullName || `gh-item-${idx}`;
 
               return (
                 <div
-                  key={repo.id}
+                  key={itemKey}
                   className={`p-3 text-xs flex items-center justify-between gap-4 transition ${
                     isConnected ? 'bg-theme-elevated/40 opacity-75' : 'hover:bg-theme-elevated/60'
                   }`}

@@ -1,5 +1,29 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export interface ILeetCodeUserStats {
+  username: string;
+  realName?: string;
+  ranking?: number;
+  userAvatar?: string;
+  reputation?: number;
+  aboutMe?: string;
+  countryName?: string;
+  totalSolved: number;
+  easySolved: number;
+  mediumSolved: number;
+  hardSolved: number;
+  totalSubmissions: number;
+  acceptanceRate: number;
+  totalActiveDays?: number;
+  maxStreak?: number;
+  submissionCalendar?: string;
+  badgesCount?: number;
+  easyTotal?: number;
+  mediumTotal?: number;
+  hardTotal?: number;
+  lastSyncedAt: Date;
+}
+
 export interface IUserDocument extends Document {
   _id: Types.ObjectId;
   githubId: string;
@@ -15,6 +39,8 @@ export interface IUserDocument extends Document {
     email: boolean;
     streakWarningHoursBefore: number;
   };
+  leetcodeUsername?: string;
+  leetcodeStats?: ILeetCodeUserStats;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -35,6 +61,8 @@ const UserSchema = new Schema<IUserDocument>(
       email: { type: Boolean, default: false },
       streakWarningHoursBefore: { type: Number, default: 3 }
     },
+    leetcodeUsername: { type: String, default: 'yash1th2k4' },
+    leetcodeStats: { type: Schema.Types.Mixed, default: null },
     isActive: { type: Boolean, default: true }
   },
   { timestamps: true }
