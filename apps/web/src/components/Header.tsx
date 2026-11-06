@@ -57,6 +57,7 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
   };
 
   const primaryTargetRepo = connectedRepos.find((r) => r.isTargetForLeetCode);
+  const verifiedStreak = user ? (overview?.currentStreak ?? 0) : 0;
 
   const unreadCount = notifications?.filter((n) => !n.isRead).length || 0;
 
@@ -111,11 +112,15 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
           {/* Verified Streak Pill */}
           <div
             onClick={() => onTabChange('calendar')}
-            className="cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-gradient-to-b from-[#2ea043]/20 to-[#238636]/10 border border-[#2ea043]/50 text-[#3fb950] rounded-full text-xs font-semibold transition hover:scale-105 hover:border-[#3fb950] shadow-[0_0_12px_rgba(46,160,67,0.25)]"
-            title="Click to view Streak Calendar"
+            className={`cursor-pointer flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
+              verifiedStreak > 0
+                ? 'bg-gradient-to-b from-[#2ea043]/20 to-[#238636]/10 border border-[#2ea043]/50 text-[#3fb950] hover:scale-105 hover:border-[#3fb950] shadow-[0_0_12px_rgba(46,160,67,0.25)]'
+                : 'bg-[#161b22] border border-[#30363d] text-[#8b949e] hover:text-[#f0f6fc]'
+            }`}
+            title={verifiedStreak > 0 ? `${verifiedStreak} active days streak` : '0 active days verified'}
           >
-            <Flame className="w-3.5 h-3.5 fill-[#3fb950] text-[#3fb950] animate-pulse" />
-            <span className="tabular-nums font-mono">{overview?.currentStreak || 2}d Streak</span>
+            <Flame className={`w-3.5 h-3.5 ${verifiedStreak > 0 ? 'fill-[#3fb950] text-[#3fb950] animate-pulse' : 'text-[#8b949e]'}`} />
+            <span className="tabular-nums font-mono">{verifiedStreak}d Streak</span>
           </div>
 
           {/* Quick Refresh Button */}

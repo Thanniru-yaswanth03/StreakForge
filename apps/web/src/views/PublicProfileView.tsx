@@ -155,13 +155,13 @@ export function PublicProfileView() {
               <span className="text-xs text-[#8b949e] block">Current Streak</span>
               <span className="text-2xl font-black text-[#3fb950] font-mono flex items-center justify-center gap-1">
                 <Flame className="w-5 h-5 fill-[#3fb950]" />
-                {profile?.currentStreak ?? 2}d
+                {profile?.currentStreak ?? 0}d
               </span>
             </div>
             <div className="p-3 rounded-xl bg-[#0d1117] border border-[#30363d] text-center">
               <span className="text-xs text-[#8b949e] block">Total Solved</span>
               <span className="text-2xl font-black text-[#f0f6fc] font-mono">
-                {profile?.totalSolved ?? 32}
+                {profile?.totalSolved ?? 0}
               </span>
             </div>
           </div>
@@ -174,7 +174,7 @@ export function PublicProfileView() {
               Easy Solved
             </span>
             <span className="text-2xl font-black text-[#f0f6fc] font-mono">
-              {profile?.difficultyDistribution?.easy ?? 29}
+              {profile?.difficultyDistribution?.easy ?? 0}
             </span>
           </div>
 
@@ -183,7 +183,7 @@ export function PublicProfileView() {
               Medium Solved
             </span>
             <span className="text-2xl font-black text-[#f0f6fc] font-mono">
-              {profile?.difficultyDistribution?.medium ?? 3}
+              {profile?.difficultyDistribution?.medium ?? 0}
             </span>
           </div>
 

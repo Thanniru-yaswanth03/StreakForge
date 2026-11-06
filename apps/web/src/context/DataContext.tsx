@@ -98,6 +98,13 @@ export interface GitHubActivityData {
   };
 }
 
+export type ExtensionDetectionStatus =
+  | 'NOT_INSTALLED'
+  | 'INSTALLED_DISCONNECTED'
+  | 'CONNECTED'
+  | 'SYNCHRONIZING'
+  | 'SYNC_FAILED';
+
 interface DataContextValue {
   user: User | null;
   overview: AnalyticsOverview | null;
@@ -112,6 +119,7 @@ interface DataContextValue {
   notifications: NotificationItem[];
   githubActivity: GitHubActivityData;
   leetcodeStats: LeetCodeUserStats | null;
+  extensionStatus: ExtensionDetectionStatus;
   isLoading: boolean;
   isDemoMode: boolean;
   refreshData: () => Promise<void>;
@@ -371,6 +379,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     issues: []
   });
   const [leetcodeStats, setLeetcodeStats] = useState<LeetCodeUserStats | null>(null);
+  const [extensionStatus, setExtensionStatus] = useState<ExtensionDetectionStatus>('NOT_INSTALLED');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
@@ -624,14 +633,57 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     refreshData();
 
+    // Extension detection & real-time live sync listeners
+    const evaluateExtensionStatus = () => {
+      const hasAttr = typeof document !== 'undefined' && document.documentElement.getAttribute('data-streakforge-extension') === 'active';
+      const token = getStoredToken();
+      const hasFailed = submissions.some((s) => s.syncStatus === 'FAILED');
+
+      if (hasFailed) {
+        setExtensionStatus('SYNC_FAILED');
+      } else if (hasAttr) {
+        if (token && user) {
+          setExtensionStatus('CONNECTED');
+        } else {
+          setExtensionStatus('INSTALLED_DISCONNECTED');
+        }
+      } else if (submissions.length > 0 && user) {
+        setExtensionStatus('CONNECTED');
+      } else {
+        setExtensionStatus('NOT_INSTALLED');
+      }
+
+      if (typeof window !== 'undefined') {
+        window.postMessage({ type: 'STREAKFORGE_REQUEST_EXTENSION_STATUS' }, '*');
+      }
+    };
+
+    evaluateExtensionStatus();
+    const statusInterval = setInterval(evaluateExtensionStatus, 3000);
+
     const handleSyncEvent = (event: MessageEvent) => {
-      if (event.data?.type === 'STREAKFORGE_LIVE_SYNC_COMPLETED') {
+      if (event.data?.type === 'STREAKFORGE_EXTENSION_ACTIVE') {
+        const token = getStoredToken();
+        if (token && user) {
+          setExtensionStatus('CONNECTED');
+        } else {
+          setExtensionStatus('INSTALLED_DISCONNECTED');
+        }
+      } else if (event.data?.type === 'STREAKFORGE_LIVE_SYNC_STARTED') {
+        setExtensionStatus('SYNCHRONIZING');
+      } else if (event.data?.type === 'STREAKFORGE_LIVE_SYNC_COMPLETED') {
+        setExtensionStatus('CONNECTED');
         refreshData();
+      } else if (event.data?.type === 'STREAKFORGE_LIVE_SYNC_FAILED') {
+        setExtensionStatus('SYNC_FAILED');
       }
     };
     window.addEventListener('message', handleSyncEvent);
-    return () => window.removeEventListener('message', handleSyncEvent);
-  }, [refreshData]);
+    return () => {
+      clearInterval(statusInterval);
+      window.removeEventListener('message', handleSyncEvent);
+    };
+  }, [refreshData, user, submissions]);
 
   const updateJournalNote = (date: string, note: string) => {
     // Attempt backend sync
@@ -726,6 +778,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         notifications,
         githubActivity,
         leetcodeStats,
+        extensionStatus,
         isLoading,
         isDemoMode,
         refreshData,

@@ -115,6 +115,17 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
         payload: message.payload
       }, '*');
     }
+    if (message.type === 'SYNC_IN_PROGRESS') {
+      window.postMessage({
+        type: 'STREAKFORGE_LIVE_SYNC_STARTED'
+      }, '*');
+    }
+    if (message.type === 'SYNC_FAILED') {
+      window.postMessage({
+        type: 'STREAKFORGE_LIVE_SYNC_FAILED',
+        payload: message.payload
+      }, '*');
+    }
   });
 }
 

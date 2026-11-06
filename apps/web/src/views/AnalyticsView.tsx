@@ -126,17 +126,17 @@ export function AnalyticsView() {
   const diffData = [
     {
       name: 'Easy',
-      count: leetcodeAnalytics?.difficultyDistribution?.Easy?.count ?? overview?.difficultyDistribution?.Easy ?? 28,
+      count: leetcodeAnalytics?.difficultyDistribution?.Easy?.count ?? overview?.difficultyDistribution?.Easy ?? 0,
       color: diffColors.Easy
     },
     {
       name: 'Medium',
-      count: leetcodeAnalytics?.difficultyDistribution?.Medium?.count ?? overview?.difficultyDistribution?.Medium ?? 23,
+      count: leetcodeAnalytics?.difficultyDistribution?.Medium?.count ?? overview?.difficultyDistribution?.Medium ?? 0,
       color: diffColors.Medium
     },
     {
       name: 'Hard',
-      count: leetcodeAnalytics?.difficultyDistribution?.Hard?.count ?? overview?.difficultyDistribution?.Hard ?? 7,
+      count: leetcodeAnalytics?.difficultyDistribution?.Hard?.count ?? overview?.difficultyDistribution?.Hard ?? 0,
       color: diffColors.Hard
     }
   ];
@@ -379,7 +379,7 @@ export function AnalyticsView() {
                 Weekly Commits
               </div>
               <div className="text-2xl font-bold text-indigo-400 mt-1">
-                {githubAnalytics?.weeklyCommits ?? 26}
+                {githubAnalytics?.weeklyCommits ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">Trailing 7 calendar days</div>
             </div>
@@ -389,10 +389,10 @@ export function AnalyticsView() {
                 Pull Requests
               </div>
               <div className="text-2xl font-bold text-emerald-400 mt-1">
-                {githubAnalytics?.pullRequests.total ?? 24}
+                {githubAnalytics?.pullRequests.total ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">
-                {githubAnalytics?.pullRequests.merged ?? 20} merged • {githubAnalytics?.pullRequests.open ?? 3} open
+                {githubAnalytics?.pullRequests.merged ?? 0} merged • {githubAnalytics?.pullRequests.open ?? 0} open
               </div>
             </div>
 
@@ -401,10 +401,10 @@ export function AnalyticsView() {
                 Issues Managed
               </div>
               <div className="text-2xl font-bold text-purple-400 mt-1">
-                {githubAnalytics?.issues.total ?? 12}
+                {githubAnalytics?.issues.total ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">
-                {githubAnalytics?.issues.closed ?? 9} closed • {githubAnalytics?.issues.open ?? 3} open
+                {githubAnalytics?.issues.closed ?? 0} closed • {githubAnalytics?.issues.open ?? 0} open
               </div>
             </div>
           </div>
@@ -566,7 +566,7 @@ export function AnalyticsView() {
                 Solving Streak
               </div>
               <div className="text-2xl font-bold text-purple-400 mt-1">
-                {leetcodeAnalytics?.problemSolvingConsistency?.currentStreakDays ?? 8} Days
+                {leetcodeAnalytics?.problemSolvingConsistency?.currentStreakDays ?? 0} Days
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">Consecutive calendar days</div>
             </div>

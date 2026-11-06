@@ -60,13 +60,13 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
   const { user, overview, leetcodeStats, connectedRepos } = useData();
 
   const totalLeetCode = leetcodeStats?.totalSolved ?? (user?.leetcodeStats?.totalSolved ?? 0);
-  const currentStreak = overview?.currentStreak ?? 0;
+  const currentStreak = user ? (overview?.currentStreak ?? 0) : 0;
 
   const navGroups: NavGroup[] = [
     {
       title: 'Overview',
       items: [
-        { id: 'overview', label: 'Overview', icon: Flame, badge: `${currentStreak}d` },
+        { id: 'overview', label: 'Overview', icon: Flame, badge: currentStreak > 0 ? `${currentStreak}d` : undefined },
         { id: 'calendar', label: 'Streak Calendar', icon: Calendar, badge: '365' },
         { id: 'reports', label: 'Weekly Report', icon: FileText, badge: 'New' }
       ]

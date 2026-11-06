@@ -36,9 +36,9 @@ export function LeetCodeStatsCard() {
   }, []);
 
   const formatRank = (rankVal: any): string => {
-    if (!rankVal) return '3,777,525';
+    if (!rankVal) return 'N/A';
     const num = Number(rankVal);
-    if (isNaN(num)) return '3,777,525';
+    if (isNaN(num)) return 'N/A';
     return num.toLocaleString('en-US');
   };
 

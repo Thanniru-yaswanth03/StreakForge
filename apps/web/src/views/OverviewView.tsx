@@ -26,14 +26,21 @@ import {
   Terminal,
   BookOpen,
   Github,
-  User as UserIcon
+  User as UserIcon,
+  Clock,
+  AlertTriangle,
+  AlertCircle
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { API_BASE_URL } from '../lib/utils';
 import { GitHubContributionGraph } from '../components/GitHubContributionGraph';
 import { LeetCodeStatsCard } from '../components/LeetCodeStatsCard';
 
-export function OverviewView() {
+interface OverviewViewProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
   const {
     user,
     overview,
@@ -41,6 +48,7 @@ export function OverviewView() {
     connectedRepos,
     submissions,
     leetcodeStats,
+    extensionStatus,
     refreshData,
     isLoading
   } = useData();
@@ -52,26 +60,28 @@ export function OverviewView() {
 
   const primaryRepo = connectedRepos.find((r) => r.isTargetForLeetCode);
 
-  // Derived metrics (strictly authentic, no inflation)
-  const totalSolved = leetcodeStats?.totalSolved ?? overview?.totalLeetCodeSolved ?? 0;
-  const todayCommits = overview?.todayCommitCount ?? 0;
-  const todayLeetCode = overview?.todayLeetCodeCount ?? 0;
-  const currentStreak = overview?.currentStreak ?? (overview?.hasSubmittedToday ? 1 : 0);
-  const longestStreak = overview?.longestStreak ?? 0;
+  // Derived metrics (strictly authentic, no inflation - 0 for unauthenticated guest)
+  const totalSolved = user ? (leetcodeStats?.totalSolved ?? overview?.totalLeetCodeSolved ?? 0) : 0;
+  const todayCommits = user ? (overview?.todayCommitCount ?? 0) : 0;
+  const todayLeetCode = user ? (overview?.todayLeetCodeCount ?? 0) : 0;
+  const currentStreak = user ? (overview?.currentStreak ?? (overview?.hasSubmittedToday ? 1 : 0)) : 0;
+  const longestStreak = user ? (overview?.longestStreak ?? 0) : 0;
 
-  // Onboarding progress calculations
+  // Authentic Onboarding Progress
   const isGithubConnected = Boolean(user);
   const isRepoConfigured = Boolean(primaryRepo);
-  const isExtensionInstalled = Boolean(submissions.length > 0);
-  const isFirstProblemSolved = Boolean(submissions.length > 0);
+  const isExtensionConnected = extensionStatus === 'CONNECTED' || (Boolean(user) && submissions.length > 0);
+  const isSyncReady = isGithubConnected && isRepoConfigured && isExtensionConnected;
+  const isFirstProblemSolved = submissions.length > 0;
 
-  const completedStepsCount = [
+  const completedSteps = [
     isGithubConnected,
-    true, // Extension built & ready
+    isExtensionConnected,
     isRepoConfigured,
-    isFirstProblemSolved
-  ].filter(Boolean).length;
+    isSyncReady && isFirstProblemSolved
+  ];
 
+  const completedStepsCount = completedSteps.filter(Boolean).length;
   const progressPercent = Math.round((completedStepsCount / 4) * 100);
 
   const handleCopyPath = () => {
@@ -260,16 +270,42 @@ export function OverviewView() {
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#58a6ff] font-mono">
                     Step 02
                   </span>
-                  <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
-                    <Puzzle className="w-3.5 h-3.5" />
-                    Extension
-                  </span>
+                  {extensionStatus === 'CONNECTED' ? (
+                    <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#3fb950]" />
+                      Connected
+                    </span>
+                  ) : extensionStatus === 'INSTALLED_DISCONNECTED' ? (
+                    <span className="text-[10px] font-bold text-[#d29922] flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-[#d29922]" />
+                      Installed (Unpaired)
+                    </span>
+                  ) : extensionStatus === 'SYNCHRONIZING' ? (
+                    <span className="text-[10px] font-bold text-[#58a6ff] flex items-center gap-1">
+                      <RotateCw className="w-3.5 h-3.5 text-[#58a6ff] animate-spin" />
+                      Synchronizing
+                    </span>
+                  ) : extensionStatus === 'SYNC_FAILED' ? (
+                    <span className="text-[10px] font-bold text-[#f85149] flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 text-[#f85149]" />
+                      Sync Failed
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#8b949e] flex items-center gap-1">
+                      <Puzzle className="w-3.5 h-3.5 text-[#8b949e]" />
+                      Not Installed
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs font-bold text-[#f0f6fc]">
                   Load Chrome Extension
                 </div>
                 <p className="text-[11px] text-[#8b949e] leading-relaxed">
-                  Open <code className="text-[#58a6ff] font-mono">chrome://extensions</code>, enable Developer mode, click <strong>Load unpacked</strong> and pick folder:
+                  {extensionStatus === 'CONNECTED'
+                    ? 'Extension paired and actively observing LeetCode submissions.'
+                    : extensionStatus === 'INSTALLED_DISCONNECTED'
+                    ? 'Extension active in browser. Sign in to GitHub in Step 01 to pair your authentication session.'
+                    : 'Open chrome://extensions, enable Developer mode, click Load unpacked, and pick folder:'}
                 </p>
               </div>
               <button
@@ -288,21 +324,46 @@ export function OverviewView() {
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#58a6ff] font-mono">
                     Step 03
                   </span>
-                  <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
-                    <FolderGit2 className="w-3.5 h-3.5" />
-                    Target Set
-                  </span>
+                  {primaryRepo ? (
+                    <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#3fb950]" />
+                      Target Configured
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#8b949e] flex items-center gap-1">
+                      <FolderGit2 className="w-3.5 h-3.5 text-[#8b949e]" />
+                      Not Selected
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs font-bold text-[#f0f6fc]">
                   Designate Target Repo
                 </div>
                 <p className="text-[11px] text-[#8b949e] leading-relaxed">
-                  Solutions are committed into: <code className="text-[#c9d1d9] font-mono">solutions/Easy/...</code>
+                  {primaryRepo
+                    ? `Solutions are committed into: ${primaryRepo.repoFullName} (${primaryRepo.defaultBranch || 'main'}).`
+                    : 'Select a GitHub repository to store and catalog your verified solutions.'}
                 </p>
               </div>
-              <div className="text-[10px] text-[#58a6ff] font-mono font-medium truncate">
-                &rarr; {primaryRepo?.repoFullName || 'Select a repository'}
-              </div>
+              {primaryRepo ? (
+                <a
+                  href={`https://github.com/${primaryRepo.repoFullName}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-[#58a6ff] hover:underline font-mono font-medium truncate flex items-center gap-1"
+                >
+                  <span>&rarr; {primaryRepo.repoFullName}</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              ) : (
+                <button
+                  onClick={() => onNavigate ? onNavigate('repos') : undefined}
+                  className="w-full py-1.5 px-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded text-[10px] font-semibold text-[#58a6ff] flex items-center justify-center gap-1 transition cursor-pointer"
+                >
+                  <FolderGit2 className="w-3 h-3 text-[#58a6ff]" />
+                  <span>Select Target Repo</span>
+                </button>
+              )}
             </div>
 
             {/* Step 4 */}
@@ -312,27 +373,47 @@ export function OverviewView() {
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#58a6ff] font-mono">
                     Step 04
                   </span>
-                  <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
-                    <Flame className="w-3.5 h-3.5 fill-[#3fb950]" />
-                    Ready
-                  </span>
+                  {isFirstProblemSolved ? (
+                    <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#3fb950]" />
+                      Active &amp; Synced
+                    </span>
+                  ) : isSyncReady ? (
+                    <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
+                      <Flame className="w-3.5 h-3.5 fill-[#3fb950]" />
+                      Ready to Sync
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-[#8b949e] flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-[#8b949e]" />
+                      Awaiting Setup
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs font-bold text-[#f0f6fc]">
                   Solve &amp; Watch Sync
                 </div>
                 <p className="text-[11px] text-[#8b949e] leading-relaxed">
-                  Open any problem on LeetCode. Hit Submit. Only genuine <strong>Accepted</strong> verdicts commit directly to GitHub!
+                  {isSyncReady
+                    ? `Open any problem on LeetCode. Accepted verdicts will commit automatically to ${primaryRepo?.repoFullName || 'your repo'}!`
+                    : 'Complete Steps 01 to 03 above to enable automated solution synchronization.'}
                 </p>
               </div>
-              <a
-                href="https://leetcode.com/problemset/"
-                target="_blank"
-                rel="noreferrer"
-                className="github-glossy-button-primary w-full py-1.5 px-2 text-[10px] flex items-center justify-center gap-1.5 transition text-center"
-              >
-                <span>Open LeetCode.com</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              {isSyncReady ? (
+                <a
+                  href="https://leetcode.com/problemset/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="github-glossy-button-primary w-full py-1.5 px-2 text-[10px] flex items-center justify-center gap-1.5 transition text-center"
+                >
+                  <span>Open LeetCode.com</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              ) : (
+                <div className="w-full py-1.5 px-2 bg-[#21262d]/50 border border-[#30363d]/50 rounded text-[10px] text-[#8b949e] font-mono text-center">
+                  Requires Steps 01–03
+                </div>
+              )}
             </div>
           </div>
         )}

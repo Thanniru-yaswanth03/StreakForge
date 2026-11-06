@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const renderActiveView = () => {
     switch (currentTab) {
       case 'overview':
-        return <OverviewView />;
+        return <OverviewView onNavigate={setCurrentTab} />;
       case 'intelligence':
         return <LearningIntelligenceView onNavigate={setCurrentTab} />;
       case 'curriculum':
@@ -94,7 +94,7 @@ export default function DashboardPage() {
       case 'settings':
         return <SettingsView />;
       default:
-        return <OverviewView />;
+        return <OverviewView onNavigate={setCurrentTab} />;
     }
   };
 
