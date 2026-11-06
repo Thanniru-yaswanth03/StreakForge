@@ -18,7 +18,8 @@ import {
   Info,
   Zap,
   Lock,
-  Share2
+  Share2,
+  Code2
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
@@ -43,28 +44,27 @@ export function LeetCodeStatsCard() {
 
   // Authoritative user stats from MongoDB / LeetCode GraphQL
   const stats = leetcodeStats || user?.leetcodeStats;
-  const username = stats?.username || user?.leetcodeUsername || 'yash1th03';
-  const realName = stats?.realName || 'yash1th03';
-  const ranking = stats?.ranking || 3777525;
-  const aboutMe = stats?.aboutMe || 'On My Journey To achieve My First Job';
-  const countryName = stats?.countryName || 'India';
-  const totalSolved = stats?.totalSolved ?? 31;
-  const easySolved = stats?.easySolved ?? 29;
-  const mediumSolved = stats?.mediumSolved ?? 2;
+  const username = stats?.username || user?.leetcodeUsername || '';
+  const realName = stats?.realName || username;
+  const ranking = stats?.ranking;
+  const aboutMe = stats?.aboutMe || '';
+  const countryName = stats?.countryName || '';
+  const totalSolved = stats?.totalSolved ?? 0;
+  const easySolved = stats?.easySolved ?? 0;
+  const mediumSolved = stats?.mediumSolved ?? 0;
   const hardSolved = stats?.hardSolved ?? 0;
-  const totalSubmissions = stats?.totalSubmissions ?? 99;
-  const acceptanceRate = stats?.acceptanceRate ?? 79.80;
-  const totalActiveDays = stats?.totalActiveDays ?? 36;
-  const maxStreak = stats?.maxStreak ?? 15;
+  const totalSubmissions = stats?.totalSubmissions ?? 0;
+  const acceptanceRate = stats?.acceptanceRate ?? 0;
+  const totalActiveDays = stats?.totalActiveDays ?? 0;
+  const maxStreak = stats?.maxStreak ?? 0;
   const badgesCount = stats?.badgesCount ?? 0;
   const easyTotal = stats?.easyTotal ?? 975;
   const mediumTotal = stats?.mediumTotal ?? 2139;
   const hardTotal = stats?.hardTotal ?? 987;
-  const avatarUrl =
-    stats?.userAvatar ||
-    'https://assets.leetcode.com/users/yash1th03/avatar_1781334970.png';
+  const avatarUrl = stats?.userAvatar || '';
 
   const handleRefresh = async () => {
+    if (!username) return;
     setIsRefreshing(true);
     try {
       await refreshLeetCodeStats(username);
@@ -87,20 +87,7 @@ export function LeetCodeStatsCard() {
   // Parse authentic submissionCalendar from LeetCode
   const calendarMap = useMemo(() => {
     const raw = stats?.submissionCalendar;
-    if (!raw) {
-      // Default matching user's 36 active days
-      return {
-        "1781308800": 1, "1785456000": 4, "1785628800": 2, "1785715200": 1,
-        "1785801600": 6, "1785888000": 3, "1785974400": 2, "1786060800": 2,
-        "1786147200": 1, "1786233600": 2, "1786320000": 1, "1786406400": 1,
-        "1786492800": 1, "1786579200": 2, "1786665600": 5, "1786752000": 1,
-        "1786838400": 1, "1787702400": 1, "1788134400": 6, "1788220800": 4,
-        "1788307200": 3, "1788393600": 3, "1788480000": 1, "1788566400": 1,
-        "1788652800": 1, "1788739200": 1, "1788825600": 5, "1788912000": 6,
-        "1788998400": 14, "1789171200": 1, "1789257600": 2, "1789430400": 1,
-        "1789603200": 3, "1790553600": 1, "1790812800": 2, "1793836800": 6
-      };
-    }
+    if (!raw) return {};
     try {
       return typeof raw === 'string' ? JSON.parse(raw) : raw;
     } catch {
@@ -188,6 +175,47 @@ export function LeetCodeStatsCard() {
 
   // Split acceptance into integer & decimal for exact LeetCode style
   const [rateInt, rateDec] = acceptanceRate.toFixed(2).split('.');
+
+  if (!username) {
+    return (
+      <div className="github-glossy-card p-8 text-center space-y-4">
+        <div className="w-12 h-12 mx-auto rounded-full bg-[#ffa116]/10 border border-[#ffa116]/30 flex items-center justify-center text-[#ffa116]">
+          <Code2 className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-[#f0f6fc]">No LeetCode Profile Connected</h3>
+          <p className="text-xs text-[#8b949e] max-w-md mx-auto mt-1">
+            Connect your LeetCode handle to track your authentic solved problems, acceptance rates, difficulty distribution, and daily problem streaks.
+          </p>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (customUsername.trim()) {
+              handleSaveUsername();
+            }
+          }}
+          className="flex items-center justify-center gap-2 max-w-sm mx-auto"
+        >
+          <input
+            type="text"
+            value={customUsername}
+            onChange={(e) => setCustomUsername(e.target.value)}
+            placeholder="e.g. your_leetcode_handle"
+            className="flex-1 px-3 py-1.5 text-xs bg-[#0d1117] border border-[#30363d] rounded-md text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
+          />
+          <button
+            type="submit"
+            disabled={isRefreshing || !customUsername.trim()}
+            className="github-glossy-button-primary px-3 py-1.5 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            {isRefreshing ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : null}
+            <span>Connect Profile</span>
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 select-none">
@@ -560,7 +588,7 @@ export function LeetCodeStatsCard() {
         {/* Heatmap Footer Legend */}
         <div className="mt-3 pt-2.5 border-t border-[#21262d] flex items-center justify-between text-[11px] text-[#8b949e]">
           <span className="font-mono text-[10px]">
-            Synchronized directly with @yash1th03 on LeetCode
+            {username ? `Synchronized directly with @${username} on LeetCode` : 'Connect your LeetCode profile to synchronize live stats'}
           </span>
 
           <div className="flex items-center gap-1.5">

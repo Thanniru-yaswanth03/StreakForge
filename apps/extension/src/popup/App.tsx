@@ -36,17 +36,7 @@ export function App() {
   const [config, setConfig] = useState<ExtensionConfig | null>(null);
   const [activeProblem, setActiveProblem] = useState<ActiveProblemContext | undefined>();
   const [syncedHistory, setSyncedHistory] = useState<DetectedSubmission[]>([]);
-  const [leetcodeStats, setLeetcodeStats] = useState<LeetCodeStats>({
-    username: 'yash1th03',
-    realName: 'yash1th03',
-    ranking: 3777525,
-    totalSolved: 31,
-    easySolved: 29,
-    mediumSolved: 2,
-    hardSolved: 0,
-    totalSubmissions: 99,
-    acceptanceRate: 79.80
-  });
+  const [leetcodeStats, setLeetcodeStats] = useState<LeetCodeStats | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isOnLeetCode, setIsOnLeetCode] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -195,7 +185,7 @@ export function App() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${config.authToken}`
           },
-          body: JSON.stringify({ username: 'yash1th03' })
+          body: JSON.stringify(config.leetcodeUsername ? { username: config.leetcodeUsername } : {})
         });
         if (refreshRes.ok) {
           const rJson = await refreshRes.json();
@@ -248,7 +238,7 @@ export function App() {
         setTimeout(async () => {
           await loadState();
           setIsSyncing(false);
-          const solvedMsg = `✓ Synced! ${leetcodeStats.totalSolved || 31} Solved (${leetcodeStats.easySolved || 29}E, ${leetcodeStats.mediumSolved || 2}M)`;
+          const solvedMsg = `✓ Synced! ${leetcodeStats?.totalSolved ?? totalSolved} Solved (${leetcodeStats?.easySolved ?? easyCount}E, ${leetcodeStats?.mediumSolved ?? mediumCount}M)`;
           showStatus(solvedMsg);
 
           // Trigger native Chrome system notification
@@ -257,7 +247,7 @@ export function App() {
               type: 'basic',
               iconUrl: 'icons/icon-48.png',
               title: 'StreakForge • LeetCode Synced!',
-              message: `${solvedMsg} • Target: ${config?.targetRepoFullName || 'LeetCodeHustle'}`
+              message: `${solvedMsg} • Target: ${config?.targetRepoFullName || 'target repository'}`
             });
           }
         }, 500);
@@ -278,15 +268,17 @@ export function App() {
     }
   };
 
+  const webAppUrl = config?.webAppUrl || (typeof window !== 'undefined' && window.location.origin.includes('vercel.app') ? window.location.origin : 'https://streak-forge-six.vercel.app');
+
   const openDashboard = () => {
-    openUrl('http://localhost:3000');
+    openUrl(webAppUrl);
   };
 
   const openRepository = () => {
     if (config?.targetRepoFullName) {
       openUrl(`https://github.com/${config.targetRepoFullName}`);
     } else {
-      openUrl('http://localhost:3000/repos');
+      openUrl(`${webAppUrl}/settings`);
     }
   };
 
@@ -333,13 +325,13 @@ export function App() {
   };
 
   // Authentic statistics values
-  const easyCount = leetcodeStats.easySolved ?? 28;
-  const mediumCount = leetcodeStats.mediumSolved ?? 2;
-  const hardCount = leetcodeStats.hardSolved ?? 0;
-  const totalSolved = leetcodeStats.totalSolved ?? (easyCount + mediumCount + hardCount);
+  const easyCount = leetcodeStats?.easySolved ?? 0;
+  const mediumCount = leetcodeStats?.mediumSolved ?? 0;
+  const hardCount = leetcodeStats?.hardSolved ?? 0;
+  const totalSolved = leetcodeStats?.totalSolved ?? (easyCount + mediumCount + hardCount);
 
-  const username = config?.userProfile?.username || 'Thanniru-yaswanth03';
-  const targetRepo = config?.targetRepoFullName || 'Thanniru-yaswanth03/LeetCodeHustle';
+  const username = config?.userProfile?.username || 'Guest Developer';
+  const targetRepo = config?.targetRepoFullName || 'No repository selected';
   const lastSynced = syncedHistory.length > 0 ? syncedHistory[0] : null;
 
   return (
@@ -351,7 +343,7 @@ export function App() {
             <Check className="w-3.5 h-3.5 stroke-[3]" />
           </div>
           <span className="text-sm font-bold tracking-tight text-[#f0f6fc]">
-            StreakForge <span className="text-[#3fb950] font-mono text-[11px] font-normal">v1.0</span>
+            StreakForge <span className="text-[#3fb950] font-mono text-[11px] font-normal">v3.0</span>
           </span>
         </div>
 
@@ -371,12 +363,12 @@ export function App() {
           {/* LeetCode Profile Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-[#30363d]">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-[#3fb950] animate-pulse" />
+              <span className={`w-2 h-2 rounded-full ${leetcodeStats?.username ? 'bg-[#3fb950] animate-pulse' : 'bg-gray-500'}`} />
               <div className="truncate">
                 <span className="font-semibold text-xs text-[#f0f6fc]">
-                  @{leetcodeStats.username || 'yash1th2k4'}
+                  {leetcodeStats?.username ? `@${leetcodeStats.username}` : (config?.leetcodeUsername ? `@${config.leetcodeUsername}` : 'No LeetCode Account')}
                 </span>
-                {leetcodeStats.realName && (
+                {leetcodeStats?.realName && (
                   <span className="text-[10px] text-[#8b949e] ml-1.5 truncate">
                     ({leetcodeStats.realName})
                   </span>
@@ -385,7 +377,7 @@ export function App() {
             </div>
 
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-[#8b949e] border border-[#30363d]">
-              Rank #{leetcodeStats.ranking?.toLocaleString() || '3,113,595'}
+              {leetcodeStats?.ranking ? `Rank #${leetcodeStats.ranking.toLocaleString()}` : 'Unranked'}
             </span>
           </div>
 
@@ -411,7 +403,7 @@ export function App() {
           <div className="space-y-1">
             <div className="flex items-center justify-between text-[10px] text-[#8b949e]">
               <span>Authentic Solves: <strong className="text-[#f0f6fc]">{totalSolved}</strong></span>
-              <span>Acceptance: <strong className="text-[#58a6ff]">{leetcodeStats.acceptanceRate ?? 49.4}%</strong></span>
+              <span>Acceptance: <strong className="text-[#58a6ff]">{leetcodeStats?.acceptanceRate != null ? `${leetcodeStats.acceptanceRate.toFixed(1)}%` : 'N/A'}</strong></span>
             </div>
             <div className="w-full h-1.5 bg-[#21262d] rounded-full overflow-hidden flex">
               <div

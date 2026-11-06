@@ -36,6 +36,7 @@ import {
   setStoredLoopbackToken,
   LOCAL_AGENT_URL
 } from '../lib/api';
+import { API_BASE_URL } from '../lib/utils';
 
 interface AgentManagerProps {
   agents: LocalAgentInstance[];
@@ -173,7 +174,8 @@ export function AgentManager({ agents, onRefresh }: AgentManagerProps) {
 
   const getPairCommand = () => {
     if (!createdAgent) return '';
-    return `streakforge-agent pair --server http://localhost:4000 --key ${createdAgent.apiKey} --agent-id ${createdAgent.agentId}`;
+    const serverUrl = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+    return `streakforge-agent pair --server ${serverUrl} --key ${createdAgent.apiKey} --agent-id ${createdAgent.agentId}`;
   };
 
   const handleCopyPairCmd = () => {

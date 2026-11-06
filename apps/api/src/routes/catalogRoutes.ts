@@ -16,7 +16,21 @@ catalogRouter.get('/preview', requireAuth, async (req: AuthenticatedRequest, res
         userId: req.userId!,
         isTargetForLeetCode: true
       }).lean();
-      repo = target?.repoFullName || 'Thanniru-yaswanth03/LeetCodeHustle';
+      repo = target?.repoFullName || '';
+    }
+
+    if (!repo) {
+      res.json({
+        success: true,
+        data: {
+          repoFullName: '',
+          branch: 'main',
+          totalCount: 0,
+          items: [],
+          markdownPreview: '<!-- No target repository linked yet. Select a target repository in Repositories or Settings to generate your README solutions catalog. -->'
+        }
+      });
+      return;
     }
 
     const preview = await CatalogService.previewCatalog(req.userId!, repo);
@@ -37,7 +51,15 @@ catalogRouter.post('/sync', requireAuth, async (req: AuthenticatedRequest, res: 
         userId: req.userId!,
         isTargetForLeetCode: true
       }).lean();
-      repo = target?.repoFullName || 'Thanniru-yaswanth03/LeetCodeHustle';
+      repo = target?.repoFullName || '';
+    }
+
+    if (!repo) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'NO_TARGET_REPO', message: 'No target repository configured for solution catalog. Select a repository in Settings first.' }
+      });
+      return;
     }
 
     const result = await CatalogService.applyCatalogToGitHub(req.userId!, repo);
@@ -58,7 +80,15 @@ catalogRouter.post('/rollback', requireAuth, async (req: AuthenticatedRequest, r
         userId: req.userId!,
         isTargetForLeetCode: true
       }).lean();
-      repo = target?.repoFullName || 'Thanniru-yaswanth03/LeetCodeHustle';
+      repo = target?.repoFullName || '';
+    }
+
+    if (!repo) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'NO_TARGET_REPO', message: 'No target repository configured for solution catalog.' }
+      });
+      return;
     }
 
     const result = await CatalogService.rollbackCatalog(req.userId!, repo);

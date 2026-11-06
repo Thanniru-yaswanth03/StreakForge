@@ -13,6 +13,7 @@ import {
   connectGitHubWithPAT
 } from '../services/authService.js';
 import { User } from '../models/User.js';
+import { syncLeetCodeUserStats } from '../services/leetcodeService.js';
 import { logger } from '../utils/logger.js';
 
 export const authRouter: Router = Router();
@@ -189,12 +190,49 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Respon
         timezone: user.timezone,
         streakGoalPerDay: user.streakGoalPerDay,
         notificationPreferences: user.notificationPreferences,
-        leetcodeUsername: user.leetcodeUsername || 'yash1th03',
-        leetcodeStats: user.leetcodeStats,
+        leetcodeUsername: user.leetcodeUsername || null,
+        leetcodeStats: user.leetcodeStats || null,
         createdAt: user.createdAt
       }
     }
   });
+});
+
+authRouter.post('/leetcode', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const { leetcodeUsername } = req.body;
+    if (!leetcodeUsername || typeof leetcodeUsername !== 'string' || !leetcodeUsername.trim()) {
+      res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Valid LeetCode username is required' } });
+      return;
+    }
+    const cleanUsername = leetcodeUsername.trim();
+    const stats = await syncLeetCodeUserStats(req.userId!, cleanUsername);
+    const updatedUser = await User.findById(req.userId);
+    res.json({
+      success: true,
+      data: {
+        leetcodeUsername: updatedUser?.leetcodeUsername,
+        leetcodeStats: stats
+      }
+    });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+authRouter.delete('/leetcode', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    await User.findByIdAndUpdate(req.userId, {
+      leetcodeUsername: null,
+      leetcodeStats: null
+    });
+    res.json({
+      success: true,
+      data: { message: 'LeetCode profile disconnected successfully' }
+    });
+  } catch (err: any) {
+    next(err);
+  }
 });
 
 authRouter.patch(

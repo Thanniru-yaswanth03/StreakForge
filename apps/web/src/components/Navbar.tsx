@@ -3,7 +3,7 @@
 import React from 'react';
 import { Flame, GitBranch, Terminal, ShieldCheck, Settings, LogOut, CheckCircle2 } from 'lucide-react';
 import type { User } from '@streakforge/shared-types';
-import { clearStoredToken } from '../lib/utils';
+import { clearStoredToken, API_BASE_URL } from '../lib/utils';
 
 interface NavbarProps {
   user: User | null;
@@ -98,7 +98,7 @@ export function Navbar({ user, activeTab, onTabChange, currentStreak }: NavbarPr
             </div>
           ) : (
             <a
-              href="http://localhost:4000/api/v1/auth/github"
+              href={`${API_BASE_URL}/auth/github`}
               className="flex items-center gap-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition shadow-md shadow-indigo-600/20"
             >
               <span>Connect GitHub</span>

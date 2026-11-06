@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
+import { API_BASE_URL } from '../lib/utils';
 
 interface HeaderProps {
   currentTab: string;
@@ -55,10 +56,7 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
     profile: 'Public Developer Profile'
   };
 
-  const primaryTargetRepo = connectedRepos.find((r) => r.isTargetForLeetCode) || {
-    repoFullName: 'Thanniru-yaswanth03/LeetCodeHustle',
-    defaultBranch: 'main'
-  };
+  const primaryTargetRepo = connectedRepos.find((r) => r.isTargetForLeetCode);
 
   const unreadCount = notifications?.filter((n) => !n.isRead).length || 0;
 
@@ -85,17 +83,27 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
           </div>
 
           {/* Target Repo Sync Pill */}
-          <a
-            href={`https://github.com/${primaryTargetRepo.repoFullName}`}
-            target="_blank"
-            rel="noreferrer"
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] rounded-full text-xs text-[#8b949e] hover:text-[#58a6ff] transition font-mono group ml-2"
-            title="Active target repository for LeetCode commits"
-          >
-            <span className="w-2 h-2 rounded-full bg-[#3fb950] group-hover:animate-ping" />
-            <span className="text-[#c9d1d9] font-medium">{primaryTargetRepo.repoFullName}</span>
-            <ExternalLink className="w-3 h-3 opacity-60" />
-          </a>
+          {primaryTargetRepo ? (
+            <a
+              href={`https://github.com/${primaryTargetRepo.repoFullName}`}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] rounded-full text-xs text-[#8b949e] hover:text-[#58a6ff] transition font-mono group ml-2"
+              title="Active target repository for LeetCode commits"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#3fb950] group-hover:animate-ping" />
+              <span className="text-[#c9d1d9] font-medium">{primaryTargetRepo.repoFullName}</span>
+              <ExternalLink className="w-3 h-3 opacity-60" />
+            </a>
+          ) : user ? (
+            <button
+              onClick={() => onTabChange('repos')}
+              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] hover:bg-[#21262d] border border-dashed border-[#30363d] hover:border-[#58a6ff] rounded-full text-xs text-[#8b949e] hover:text-[#58a6ff] transition font-mono group ml-2 cursor-pointer"
+              title="Select a target repository for LeetCode solution tracking"
+            >
+              <span>+ Select Target Repo</span>
+            </button>
+          ) : null}
         </div>
 
         {/* Right: Quick Action Status Pill, Refresh, Notifications, Profile */}
@@ -149,24 +157,30 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
               title={`Signed in as @${user.username}`}
             >
               <div className="relative">
-                <img
-                  src={user.avatarUrl || 'https://avatars.githubusercontent.com/u/121496542?v=4'}
-                  alt={user.username}
-                  width={28}
-                  height={28}
-                  style={{ width: 28, height: 28, maxWidth: 28, maxHeight: 28, objectFit: 'cover' }}
-                  className="w-7 h-7 rounded-full border border-[#30363d] object-cover group-hover:border-[#58a6ff] transition-all group-hover:scale-105"
-                />
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.username}
+                    width={28}
+                    height={28}
+                    style={{ width: 28, height: 28, maxWidth: 28, maxHeight: 28, objectFit: 'cover' }}
+                    className="w-7 h-7 rounded-full border border-[#30363d] object-cover group-hover:border-[#58a6ff] transition-all group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-xs font-bold text-[#58a6ff]">
+                    {user.username.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#238636] ring-2 ring-[#0d1117]" />
               </div>
             </div>
           ) : (
             <a
-              href="http://localhost:4000/api/v1/auth/github"
-              className="github-glossy-button-primary px-3 py-1 text-xs"
+              href={`${API_BASE_URL}/auth/github`}
+              className="github-glossy-button-primary px-3 py-1 text-xs flex items-center gap-1.5"
             >
               <Github className="w-3.5 h-3.5" />
-              <span>Connect</span>
+              <span>Connect GitHub</span>
             </a>
           )}
         </div>

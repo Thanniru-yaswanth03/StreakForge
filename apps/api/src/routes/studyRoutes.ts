@@ -118,13 +118,13 @@ studyRouter.get('/intelligence', requireAuth, async (req: AuthenticatedRequest, 
 
     // Target repository catalog freshness
     const targetRepo = await RepositoryConnection.findOne({ userId, isTargetForLeetCode: true }).lean();
-    const repoFullName = targetRepo?.repoFullName || 'Thanniru-yaswanth03/LeetCodeHustle';
-    const catalogItems = await CatalogService.getCatalogItems(userId, repoFullName);
+    const repoFullName = targetRepo?.repoFullName || '';
+    const catalogItems = repoFullName ? await CatalogService.getCatalogItems(userId, repoFullName) : [];
 
     const summary: LearningIntelligenceSummary = {
-      totalSolvedLeetCode: user?.leetcodeStats?.totalSolved || 32,
-      authenticStreakDays: 2,
-      longestStreakDays: 18,
+      totalSolvedLeetCode: user?.leetcodeStats?.totalSolved || 0,
+      authenticStreakDays: user?.leetcodeStats?.totalActiveDays ? 1 : 0,
+      longestStreakDays: user?.leetcodeStats?.maxStreak || 0,
       curriculumProgress: {
         blind75: {
           solved: blind75Data.solvedCount,

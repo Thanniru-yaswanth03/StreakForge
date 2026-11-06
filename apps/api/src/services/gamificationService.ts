@@ -219,7 +219,7 @@ export class GamificationService {
       achievements,
       recentXpGains: [
         { timestamp: new Date().toISOString(), action: 'Solved LeetCode #2620 Counter', xp: 50 },
-        { timestamp: new Date(Date.now() - 86400000).toISOString(), action: 'Verified Git Commit Push to LeetCodeHustle', xp: 10 },
+        { timestamp: new Date(Date.now() - 86400000).toISOString(), action: 'Verified Git Commit Push to target repository', xp: 10 },
         { timestamp: new Date(Date.now() - 172800000).toISOString(), action: 'Unlocked First Blood Achievement', xp: 100 }
       ]
     };

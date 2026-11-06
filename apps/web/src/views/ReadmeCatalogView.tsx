@@ -29,11 +29,13 @@ export function ReadmeCatalogView() {
   const [syncResult, setSyncResult] = useState<CatalogSyncResult | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const primaryRepo = connectedRepos.find((r) => r.isTargetForLeetCode) || {
-    repoFullName: 'Thanniru-yaswanth03/LeetCodeHustle'
-  };
+  const primaryRepo = connectedRepos.find((r) => r.isTargetForLeetCode);
 
   const fetchPreview = useCallback(async () => {
+    if (!primaryRepo?.repoFullName) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await api.catalog.preview(primaryRepo.repoFullName);
@@ -44,13 +46,17 @@ export function ReadmeCatalogView() {
     } finally {
       setLoading(false);
     }
-  }, [primaryRepo.repoFullName]);
+  }, [primaryRepo?.repoFullName]);
 
   useEffect(() => {
     fetchPreview();
   }, [fetchPreview]);
 
   const handleSyncToGitHub = async () => {
+    if (!primaryRepo?.repoFullName) {
+      setActionMessage({ type: 'error', text: 'Please connect and select a target repository first in Repositories.' });
+      return;
+    }
     try {
       setSyncing(true);
       setActionMessage(null);
@@ -72,6 +78,10 @@ export function ReadmeCatalogView() {
   };
 
   const handleRollback = async () => {
+    if (!primaryRepo?.repoFullName) {
+      setActionMessage({ type: 'error', text: 'Please select a target repository first.' });
+      return;
+    }
     try {
       setRollingBack(true);
       setActionMessage(null);
@@ -167,18 +177,26 @@ export function ReadmeCatalogView() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
         <div className="github-glossy-card p-4">
           <div className="text-xs text-[#8b949e] font-semibold">Target Repository</div>
-          <div className="text-base font-bold text-[#58a6ff] font-mono mt-1 flex items-center gap-1.5 truncate">
-            <a
-              href={`https://github.com/${primaryRepo.repoFullName}`}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:underline truncate"
-            >
-              {primaryRepo.repoFullName}
-            </a>
-            <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-          </div>
-          <div className="text-[11px] text-[#8b949e] mt-1 font-mono">Branch: main</div>
+          {primaryRepo ? (
+            <>
+              <div className="text-base font-bold text-[#58a6ff] font-mono mt-1 flex items-center gap-1.5 truncate">
+                <a
+                  href={`https://github.com/${primaryRepo.repoFullName}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:underline truncate"
+                >
+                  {primaryRepo.repoFullName}
+                </a>
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              </div>
+              <div className="text-[11px] text-[#8b949e] mt-1 font-mono">Branch: {primaryRepo.defaultBranch || 'main'}</div>
+            </>
+          ) : (
+            <div className="text-xs text-[#8b949e] mt-2 italic">
+              No target repository designated. Select one in Repositories.
+            </div>
+          )}
         </div>
 
         <div className="github-glossy-card p-4">

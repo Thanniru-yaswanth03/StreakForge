@@ -24,9 +24,12 @@ import {
   GitCommit,
   Zap,
   Terminal,
-  BookOpen
+  BookOpen,
+  Github,
+  User as UserIcon
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { API_BASE_URL } from '../lib/utils';
 import { GitHubContributionGraph } from '../components/GitHubContributionGraph';
 import { LeetCodeStatsCard } from '../components/LeetCodeStatsCard';
 
@@ -47,17 +50,14 @@ export function OverviewView() {
   const [copiedExtensionPath, setCopiedExtensionPath] = useState<boolean>(false);
   const [activeRepoTab, setActiveRepoTab] = useState<string>('code');
 
-  const primaryRepo = connectedRepos.find((r) => r.isTargetForLeetCode) || {
-    repoFullName: 'Thanniru-yaswanth03/LeetCodeHustle',
-    defaultBranch: 'main'
-  };
+  const primaryRepo = connectedRepos.find((r) => r.isTargetForLeetCode);
 
   // Derived metrics (strictly authentic, no inflation)
-  const totalSolved = leetcodeStats?.totalSolved ?? overview?.totalLeetCodeSolved ?? 32;
-  const todayCommits = overview?.todayCommitCount ?? (overview?.hasSubmittedToday ? 3 : 0);
-  const todayLeetCode = overview?.todayLeetCodeCount ?? (overview?.hasSubmittedToday ? 1 : 0);
-  const currentStreak = overview?.currentStreak ?? 2;
-  const longestStreak = overview?.longestStreak ?? 18;
+  const totalSolved = leetcodeStats?.totalSolved ?? overview?.totalLeetCodeSolved ?? 0;
+  const todayCommits = overview?.todayCommitCount ?? 0;
+  const todayLeetCode = overview?.todayLeetCodeCount ?? 0;
+  const currentStreak = overview?.currentStreak ?? (overview?.hasSubmittedToday ? 1 : 0);
+  const longestStreak = overview?.longestStreak ?? 0;
 
   // Onboarding progress calculations
   const isGithubConnected = Boolean(user);
@@ -86,68 +86,90 @@ export function OverviewView() {
       <div className="github-glossy-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="relative flex-shrink-0">
-            <img
-              src={user?.avatarUrl || 'https://avatars.githubusercontent.com/u/121496542?v=4'}
-              alt={user?.username || 'user'}
-              width={48}
-              height={48}
-              style={{ width: 48, height: 48, maxWidth: 48, maxHeight: 48, objectFit: 'cover' }}
-              className="w-12 h-12 rounded-full border border-[#30363d] object-cover ring-2 ring-[#238636]/30 shadow-md"
-            />
-            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-[#238636] ring-2 ring-[#161b22] animate-pulse" />
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.username}
+                width={48}
+                height={48}
+                style={{ width: 48, height: 48, maxWidth: 48, maxHeight: 48, objectFit: 'cover' }}
+                className="w-12 h-12 rounded-full border border-[#30363d] object-cover ring-2 ring-[#238636]/30 shadow-md"
+              />
+            ) : user ? (
+              <div className="w-12 h-12 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-sm font-bold text-[#58a6ff]">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[#8b949e]">
+                <UserIcon className="w-6 h-6" />
+              </div>
+            )}
+            {user && (
+              <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-[#238636] ring-2 ring-[#161b22] animate-pulse" />
+            )}
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-bold text-[#f0f6fc] tracking-tight">
-                @{user?.username || 'Thanniru-yaswanth03'}
+                {user ? `@${user.username}` : 'Guest Developer'}
               </h2>
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#238636]/30 flex items-center gap-1 shadow-[0_0_8px_rgba(35,134,54,0.3)]">
-                <CheckCircle2 className="w-3 h-3 text-[#3fb950]" />
-                Verified Contributor
-              </span>
+              {user ? (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#238636]/30 flex items-center gap-1 shadow-[0_0_8px_rgba(35,134,54,0.3)]">
+                  <CheckCircle2 className="w-3 h-3 text-[#3fb950]" />
+                  Verified Contributor
+                </span>
+              ) : (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#30363d]/40 text-[#8b949e] border border-[#30363d]">
+                  Unauthenticated Session
+                </span>
+              )}
             </div>
 
             <div className="text-xs text-[#8b949e] mt-1 flex items-center gap-2 flex-wrap">
-              <span>Target Repository:</span>
-              <a
-                href={`https://github.com/${primaryRepo.repoFullName}`}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-[#58a6ff] hover:text-[#79c0ff] hover:underline flex items-center gap-1 font-semibold transition"
-              >
-                <span>{primaryRepo.repoFullName}</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              <span>•</span>
-              <span className="text-[#3fb950] font-mono text-[11px]">Branch: main</span>
+              {primaryRepo ? (
+                <>
+                  <span>Target Repository:</span>
+                  <a
+                    href={`https://github.com/${primaryRepo.repoFullName}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[#58a6ff] hover:text-[#79c0ff] hover:underline flex items-center gap-1 font-semibold transition"
+                  >
+                    <span>{primaryRepo.repoFullName}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <span>•</span>
+                  <span className="text-[#3fb950] font-mono text-[11px]">Branch: {primaryRepo.defaultBranch || 'main'}</span>
+                </>
+              ) : (
+                <span>No target repository selected yet. Connect a repository below or in Repositories.</span>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5 flex-shrink-0">
-          <button
-            onClick={async () => {
-              await refreshData();
-              window.dispatchEvent(
-                new CustomEvent('streakforge:sync-success', {
-                  detail: {
-                    title: 'Coding Activity Synchronized',
-                    language: 'Live LeetCode & GitHub',
-                    difficulty: 'Verified',
-                    commitSha: '5b06b02',
-                    repo: primaryRepo?.repoFullName || 'Thanniru-yaswanth03/LeetCodeHustle'
-                  }
-                })
-              );
-            }}
-            disabled={isLoading}
-            className="github-glossy-button-secondary px-3.5 py-1.5 text-xs flex items-center gap-1.5 transition disabled:opacity-50"
-            title="Refresh synchronizations"
-          >
-            <RotateCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#58a6ff]' : 'text-[#8b949e]'}`} />
-            <span>Sync Engine</span>
-          </button>
+          {user ? (
+            <button
+              onClick={async () => {
+                await refreshData();
+              }}
+              disabled={isLoading}
+              className="github-glossy-button-secondary px-3.5 py-1.5 text-xs flex items-center gap-1.5 transition disabled:opacity-50"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh Metrics</span>
+            </button>
+          ) : (
+            <a
+              href={`${API_BASE_URL}/auth/github`}
+              className="github-glossy-button-primary px-3.5 py-1.5 text-xs flex items-center gap-1.5"
+            >
+              <Github className="w-3.5 h-3.5" />
+              <span>Sign In with GitHub</span>
+            </a>
+          )}
         </div>
       </div>
 
@@ -204,21 +226,31 @@ export function OverviewView() {
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#58a6ff] font-mono">
                     Step 01
                   </span>
-                  <span className="text-[10px] font-bold text-[#3fb950] flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Connected
+                  <span className={`text-[10px] font-bold flex items-center gap-1 ${user ? 'text-[#3fb950]' : 'text-[#8b949e]'}`}>
+                    {user ? <CheckCircle2 className="w-3.5 h-3.5 text-[#3fb950]" /> : null}
+                    {user ? 'Connected' : 'Not Connected'}
                   </span>
                 </div>
                 <div className="text-xs font-bold text-[#f0f6fc]">
                   Connect Genuine GitHub
                 </div>
                 <p className="text-[11px] text-[#8b949e] leading-relaxed">
-                  Linked to @{user?.username || 'Thanniru-yaswanth03'}. Authorizes automated commit pushing to your repository.
+                  {user ? `Linked to @${user.username}. Authorizes automated commit pushing to your repository.` : 'Link your GitHub account to authorize repository discovery and automated solutions sync.'}
                 </p>
               </div>
-              <div className="text-[10px] text-[#3fb950] font-medium font-mono">
-                &check; OAuth 2.0 Authenticated
-              </div>
+              {user ? (
+                <div className="text-[10px] text-[#3fb950] font-medium font-mono">
+                  &check; OAuth 2.0 Authenticated
+                </div>
+              ) : (
+                <a
+                  href={`${API_BASE_URL}/auth/github`}
+                  className="w-full py-1.5 px-2 bg-[#238636] hover:bg-[#2ea043] text-white rounded text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                >
+                  <Github className="w-3.5 h-3.5" />
+                  <span>Connect GitHub</span>
+                </a>
+              )}
             </div>
 
             {/* Step 2 */}
@@ -269,7 +301,7 @@ export function OverviewView() {
                 </p>
               </div>
               <div className="text-[10px] text-[#58a6ff] font-mono font-medium truncate">
-                &rarr; {primaryRepo.repoFullName}
+                &rarr; {primaryRepo?.repoFullName || 'Select a repository'}
               </div>
             </div>
 
@@ -455,7 +487,7 @@ export function OverviewView() {
                     </span>
                     {sub.githubCommitSha && (
                       <a
-                        href={sub.githubCommitUrl || `https://github.com/${primaryRepo.repoFullName}/commit/${sub.githubCommitSha}`}
+                        href={sub.githubCommitUrl || (primaryRepo ? `https://github.com/${primaryRepo.repoFullName}/commit/${sub.githubCommitSha}` : '#')}
                         target="_blank"
                         rel="noreferrer"
                         className="font-mono text-[10px] text-[#8b949e] hover:text-[#58a6ff] hover:underline flex items-center gap-1 bg-[#21262d] px-1.5 py-0.5 rounded border border-[#30363d]"

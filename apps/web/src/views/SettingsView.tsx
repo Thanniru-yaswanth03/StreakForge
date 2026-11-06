@@ -15,11 +15,12 @@ import {
   Trash2,
   Copy,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Code2
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
-import { getStoredToken, setStoredToken, clearStoredToken } from '../lib/utils';
+import { getStoredToken, setStoredToken, clearStoredToken, API_BASE_URL } from '../lib/utils';
 import { api } from '../lib/api';
 import { AgentManager } from '../components/AgentManager';
 
@@ -29,6 +30,7 @@ export function SettingsView() {
 
   const [activeSection, setActiveSection] = useState<
     | 'github'
+    | 'leetcode'
     | 'extension'
     | 'repos'
     | 'agent'
@@ -48,6 +50,12 @@ export function SettingsView() {
   const [patInput, setPatInput] = useState('');
   const [patLoading, setPatLoading] = useState(false);
   const [patError, setPatError] = useState('');
+
+  // LeetCode connection state
+  const [leetcodeInput, setLeetcodeInput] = useState(user?.leetcodeUsername || '');
+  const [leetcodeLoading, setLeetcodeLoading] = useState(false);
+  const [leetcodeError, setLeetcodeError] = useState('');
+  const [leetcodeSuccess, setLeetcodeSuccess] = useState('');
 
   // Preference fields
   const [timezone, setTimezone] = useState(user?.timezone || 'UTC');
@@ -81,6 +89,40 @@ export function SettingsView() {
       setPatError(err.message || 'Authentication failed. Please verify your token.');
     } finally {
       setPatLoading(false);
+    }
+  };
+
+  const handleConnectLeetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leetcodeInput.trim()) return;
+    try {
+      setLeetcodeLoading(true);
+      setLeetcodeError('');
+      setLeetcodeSuccess('');
+      await api.auth.linkLeetCode(leetcodeInput.trim());
+      setLeetcodeSuccess('LeetCode profile linked and synchronized successfully!');
+      await refreshData();
+    } catch (err: any) {
+      setLeetcodeError(err.message || 'Failed to link LeetCode profile');
+    } finally {
+      setLeetcodeLoading(false);
+    }
+  };
+
+  const handleDisconnectLeetCode = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your LeetCode profile?')) return;
+    try {
+      setLeetcodeLoading(true);
+      setLeetcodeError('');
+      setLeetcodeSuccess('');
+      await api.auth.disconnectLeetCode();
+      setLeetcodeInput('');
+      setLeetcodeSuccess('LeetCode profile disconnected.');
+      await refreshData();
+    } catch (err: any) {
+      setLeetcodeError(err.message || 'Failed to disconnect LeetCode profile');
+    } finally {
+      setLeetcodeLoading(false);
     }
   };
 
@@ -132,6 +174,7 @@ export function SettingsView() {
 
   const coreSections = [
     { id: 'github', label: 'GitHub Account', icon: Github },
+    { id: 'leetcode', label: 'LeetCode Account', icon: Code2 },
     { id: 'extension', label: 'LeetCode Extension', icon: KeyRound },
     { id: 'repos', label: 'Target Repositories', icon: FolderGit2 },
     { id: 'automation', label: 'Automation Rules', icon: Bot },
@@ -345,7 +388,7 @@ export function SettingsView() {
                       To receive instantaneous push and PR synchronization events from GitHub, configure a repository webhook:
                     </p>
                     <div className="space-y-1.5 text-xs font-mono bg-theme-surface p-3 rounded-lg border border-theme-border text-theme-secondary">
-                      <div><strong className="text-theme-primary font-sans">Payload URL:</strong> http://localhost:4000/api/v1/github/webhook</div>
+                      <div><strong className="text-theme-primary font-sans">Payload URL:</strong> {API_BASE_URL}/github/webhook</div>
                       <div><strong className="text-theme-primary font-sans">Content type:</strong> application/json</div>
                       <div><strong className="text-theme-primary font-sans">Secret:</strong> configured in .env (GITHUB_WEBHOOK_SECRET)</div>
                       <div><strong className="text-theme-primary font-sans">Events:</strong> Pushes, Pull Requests, Issues, Releases</div>
@@ -418,16 +461,158 @@ export function SettingsView() {
                       Option 2: Connect via GitHub OAuth Application
                     </div>
                     <p className="text-[11px] text-theme-muted">
-                      Requires registering an OAuth App under GitHub Settings &rarr; Developer settings &rarr; OAuth Apps with callback <code className="text-theme-accent">http://localhost:4000/api/v1/auth/github/callback</code>.
+                      Requires registering an OAuth App under GitHub Settings &rarr; Developer settings &rarr; OAuth Apps with callback <code className="text-theme-accent">{API_BASE_URL}/auth/github/callback</code>.
                     </p>
                     <a
-                      href="http://localhost:4000/api/v1/auth/github"
+                      href={`${API_BASE_URL}/auth/github`}
                       className="inline-flex items-center gap-2 px-3 py-1.5 bg-theme-surface hover:bg-theme-border border border-theme-border text-theme-primary font-semibold text-xs rounded-lg transition shadow-xs mt-1"
                     >
                       <Github className="w-3.5 h-3.5" />
                       <span>Authorize via OAuth App</span>
                     </a>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 1.5. LeetCode Account Integration */}
+          {activeSection === 'leetcode' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-theme-primary flex items-center gap-2">
+                  <Code2 className="w-4 h-4 text-theme-accent" />
+                  LeetCode Account Integration
+                </h3>
+                <p className="text-xs text-theme-muted mt-0.5">
+                  Link your authentic public LeetCode handle to sync problem solving statistics, acceptance rates, and streak records.
+                </p>
+              </div>
+
+              {leetcodeSuccess && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs flex items-center gap-2">
+                  <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{leetcodeSuccess}</span>
+                </div>
+              )}
+
+              {leetcodeError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{leetcodeError}</span>
+                </div>
+              )}
+
+              {user?.leetcodeUsername ? (
+                <div className="p-5 bg-theme-elevated border border-theme-border rounded-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold">
+                        <Code2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-theme-primary">{user.leetcodeUsername}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Linked
+                          </span>
+                        </div>
+                        <a
+                          href={`https://leetcode.com/u/${user.leetcodeUsername}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-theme-accent hover:underline flex items-center gap-1 mt-0.5"
+                        >
+                          leetcode.com/u/{user.leetcodeUsername} &rarr;
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleDisconnectLeetCode}
+                        disabled={leetcodeLoading}
+                        className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg text-xs font-semibold transition disabled:opacity-50"
+                      >
+                        {leetcodeLoading ? 'Disconnecting...' : 'Disconnect Profile'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {user.leetcodeStats && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-theme-border">
+                      <div className="p-2.5 bg-theme-surface rounded-lg border border-theme-border">
+                        <div className="text-[10px] text-theme-muted uppercase font-bold">Solved</div>
+                        <div className="text-base font-bold text-theme-primary">{user.leetcodeStats.totalSolved ?? 0}</div>
+                      </div>
+                      <div className="p-2.5 bg-theme-surface rounded-lg border border-theme-border">
+                        <div className="text-[10px] text-theme-muted uppercase font-bold">Ranking</div>
+                        <div className="text-base font-bold text-theme-primary">
+                          {user.leetcodeStats.ranking ? `#${user.leetcodeStats.ranking.toLocaleString()}` : 'N/A'}
+                        </div>
+                      </div>
+                      <div className="p-2.5 bg-theme-surface rounded-lg border border-theme-border">
+                        <div className="text-[10px] text-theme-muted uppercase font-bold">Acceptance Rate</div>
+                        <div className="text-base font-bold text-theme-primary">
+                          {user.leetcodeStats.acceptanceRate ? `${user.leetcodeStats.acceptanceRate.toFixed(1)}%` : 'N/A'}
+                        </div>
+                      </div>
+                      <div className="p-2.5 bg-theme-surface rounded-lg border border-theme-border">
+                        <div className="text-[10px] text-theme-muted uppercase font-bold">Max Streak</div>
+                        <div className="text-base font-bold text-theme-primary">{user.leetcodeStats.maxStreak ?? 0}d</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <label className="text-xs font-semibold text-theme-secondary block mb-1">Update LeetCode Username</label>
+                    <form onSubmit={handleConnectLeetCode} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={leetcodeInput}
+                        onChange={(e) => setLeetcodeInput(e.target.value)}
+                        placeholder="Enter new LeetCode username"
+                        className="flex-1 bg-theme-surface border border-theme-border rounded-lg px-3 py-1.5 text-xs text-theme-primary focus:outline-none focus:border-theme-accent"
+                      />
+                      <button
+                        type="submit"
+                        disabled={leetcodeLoading || !leetcodeInput.trim() || leetcodeInput.trim() === user.leetcodeUsername}
+                        className="px-3 py-1.5 bg-theme-accent text-slate-950 font-bold text-xs rounded-lg transition hover:opacity-95 disabled:opacity-50"
+                      >
+                        {leetcodeLoading ? 'Updating...' : 'Update Handle'}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-5 bg-theme-elevated border border-theme-border rounded-xl space-y-3">
+                  <div className="text-xs font-bold text-theme-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Code2 className="w-3.5 h-3.5 text-theme-accent" />
+                    Connect LeetCode Account
+                  </div>
+                  <p className="text-[11px] text-theme-muted">
+                    Enter your public LeetCode username (e.g. your username from leetcode.com/u/your_username). We will automatically query the GraphQL endpoint to retrieve your verified solve counts, difficulty breakdowns, and activity calendar.
+                  </p>
+
+                  <form onSubmit={handleConnectLeetCode} className="space-y-3 pt-1">
+                    <div>
+                      <input
+                        type="text"
+                        value={leetcodeInput}
+                        onChange={(e) => setLeetcodeInput(e.target.value)}
+                        placeholder="e.g. tourpran, neetcode, your_handle"
+                        className="w-full bg-theme-surface border border-theme-border rounded-lg px-3 py-2 text-xs font-mono text-theme-primary focus:outline-none focus:border-theme-accent"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={leetcodeLoading || !leetcodeInput.trim()}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-theme-accent text-slate-950 font-bold text-xs rounded-lg transition hover:opacity-95 shadow-xs disabled:opacity-50"
+                    >
+                      <Code2 className="w-4 h-4" />
+                      <span>{leetcodeLoading ? 'Linking & Syncing...' : 'Link LeetCode Account'}</span>
+                    </button>
+                  </form>
                 </div>
               )}
             </div>

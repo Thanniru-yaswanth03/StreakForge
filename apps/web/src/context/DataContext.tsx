@@ -126,31 +126,31 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
 
-// Realistic demo fallback for development / unauthenticated state
-const DEMO_OVERVIEW: AnalyticsOverview = {
-  currentStreak: 14,
-  longestStreak: 42,
-  hasSubmittedToday: true,
-  todayCommitCount: 4,
-  todayLeetCodeCount: 2,
-  weeklyConsistencyPercent: 86,
-  weeklyActivityScore: 92,
-  streakDeadlineHoursLeft: 6.5,
-  totalLeetCodeSolved: 58,
-  totalGitCommitsTracked: 164,
-  difficultyDistribution: { Easy: 28, Medium: 23, Hard: 7 },
-  githubStreak: { currentStreak: 14, longestStreak: 42, activeDays: 45, hasSubmittedToday: true },
-  leetCodeStreak: { currentStreak: 8, longestStreak: 21, activeDays: 32, hasSubmittedToday: true },
-  localDevStreak: { currentStreak: 12, longestStreak: 30, activeDays: 40, hasSubmittedToday: true },
+// Initial empty overview for unauthenticated / fresh accounts
+const EMPTY_OVERVIEW: AnalyticsOverview = {
+  currentStreak: 0,
+  longestStreak: 0,
+  hasSubmittedToday: false,
+  todayCommitCount: 0,
+  todayLeetCodeCount: 0,
+  weeklyConsistencyPercent: 0,
+  weeklyActivityScore: 0,
+  streakDeadlineHoursLeft: 24,
+  totalLeetCodeSolved: 0,
+  totalGitCommitsTracked: 0,
+  difficultyDistribution: { Easy: 0, Medium: 0, Hard: 0 },
+  githubStreak: { currentStreak: 0, longestStreak: 0, activeDays: 0, hasSubmittedToday: false },
+  leetCodeStreak: { currentStreak: 0, longestStreak: 0, activeDays: 0, hasSubmittedToday: false },
+  localDevStreak: { currentStreak: 0, longestStreak: 0, activeDays: 0, hasSubmittedToday: false },
   breakdown: {
-    githubCommits: 164,
-    githubPRs: 24,
-    githubIssues: 12,
-    leetCodeTotalSubmissions: 76,
-    leetCodeAccepted: 58,
-    leetCodeUniqueProblems: 54,
-    localSessions: 48,
-    maintenanceBackups: 16
+    githubCommits: 0,
+    githubPRs: 0,
+    githubIssues: 0,
+    leetCodeTotalSubmissions: 0,
+    leetCodeAccepted: 0,
+    leetCodeUniqueProblems: 0,
+    localSessions: 0,
+    maintenanceBackups: 0
   }
 };
 
@@ -352,20 +352,27 @@ const DEMO_GITHUB_ACTIVITY: GitHubActivityData = {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [overview, setOverview] = useState<AnalyticsOverview | null>(DEMO_OVERVIEW);
+  const [overview, setOverview] = useState<AnalyticsOverview | null>(EMPTY_OVERVIEW);
   const [heatmap, setHeatmap] = useState<HeatmapDay[]>([]);
   const [connectedRepos, setConnectedRepos] = useState<RepositoryConnection[]>([]);
   const [githubRepos, setGithubRepos] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<LeetCodeSubmission[]>([]);
   const [agents, setAgents] = useState<LocalAgentInstance[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [automations, setAutomations] = useState<AutomationJob[]>(DEMO_AUTOMATIONS);
+  const [automations, setAutomations] = useState<AutomationJob[]>([]);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(DEMO_NOTIFICATIONS);
-  const [githubActivity, setGithubActivity] = useState<GitHubActivityData>(DEMO_GITHUB_ACTIVITY);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [githubActivity, setGithubActivity] = useState<GitHubActivityData>({
+    totalCommits: 0,
+    recentCommits: [],
+    repositories: [],
+    branches: [],
+    pullRequests: [],
+    issues: []
+  });
   const [leetcodeStats, setLeetcodeStats] = useState<LeetCodeUserStats | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
   const refreshLeetCodeStats = useCallback(async (usernameOverride?: string) => {
     try {
@@ -407,8 +414,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const refreshData = useCallback(async () => {
     const token = getStoredToken();
     if (!token) {
-      setIsDemoMode(true);
-      setHeatmap(generateInitialHeatmap());
+      setUser(null);
+      setOverview(EMPTY_OVERVIEW);
+      setConnectedRepos([]);
+      setSubmissions([]);
+      setLeetcodeStats(null);
+      setIsDemoMode(false);
+      setHeatmap([]);
       setIsLoading(false);
       return;
     }
@@ -438,7 +450,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setIsDemoMode(false);
       } else {
         setUser(null);
-        setIsDemoMode(true);
+        setOverview(EMPTY_OVERVIEW);
+        setLeetcodeStats(null);
+        setIsDemoMode(false);
         clearStoredToken();
       }
 

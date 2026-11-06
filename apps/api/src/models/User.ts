@@ -73,9 +73,9 @@ const UserSchema = new Schema<IUserDocument>(
       email: { type: Boolean, default: false },
       streakWarningHoursBefore: { type: Number, default: 3 }
     },
-    leetcodeUsername: { type: String, default: 'yash1th2k4' },
+    leetcodeUsername: { type: String, default: null },
     leetcodeStats: { type: Schema.Types.Mixed, default: null },
-    bio: { type: String, default: 'Full-stack builder & algorithm practitioner.' },
+    bio: { type: String, default: '' },
     codeforcesUsername: { type: String, default: '' },
     codechefUsername: { type: String, default: '' },
     isPublicProfile: { type: Boolean, default: true, index: true },

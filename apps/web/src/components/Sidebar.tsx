@@ -28,7 +28,8 @@ import {
   Target,
   Network,
   Globe,
-  Timer
+  Timer,
+  User as UserIcon
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
@@ -58,8 +59,8 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
   const { effectiveTheme, toggleTheme } = useTheme();
   const { user, overview, leetcodeStats, connectedRepos } = useData();
 
-  const totalLeetCode = leetcodeStats?.totalSolved ?? 32;
-  const currentStreak = overview?.currentStreak ?? 2;
+  const totalLeetCode = leetcodeStats?.totalSolved ?? (user?.leetcodeStats?.totalSolved ?? 0);
+  const currentStreak = overview?.currentStreak ?? 0;
 
   const navGroups: NavGroup[] = [
     {
@@ -139,12 +140,17 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
           id: 'leetcode',
           label: 'LeetCode Activity',
           icon: Code2,
-          badge: totalLeetCode,
+          badge: totalLeetCode > 0 ? String(totalLeetCode) : undefined,
           badgeColor: 'bg-[#238636]/20 text-[#3fb950] border-[#238636]/40'
         },
-        { id: 'github', label: 'GitHub Activity', icon: GitBranch, badge: '409' },
+        {
+          id: 'github',
+          label: 'GitHub Activity',
+          icon: GitBranch,
+          badge: overview?.githubStreak?.activeDays ? String(overview.githubStreak.activeDays) : undefined
+        },
         { id: 'catalog', label: 'README Catalog', icon: Layers, badge: 'Auto' },
-        { id: 'repos', label: 'Repositories', icon: FolderGit2, badge: connectedRepos.length || 1 }
+        { id: 'repos', label: 'Repositories', icon: FolderGit2, badge: connectedRepos.length > 0 ? String(connectedRepos.length) : undefined }
       ]
     },
     {
@@ -299,29 +305,54 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
         <div
           onClick={() => handleSelect('settings')}
           className="flex items-center gap-2.5 p-2 rounded-md hover:bg-[#21262d] border border-transparent hover:border-[#30363d] cursor-pointer transition-all group"
-          title="Account Settings"
+          title={user ? `Signed in as @${user.username}` : 'Sign in to your account'}
         >
           <div className="relative">
-            <img
-              src={user?.avatarUrl || 'https://avatars.githubusercontent.com/u/121496542?v=4'}
-              alt={user?.username || 'user'}
-              width={26}
-              height={26}
-              style={{ width: 26, height: 26, maxWidth: 26, maxHeight: 26, objectFit: 'cover' }}
-              className="w-6 h-6 rounded-full border border-[#30363d] flex-shrink-0 group-hover:border-[#58a6ff] transition-colors"
-            />
-            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#238636] ring-1 ring-[#0d1117]" />
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.username}
+                width={26}
+                height={26}
+                style={{ width: 26, height: 26, maxWidth: 26, maxHeight: 26, objectFit: 'cover' }}
+                className="w-6 h-6 rounded-full border border-[#30363d] flex-shrink-0 group-hover:border-[#58a6ff] transition-colors"
+              />
+            ) : user ? (
+              <div className="w-6 h-6 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[10px] font-bold text-[#58a6ff]">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[#8b949e]">
+                <UserIcon className="w-3.5 h-3.5" />
+              </div>
+            )}
+            {user && (
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#238636] ring-1 ring-[#0d1117]" />
+            )}
           </div>
 
           {!isCollapsed && (
             <div className="truncate flex-1 text-left">
-              <div className="text-xs font-bold text-[#f0f6fc] truncate group-hover:text-[#58a6ff] transition-colors">
-                @{user?.username || 'Thanniru-yaswanth03'}
-              </div>
-              <div className="text-[10px] text-[#3fb950] font-mono flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-[#3fb950]" />
-                <span>Verified Contributor</span>
-              </div>
+              {user ? (
+                <>
+                  <div className="text-xs font-bold text-[#f0f6fc] truncate group-hover:text-[#58a6ff] transition-colors">
+                    @{user.username}
+                  </div>
+                  <div className="text-[10px] text-[#3fb950] font-mono flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-[#3fb950]" />
+                    <span>Verified Contributor</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs font-semibold text-[#8b949e] truncate group-hover:text-[#f0f6fc] transition-colors">
+                    Guest Developer
+                  </div>
+                  <div className="text-[10px] text-[#58a6ff] font-mono flex items-center gap-1">
+                    <span>Click to Sign In &rarr;</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

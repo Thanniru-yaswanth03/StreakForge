@@ -136,11 +136,11 @@ export async function fetchLeetCodeUserStats(username: string): Promise<ScrapedL
   return {
     username: matched.username,
     realName: matched.profile?.realName || undefined,
-    ranking: matched.profile?.ranking || 3777525,
-    userAvatar: matched.profile?.userAvatar || 'https://assets.leetcode.com/users/yash1th03/avatar_1781334970.png',
-    reputation: matched.profile?.reputation || 3,
-    aboutMe: matched.profile?.aboutMe || 'On My Journey To achieve My First Job',
-    countryName: matched.profile?.countryName || 'India',
+    ranking: matched.profile?.ranking || undefined,
+    userAvatar: matched.profile?.userAvatar || '',
+    reputation: matched.profile?.reputation || 0,
+    aboutMe: matched.profile?.aboutMe || '',
+    countryName: matched.profile?.countryName || '',
     totalSolved,
     easySolved: easyAc.count,
     mediumSolved: mediumAc.count,
@@ -167,7 +167,10 @@ export async function syncLeetCodeUserStats(
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
-  const leetcodeUser = (usernameOverride || user.leetcodeUsername || 'yash1th03').trim();
+  const leetcodeUser = (usernameOverride || user.leetcodeUsername || '').trim();
+  if (!leetcodeUser) {
+    throw new Error('No LeetCode profile linked. Connect your LeetCode username in Settings.');
+  }
 
   logger.info(`[LeetCodeSync] Fetching authentic stats for '${leetcodeUser}' (StreakForge user ${user.username})`);
 
@@ -259,9 +262,13 @@ export async function syncLeetCodeUserStats(
 export async function getOrRefreshLeetCodeStats(
   userId: string,
   forceRefresh: boolean = false
-): Promise<ILeetCodeUserStats> {
+): Promise<ILeetCodeUserStats | null> {
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
+
+  if (!user.leetcodeUsername) {
+    return null;
+  }
 
   const currentStats = user.leetcodeStats;
   const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
@@ -277,7 +284,7 @@ export async function getOrRefreshLeetCodeStats(
       logger.warn(`Failed background refresh for LeetCode stats, falling back to cached: ${err.message}`);
       return currentStats;
     }
-    throw err;
+    return null;
   }
 }
 

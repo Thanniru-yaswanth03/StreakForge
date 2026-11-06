@@ -139,7 +139,16 @@ export const api = {
         body: JSON.stringify(prefs)
       }),
     logout: () => apiFetch('/auth/logout', { method: 'POST' }),
-    disconnect: () => apiFetch('/auth/disconnect', { method: 'POST' })
+    disconnect: () => apiFetch('/auth/disconnect', { method: 'POST' }),
+    linkLeetCode: (username: string) =>
+      apiFetch<{ message: string; leetcodeUsername: string; leetcodeStats: any }>('/auth/leetcode', {
+        method: 'POST',
+        body: JSON.stringify({ username })
+      }),
+    disconnectLeetCode: () =>
+      apiFetch<{ message: string }>('/auth/leetcode', {
+        method: 'DELETE'
+      })
   },
   github: {
     getActivity: (page: number = 1, limit: number = 20) =>

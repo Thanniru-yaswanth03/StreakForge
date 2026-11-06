@@ -97,15 +97,15 @@ export class MultiPlatformService {
     });
 
     // 2. LeetCode
-    const lcSolved = user.leetcodeStats?.totalSolved ?? 32;
+    const lcSolved = user.leetcodeStats?.totalSolved ?? 0;
     profiles.push({
       platform: 'leetcode',
-      handle: user.leetcodeUsername || 'yash1th03',
+      handle: user.leetcodeUsername || 'Not Connected',
       connected: !!user.leetcodeUsername,
       rating: user.leetcodeStats?.ranking,
-      rank: user.leetcodeStats?.ranking ? `#${user.leetcodeStats.ranking}` : '#3777525',
+      rank: user.leetcodeStats?.ranking ? `#${user.leetcodeStats.ranking}` : undefined,
       totalSolved: lcSolved,
-      lastSyncedAt: user.leetcodeStats?.lastSyncedAt?.toString() || new Date().toISOString(),
+      lastSyncedAt: user.leetcodeStats?.lastSyncedAt?.toString() || (user.leetcodeUsername ? new Date().toISOString() : undefined),
       avatarUrl: user.leetcodeStats?.userAvatar
     });
 

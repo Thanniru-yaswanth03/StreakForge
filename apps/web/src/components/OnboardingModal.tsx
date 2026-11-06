@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { api } from '../lib/api';
+import { API_BASE_URL } from '../lib/utils';
 import { BrandLogo } from './BrandLogo';
 
 interface OnboardingModalProps {
@@ -194,7 +195,7 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
               ) : (
                 <div className="space-y-3">
                   <a
-                    href="http://localhost:4000/api/v1/auth/github"
+                    href={`${API_BASE_URL}/auth/github`}
                     className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-xs"
                   >
                     <Github className="w-4 h-4" />

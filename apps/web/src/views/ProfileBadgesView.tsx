@@ -15,6 +15,7 @@ import {
   Moon
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { API_BASE_URL } from '../lib/utils';
 import type { BadgeTheme } from '@streakforge/shared-types';
 
 export function ProfileBadgesView() {
@@ -23,13 +24,10 @@ export function ProfileBadgesView() {
   const [copiedMarkdown, setCopiedMarkdown] = useState<boolean>(false);
   const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
 
-  const username = user?.username || 'Thanniru-yaswanth03';
+  const username = user?.username || 'developer';
 
-  // Badge URL (points to API server)
-  const apiHost =
-    typeof window !== 'undefined'
-      ? `${window.location.protocol}//${window.location.hostname}:4000`
-      : 'http://localhost:4000';
+  // Badge URL (points to API server base)
+  const apiHost = API_BASE_URL.replace('/api/v1', '');
 
   const badgeUrl = `${apiHost}/api/v1/badge/streak.svg?user=${encodeURIComponent(username)}&theme=${selectedTheme}`;
   const markdownSnippet = `[![StreakForge Verified Progress](${badgeUrl})](https://github.com/${username})`;

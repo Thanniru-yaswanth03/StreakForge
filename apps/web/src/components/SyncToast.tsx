@@ -35,7 +35,7 @@ export function SyncToast() {
         try {
           const shortSha = data.commitSha ? data.commitSha.slice(0, 7) : 'verified';
           new Notification('StreakForge • Synced to GitHub!', {
-            body: `${data.title} (${data.language || 'solution'}) committed [${shortSha}] to ${data.repo || 'LeetCodeHustle'}`,
+            body: `${data.title} (${data.language || 'solution'}) committed [${shortSha}] to ${data.repo || 'Repository'}`,
             icon: '/favicon.ico'
           });
         } catch {
@@ -58,7 +58,7 @@ export function SyncToast() {
         showNotification(event.data.payload || {
           title: 'LeetCode Solution',
           language: 'python3',
-          repo: 'Thanniru-yaswanth03/LeetCodeHustle'
+          repo: 'Target Repository'
         });
       }
     };
@@ -83,7 +83,7 @@ export function SyncToast() {
   if (!toast) return null;
 
   const shortSha = toast.commitSha ? toast.commitSha.slice(0, 7) : 'verified';
-  const commitLink = toast.commitUrl || (toast.repo ? `https://github.com/${toast.repo}` : 'https://github.com/Thanniru-yaswanth03/LeetCodeHustle');
+  const commitLink = toast.commitUrl || (toast.repo ? `https://github.com/${toast.repo}` : '#');
 
   return (
     <div
@@ -141,7 +141,7 @@ export function SyncToast() {
         <div className="mt-2.5 pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-400">
           <div className="flex items-center gap-1.5 truncate max-w-[220px]">
             <GitCommit className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-            <span className="truncate">{toast.repo || 'Thanniru-yaswanth03/LeetCodeHustle'}</span>
+            <span className="truncate">{toast.repo || 'Repository'}</span>
           </div>
 
           <a

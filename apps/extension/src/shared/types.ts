@@ -98,6 +98,7 @@ export interface ExtensionConfig {
     avatarUrl: string;
   };
   leetcodeUsername?: string;
+  webAppUrl?: string;
 }
 
 export interface DuplicateRecord {

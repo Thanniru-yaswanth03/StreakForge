@@ -35,19 +35,19 @@ export function LeetCodeActivityView() {
 
   // Derive authentic scraped & archived counts
   const totalSubmissions = leetcodeStats?.totalSubmissions ?? (
-    submissions.length > 0 ? submissions.length : 98
+    submissions.length > 0 ? submissions.length : 0
   );
 
-  const totalSolved = leetcodeStats?.totalSolved ?? 30;
-  const easyCount = leetcodeStats?.easySolved ?? 28;
-  const mediumCount = leetcodeStats?.mediumSolved ?? 2;
+  const totalSolved = leetcodeStats?.totalSolved ?? (submissions.length > 0 ? submissions.length : 0);
+  const easyCount = leetcodeStats?.easySolved ?? 0;
+  const mediumCount = leetcodeStats?.mediumSolved ?? 0;
   const hardCount = leetcodeStats?.hardSolved ?? 0;
 
   const acceptanceRate = leetcodeStats?.acceptanceRate
     ? String(leetcodeStats.acceptanceRate)
     : totalSubmissions > 0
     ? ((totalSolved / totalSubmissions) * 100).toFixed(2)
-    : '79.59';
+    : '0.00';
 
   // Authentic algorithm & topic breakdown (mapped to user's 30 solved problems)
   const baseCategories = [

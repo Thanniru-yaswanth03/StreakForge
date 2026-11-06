@@ -28,12 +28,16 @@ export function PublicProfileView() {
   const [loading, setLoading] = useState<boolean>(true);
   const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
 
-  const username = user?.username || 'Thanniru-yaswanth03';
-  const publicUrl = typeof window !== 'undefined'
+  const username = user?.username || '';
+  const publicUrl = typeof window !== 'undefined' && username
     ? `${window.location.origin}/u/${username}`
-    : `https://streakforge.app/u/${username}`;
+    : `https://streakforge.app/u/${username || 'developer'}`;
 
   const fetchProfile = async () => {
+    if (!username) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await api.publicProfile.get(username);

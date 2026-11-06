@@ -256,7 +256,7 @@ export function GitHubActivityView() {
                     </button>
 
                     <a
-                      href={c.repo.includes('/') ? `https://github.com/${c.repo}/commit/${c.sha}` : `https://github.com/${user?.username || 'Thanniru-yaswanth03'}/${c.repo}/commit/${c.sha}`}
+                      href={c.repo.includes('/') ? `https://github.com/${c.repo}/commit/${c.sha}` : (user?.username ? `https://github.com/${user.username}/${c.repo}/commit/${c.sha}` : `https://github.com/search?q=${c.sha}`)}
                       target="_blank"
                       rel="noreferrer"
                       className="p-1.5 hover:bg-theme-elevated text-theme-muted hover:text-theme-accent rounded-md transition"
