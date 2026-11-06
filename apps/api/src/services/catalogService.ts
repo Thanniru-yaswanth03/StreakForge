@@ -40,22 +40,26 @@ export class CatalogService {
         const topics = master?.category ? [master.category] : ['Algorithms'];
         const language = sub.language || 'typescript';
 
-        // Derive solution path based on typical structure
-        const ext =
-          language === 'python3' || language === 'python'
-            ? 'py'
-            : language === 'javascript'
-            ? 'js'
-            : language === 'typescript'
-            ? 'ts'
-            : language === 'java'
-            ? 'java'
-            : language === 'cpp'
-            ? 'cpp'
-            : 'txt';
+        // Derive solution path: ALWAYS PREFER authentic filePath recorded on the submission
+        let solutionPath = sub.filePath;
+        if (!solutionPath) {
+          const ext =
+            language === 'python3' || language === 'python'
+              ? 'py'
+              : language === 'javascript'
+              ? 'js'
+              : language === 'typescript'
+              ? 'ts'
+              : language === 'java'
+              ? 'java'
+              : language === 'cpp'
+              ? 'cpp'
+              : 'txt';
 
-        const slug = sub.questionSlug || master?.slug || 'solution';
-        const solutionPath = `solutions/${difficulty}/${String(num).padStart(4, '0')}-${slug}/solution.${ext}`;
+          const slug = sub.questionSlug || master?.slug || 'solution';
+          solutionPath = `solutions/${difficulty}/${num}-${slug}/${slug}.${ext}`;
+        }
+
         const githubUrl = `https://github.com/${repoFullName}/blob/main/${solutionPath}`;
 
         itemMap.set(num, {
