@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ExternalLink,
   RotateCw,
@@ -24,10 +24,22 @@ import { useData } from '../context/DataContext';
 
 export function LeetCodeStatsCard() {
   const { user, leetcodeStats, refreshLeetCodeStats, isLoading } = useData();
+  const [mounted, setMounted] = useState(false);
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [customUsername, setCustomUsername] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hoveredCalDay, setHoveredCalDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const formatRank = (rankVal: any): string => {
+    if (!rankVal) return '3,777,525';
+    const num = Number(rankVal);
+    if (isNaN(num)) return '3,777,525';
+    return num.toLocaleString('en-US');
+  };
 
   // Authoritative user stats from MongoDB / LeetCode GraphQL
   const stats = leetcodeStats || user?.leetcodeStats;
@@ -260,10 +272,10 @@ export function LeetCodeStatsCard() {
                   {realName}
                 </div>
 
-                <div className="text-xs text-[#8b949e] mt-1.5 flex items-center gap-1.5">
+                <div className="text-xs text-[#8b949e] mt-1.5 flex items-center gap-1.5" suppressHydrationWarning>
                   <span>Rank</span>
                   <span className="font-bold text-[#f0f6fc] font-mono" suppressHydrationWarning>
-                    {ranking ? Number(ranking).toLocaleString('en-US') : '3,777,525'}
+                    {mounted ? formatRank(ranking) : '3,777,525'}
                   </span>
                 </div>
               </div>

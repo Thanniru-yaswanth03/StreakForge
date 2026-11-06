@@ -91,15 +91,11 @@ export class StudyService {
       }
 
       const status: StudyProblemStatus = progress?.status || 'NOT_STARTED';
-      if (status === 'SOLVED') solvedCount++;
-      else if (status === 'MASTERED') {
-        solvedCount++;
-        masteredCount++;
-      } else if (status === 'NEEDS_REVISION') {
-        needsRevisionCount++;
-      } else if (status === 'ATTEMPTED') {
-        attemptedCount++;
-      }
+      const isCountedAsSolved = status === 'SOLVED' || status === 'MASTERED' || status === 'NEEDS_REVISION';
+      if (isCountedAsSolved) solvedCount++;
+      if (status === 'MASTERED') masteredCount++;
+      if (status === 'NEEDS_REVISION') needsRevisionCount++;
+      if (status === 'ATTEMPTED') attemptedCount++;
 
       return {
         ...problem,
@@ -109,7 +105,7 @@ export class StudyService {
         easeFactor: progress?.easeFactor || 2.5,
         intervalDays: progress?.intervalDays || 1,
         lastReviewedAt: progress?.lastReviewedAt,
-        nextReviewDate: progress?.nextReviewDate || todayStr,
+        nextReviewDate: status === 'NEEDS_REVISION' ? todayStr : (progress?.nextReviewDate || todayStr),
         history: progress?.history || []
       };
     });
@@ -127,7 +123,7 @@ export class StudyService {
       topicStats[p.category].total++;
       if (diffStats[p.difficulty]) diffStats[p.difficulty].total++;
 
-      if (p.status === 'SOLVED' || p.status === 'MASTERED') {
+      if (p.status === 'SOLVED' || p.status === 'MASTERED' || p.status === 'NEEDS_REVISION') {
         topicStats[p.category].solved++;
         if (diffStats[p.difficulty]) diffStats[p.difficulty].solved++;
       }
@@ -356,9 +352,10 @@ export class StudyService {
     let totalSolved = 0;
 
     for (const item of allItems) {
+      const isCountedAsSolved = item.status === 'SOLVED' || item.status === 'MASTERED' || item.status === 'NEEDS_REVISION';
+      if (isCountedAsSolved) totalSolved++;
       if (item.status === 'MASTERED') totalMastered++;
-      else if (item.status === 'NEEDS_REVISION') totalNeedsRevision++;
-      else if (item.status === 'SOLVED') totalSolved++;
+      if (item.status === 'NEEDS_REVISION') totalNeedsRevision++;
 
       const mapped: StudyProgressItem = {
         id: item._id.toString(),
@@ -375,7 +372,7 @@ export class StudyService {
         easeFactor: item.easeFactor,
         intervalDays: item.intervalDays,
         lastReviewedAt: item.lastReviewedAt ? item.lastReviewedAt.toISOString() : undefined,
-        nextReviewDate: item.nextReviewDate,
+        nextReviewDate: item.status === 'NEEDS_REVISION' ? todayStr : item.nextReviewDate,
         history: (item.history || []).map((h: any) => ({
           reviewedAt: h.reviewedAt.toISOString(),
           rating: h.rating,
@@ -385,10 +382,12 @@ export class StudyService {
         updatedAt: item.updatedAt.toISOString()
       };
 
-      if (item.nextReviewDate < todayStr) {
-        overdue.push(mapped);
-      } else if (item.nextReviewDate === todayStr) {
-        dueToday.push(mapped);
+      if (item.status === 'NEEDS_REVISION' || item.nextReviewDate <= todayStr) {
+        if (item.nextReviewDate < todayStr && item.status !== 'NEEDS_REVISION') {
+          overdue.push(mapped);
+        } else {
+          dueToday.push(mapped);
+        }
       } else {
         upcoming.push(mapped);
       }

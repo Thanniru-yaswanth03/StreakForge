@@ -50,20 +50,95 @@ export function CurriculumView() {
   const handleStatusChange = async (slug: string, newStatus: StudyProblemStatus) => {
     try {
       setSavingSlug(slug);
-      await api.study.updateStatus(slug, newStatus);
-      // Update local state optimistically
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // Instant optimistic local state recalculation
       setCurriculumData((prev: any) => {
         if (!prev) return prev;
+        let solved = 0;
+        let mastered = 0;
+        let needsRevision = 0;
+        let attempted = 0;
+
+        const newDiffStats: Record<string, { total: number; solved: number }> = {
+          Easy: { total: 0, solved: 0 },
+          Medium: { total: 0, solved: 0 },
+          Hard: { total: 0, solved: 0 }
+        };
+
         const updatedProblems = prev.problems.map((p: any) => {
-          if (p.slug === slug) {
-            return { ...p, status: newStatus };
+          const isTarget = p.slug === slug;
+          const currentStatus = isTarget ? newStatus : p.status;
+
+          let nextReviewDate = p.nextReviewDate;
+          if (isTarget) {
+            if (newStatus === 'NEEDS_REVISION') {
+              nextReviewDate = todayStr;
+            } else if (newStatus === 'SOLVED') {
+              const d = new Date();
+              d.setDate(d.getDate() + 3);
+              nextReviewDate = d.toISOString().slice(0, 10);
+            } else if (newStatus === 'MASTERED') {
+              const d = new Date();
+              d.setDate(d.getDate() + 30);
+              nextReviewDate = d.toISOString().slice(0, 10);
+            }
+          }
+
+          const isSolved =
+            currentStatus === 'SOLVED' ||
+            currentStatus === 'MASTERED' ||
+            currentStatus === 'NEEDS_REVISION';
+
+          if (isSolved) {
+            solved++;
+            if (newDiffStats[p.difficulty]) newDiffStats[p.difficulty].solved++;
+          }
+          if (currentStatus === 'MASTERED') mastered++;
+          if (currentStatus === 'NEEDS_REVISION') needsRevision++;
+          if (currentStatus === 'ATTEMPTED') attempted++;
+
+          if (newDiffStats[p.difficulty]) newDiffStats[p.difficulty].total++;
+
+          if (isTarget) {
+            return {
+              ...p,
+              status: newStatus,
+              nextReviewDate,
+              repetitionLevel:
+                newStatus === 'MASTERED'
+                  ? Math.max(p.repetitionLevel || 0, 5)
+                  : p.repetitionLevel || 1
+            };
           }
           return p;
         });
-        return { ...prev, problems: updatedProblems };
+
+        const completionPercent = Math.round((solved / (updatedProblems.length || 1)) * 100);
+
+        return {
+          ...prev,
+          problems: updatedProblems,
+          solvedCount: solved,
+          masteredCount: mastered,
+          needsRevisionCount: needsRevision,
+          attemptedCount: attempted,
+          completionPercent,
+          diffStats: newDiffStats
+        };
       });
+
+      // Persist to backend API
+      await api.study.updateStatus(slug, newStatus);
+
+      // Reconcile with authoritative server state
+      const fresh = await api.study.getCurriculum(activeTrack);
+      if (fresh) {
+        setCurriculumData(fresh);
+      }
     } catch (err) {
       console.error('Failed updating status:', err);
+      fetchTrack(activeTrack);
     } finally {
       setSavingSlug(null);
     }
