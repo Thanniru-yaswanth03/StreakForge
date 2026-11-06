@@ -810,3 +810,4 @@ var ${methodName} = function() {
       return `# Write your solution for ${title} here\ndef solution():\n    pass\n`;
   }
 }
+

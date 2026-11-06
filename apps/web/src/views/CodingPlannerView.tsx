@@ -29,6 +29,28 @@ const DAYS_OF_WEEK = [
   'Sunday'
 ];
 
+const DEFAULT_DAY_ROUTINES: Record<string, { topics: string[]; target: number; revision: number }> = {
+  Monday: { topics: ['Arrays & Two Pointers'], target: 2, revision: 25 },
+  Tuesday: { topics: ['Sliding Window & Binary Search'], target: 2, revision: 25 },
+  Wednesday: { topics: ['Linked Lists & Trees'], target: 2, revision: 25 },
+  Thursday: { topics: ['Graphs & BFS/DFS'], target: 2, revision: 25 },
+  Friday: { topics: ['Dynamic Programming & Greedy'], target: 2, revision: 25 },
+  Saturday: { topics: ['Weakness Revisions & Mock Arena'], target: 3, revision: 30 },
+  Sunday: { topics: ['Weekly Review & Knowledge Vault'], target: 1, revision: 20 }
+};
+
+const SUGGESTED_TOPICS = [
+  'Arrays & Two Pointers',
+  'Sliding Window',
+  'Binary Search',
+  'Linked Lists',
+  'Trees & Tree Traversal',
+  'Graphs & BFS/DFS',
+  'Dynamic Programming',
+  'Stack & Queue',
+  'Weakness Revisions'
+];
+
 export function CodingPlannerView() {
   const [planner, setPlanner] = useState<CodingGoal | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -39,7 +61,9 @@ export function CodingPlannerView() {
   const [selectedDay, setSelectedDay] = useState<string>('Monday');
   const [newRoutineTopic, setNewRoutineTopic] = useState<string>('');
   const [newRoutineTarget, setNewRoutineTarget] = useState<number>(2);
-  const [newRoutineRevision, setNewRoutineRevision] = useState<number>(30);
+  const [newRoutineRevision, setNewRoutineRevision] = useState<number>(25);
+  const [isAddingRoutine, setIsAddingRoutine] = useState<boolean>(false);
+  const [isRestoringSchedule, setIsRestoringSchedule] = useState<boolean>(false);
 
   const fetchPlanner = async () => {
     try {
@@ -66,8 +90,10 @@ export function CodingPlannerView() {
   const handleSaveTargets = async () => {
     try {
       setSavingTargets(true);
+      const easy = Math.max(0, Math.floor(dailyInput * 0.4));
+      const medium = Math.max(1, dailyInput - easy);
       const res = await api.planner.updateTargets(
-        { easy: 1, medium: Math.max(1, dailyInput - 1), hard: 0, revisionMinutes: 30 },
+        { easy, medium, hard: 0, revisionMinutes: 25 },
         weeklyInput
       );
       const data = (res as any)?.data ?? res;
@@ -82,16 +108,24 @@ export function CodingPlannerView() {
     }
   };
 
-  const handleAddRoutine = async () => {
-    if (!planner || !newRoutineTopic.trim()) return;
+  const handleAddRoutine = async (customTopic?: string, customTarget?: number, customDay?: string) => {
+    if (!planner) return;
+    const targetDay = customDay || selectedDay;
+    const topic = (customTopic || newRoutineTopic).trim() || DEFAULT_DAY_ROUTINES[targetDay]?.topics.join(', ') || 'Arrays & Hashing';
+    const targetCount = customTarget ?? (Number(newRoutineTarget) || 2);
+    const revisionMinutes = Number(newRoutineRevision) || 25;
+
+    setIsAddingRoutine(true);
     const currentRoutines = [...(planner.studyRoutines || [])];
-    const dayIndex = currentRoutines.findIndex((r) => r.dayOfWeek.toLowerCase() === selectedDay.toLowerCase());
+    const dayIndex = currentRoutines.findIndex(
+      (r) => r.dayOfWeek.toLowerCase() === targetDay.toLowerCase()
+    );
 
     const newItem: RoutineItem = {
-      dayOfWeek: selectedDay,
-      focusTopics: [newRoutineTopic.trim()],
-      targetCount: Number(newRoutineTarget) || 2,
-      revisionMinutes: Number(newRoutineRevision) || 30
+      dayOfWeek: targetDay,
+      focusTopics: [topic],
+      targetCount,
+      revisionMinutes
     };
 
     if (dayIndex >= 0) {
@@ -100,15 +134,55 @@ export function CodingPlannerView() {
       currentRoutines.push(newItem);
     }
 
+    // Optimistic local update
+    setPlanner({
+      ...planner,
+      studyRoutines: currentRoutines
+    });
+
     try {
       const res = await api.planner.updateRoutines(currentRoutines);
       const data = (res as any)?.data ?? res;
       if (data) {
         setPlanner(data);
-        setNewRoutineTopic('');
       }
+      setNewRoutineTopic('');
     } catch (err) {
       console.error('Failed to add routine:', err);
+    } finally {
+      setIsAddingRoutine(false);
+    }
+  };
+
+  const handleRestoreFullSchedule = async () => {
+    if (!planner) return;
+    setIsRestoringSchedule(true);
+    const fullRoutines: RoutineItem[] = DAYS_OF_WEEK.map((day) => {
+      const existing = (planner.studyRoutines || []).find(
+        (r) => r.dayOfWeek.toLowerCase() === day.toLowerCase()
+      );
+      if (existing) return existing;
+      const def = DEFAULT_DAY_ROUTINES[day];
+      return {
+        dayOfWeek: day,
+        focusTopics: def.topics,
+        targetCount: def.target,
+        revisionMinutes: def.revision
+      };
+    });
+
+    setPlanner({ ...planner, studyRoutines: fullRoutines });
+
+    try {
+      const res = await api.planner.updateRoutines(fullRoutines);
+      const data = (res as any)?.data ?? res;
+      if (data) {
+        setPlanner(data);
+      }
+    } catch (err) {
+      console.error('Failed to restore schedule:', err);
+    } finally {
+      setIsRestoringSchedule(false);
     }
   };
 
@@ -339,113 +413,227 @@ export function CodingPlannerView() {
             </p>
           </div>
 
-          {/* Day selection tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full">
-            {DAYS_OF_WEEK.map((day) => (
-              <button
-                key={day}
-                onClick={() => setSelectedDay(day)}
-                className={`px-3 py-1 text-xs rounded-md font-medium transition whitespace-nowrap ${
-                  selectedDay.toLowerCase() === day.toLowerCase()
-                    ? 'bg-[#388bfd] text-white shadow-sm'
-                    : 'text-[#8b949e] hover:text-[#f0f6fc] hover:bg-[#21262d]'
-                }`}
-              >
-                {day.substring(0, 3)}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRestoreFullSchedule}
+              disabled={isRestoringSchedule}
+              className="text-xs px-2.5 py-1.5 bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] hover:text-white border border-[#30363d] rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+              title="Populate recommended topics for all 7 days"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#e3b341]" />
+              <span>{isRestoringSchedule ? 'Restoring...' : 'Restore 7-Day Schedule'}</span>
+            </button>
+
+            {/* Day selection tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-full">
+              {DAYS_OF_WEEK.map((day) => {
+                const hasRoutine = (planner?.studyRoutines || []).some(
+                  (r) => r.dayOfWeek.toLowerCase() === day.toLowerCase()
+                );
+                const isSelected = selectedDay.toLowerCase() === day.toLowerCase();
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setSelectedDay(day)}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#388bfd] text-white shadow-sm font-semibold'
+                        : 'text-[#8b949e] hover:text-[#f0f6fc] hover:bg-[#21262d]'
+                    }`}
+                  >
+                    <span>{day.substring(0, 3)}</span>
+                    {hasRoutine && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isSelected ? 'bg-white' : 'bg-[#3fb950]'
+                        }`}
+                        title="Routine configured"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {/* Selected Day Routine Items */}
-        <div className="space-y-3">
+        <div className="space-y-4">
           {(() => {
             const dayRoutine = (planner?.studyRoutines || []).find(
               (r) => r.dayOfWeek.toLowerCase() === selectedDay.toLowerCase()
             );
 
             if (!dayRoutine) {
+              const defaultTopic = DEFAULT_DAY_ROUTINES[selectedDay]?.topics.join(', ') || 'Arrays & Hashing';
+              const defaultTarget = DEFAULT_DAY_ROUTINES[selectedDay]?.target || 2;
+
               return (
-                <div className="text-center py-8 border border-dashed border-[#30363d] rounded-lg">
-                  <p className="text-xs text-[#8b949e]">
-                    No study routine configured for {selectedDay}. Add a target topic below.
-                  </p>
+                <div className="text-center py-7 border border-dashed border-[#30363d] rounded-xl p-6 bg-[#0d1117]/40 space-y-3">
+                  <div className="w-10 h-10 rounded-full bg-[#161b22] border border-[#30363d] flex items-center justify-center mx-auto text-[#58a6ff]">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#f0f6fc]">
+                      No study routine configured for {selectedDay}
+                    </h4>
+                    <p className="text-xs text-[#8b949e] mt-1 max-w-md mx-auto">
+                      Lock in your focus topic and target problems to keep consistency high.
+                    </p>
+                  </div>
+                  <div className="pt-1 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddRoutine(defaultTopic, defaultTarget, selectedDay)}
+                      disabled={isAddingRoutine}
+                      className="px-4 py-2 bg-[#238636] hover:bg-[#2ea043] text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Add Recommended {selectedDay} Routine ({defaultTopic})</span>
+                    </button>
+                  </div>
                 </div>
               );
             }
 
             return (
               <div
-                className="flex items-center justify-between p-3.5 rounded-lg border border-[#30363d]/80 bg-[#0d1117] hover:border-[#58a6ff]/40 transition"
+                className="flex items-center justify-between p-4 rounded-xl border border-[#30363d] bg-[#0d1117] hover:border-[#58a6ff]/40 transition"
               >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded bg-[#21262d] text-[#58a6ff]">
-                    <BookOpen className="w-4 h-4" />
+                <div className="flex items-center gap-3.5">
+                  <div className="p-2.5 rounded-lg bg-[#21262d] text-[#58a6ff] border border-[#30363d]">
+                    <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-[#f0f6fc]">
+                    <div className="text-sm font-bold text-[#f0f6fc]">
                       {(dayRoutine.focusTopics || []).join(', ') || 'General DSA'}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-[#8b949e] mt-0.5">
-                      <span className="flex items-center gap-1">
-                        <Target className="w-3 h-3 text-[#3fb950]" />
+                    <div className="flex items-center gap-3 text-xs text-[#8b949e] mt-1">
+                      <span className="flex items-center gap-1.5 font-medium text-[#c9d1d9]">
+                        <Target className="w-3.5 h-3.5 text-[#3fb950]" />
                         {dayRoutine.targetCount} problems
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-[#f0883e]" />
-                        {dayRoutine.revisionMinutes}m SRS revision
+                      <span className="text-[#30363d]">&bull;</span>
+                      <span className="flex items-center gap-1.5 font-medium text-[#c9d1d9]">
+                        <Clock className="w-3.5 h-3.5 text-[#f0883e]" />
+                        {dayRoutine.revisionMinutes}m SRS review
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleRemoveRoutineItem(selectedDay)}
-                  className="text-xs text-[#8b949e] hover:text-[#f85149] px-2 py-1 rounded hover:bg-[#21262d] transition"
-                  title="Remove routine item"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewRoutineTopic((dayRoutine.focusTopics || []).join(', '));
+                      setNewRoutineTarget(dayRoutine.targetCount || 2);
+                      setNewRoutineRevision(dayRoutine.revisionMinutes || 25);
+                    }}
+                    className="text-xs text-[#8b949e] hover:text-[#58a6ff] px-2.5 py-1.5 rounded-lg hover:bg-[#21262d] border border-transparent hover:border-[#30363d] transition cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveRoutineItem(selectedDay)}
+                    className="text-xs text-[#8b949e] hover:text-[#f85149] px-2.5 py-1.5 rounded-lg hover:bg-[#21262d] border border-transparent hover:border-[#da3633]/30 transition cursor-pointer"
+                    title="Remove routine item"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             );
           })()}
 
-          {/* Add New Routine Form */}
-          <div className="mt-4 pt-4 border-t border-[#30363d]/50 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold text-[#8b949e] mb-1">
-                Target Topic / Pattern
-              </label>
-              <input
-                type="text"
-                value={newRoutineTopic}
-                onChange={(e) => setNewRoutineTopic(e.target.value)}
-                placeholder="e.g. Sliding Window & Two Pointers"
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
-              />
+          {/* Add / Update Routine Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddRoutine();
+            }}
+            className="mt-5 pt-4 border-t border-[#30363d]/60 space-y-3"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold text-[#8b949e] mb-1">
+                  Target Topic / Pattern
+                </label>
+                <input
+                  type="text"
+                  value={newRoutineTopic}
+                  onChange={(e) => setNewRoutineTopic(e.target.value)}
+                  placeholder={`e.g. ${DEFAULT_DAY_ROUTINES[selectedDay]?.topics.join(', ') || 'Sliding Window & Two Pointers'}`}
+                  className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#8b949e] mb-1">
+                  Problems Target
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={newRoutineTarget}
+                  onChange={(e) => setNewRoutineTarget(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#8b949e] mb-1">
+                  Revision (Mins)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="120"
+                  step="5"
+                  value={newRoutineRevision}
+                  onChange={(e) => setNewRoutineRevision(parseInt(e.target.value) || 15)}
+                  className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isAddingRoutine}
+                className="w-full py-2 bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] hover:text-white border border-[#30363d] rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                {isAddingRoutine ? (
+                  <>
+                    <RotateCw className="w-3.5 h-3.5 text-[#58a6ff] animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-3.5 h-3.5 text-[#58a6ff]" />
+                    <span>Save {selectedDay} Routine</span>
+                  </>
+                )}
+              </button>
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-[#8b949e] mb-1">
-                Problems Target
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={newRoutineTarget}
-                onChange={(e) => setNewRoutineTarget(parseInt(e.target.value) || 1)}
-                className="w-full px-3 py-1.5 bg-[#0d1117] border border-[#30363d] rounded-lg text-xs text-[#f0f6fc] focus:outline-none focus:border-[#58a6ff]"
-              />
+
+            {/* Quick Topic Chips */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] text-[#8b949e] font-mono mr-1">Quick Select:</span>
+              {SUGGESTED_TOPICS.map((topic) => (
+                <button
+                  key={topic}
+                  type="button"
+                  onClick={() => setNewRoutineTopic(topic)}
+                  className="px-2 py-0.5 rounded bg-[#0d1117] hover:bg-[#21262d] border border-[#30363d] hover:border-[#58a6ff]/50 text-[10px] text-[#8b949e] hover:text-[#58a6ff] transition cursor-pointer"
+                >
+                  + {topic}
+                </button>
+              ))}
             </div>
-            <button
-              onClick={handleAddRoutine}
-              disabled={!newRoutineTopic.trim()}
-              className="w-full py-2 bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] hover:text-white border border-[#30363d] rounded-lg text-xs font-medium transition flex items-center justify-center gap-1.5 disabled:opacity-50"
-            >
-              <Plus className="w-3.5 h-3.5 text-[#58a6ff]" />
-              Add to {selectedDay}
-            </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
