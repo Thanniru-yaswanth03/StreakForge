@@ -258,19 +258,19 @@ export function MockInterviewView() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-xl border border-[#30363d] bg-[#161b22]/70 backdrop-blur-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-xl border border-theme-border bg-theme-surface shadow-xs">
         <div className="flex items-start gap-3.5">
-          <div className="p-2.5 rounded-lg bg-[#f0883e]/10 text-[#f0883e] border border-[#f0883e]/20">
+          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
             <Timer className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-[#f0f6fc]">Mock Interview Practice Arena</h1>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0883e]/10 text-[#f0883e] border border-[#f0883e]/25 font-mono">
+              <h1 className="text-xl font-bold text-theme-primary">Mock Interview Practice Arena</h1>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 font-mono">
                 Real-Time Simulation
               </span>
             </div>
-            <p className="text-xs text-[#8b949e] mt-1">
+            <p className="text-xs text-theme-muted mt-1">
               Simulate rigorous real-world technical interviews with strict time limits, realistic problem sets, and post-session performance grading.
             </p>
           </div>
@@ -278,16 +278,16 @@ export function MockInterviewView() {
 
         {activeSession?.status === 'IN_PROGRESS' && (
           <div className="flex items-center gap-3">
-            <div className="px-3.5 py-1.5 rounded-lg bg-[#0d1117] border border-[#f0883e]/50 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#f0883e] animate-pulse" />
-              <span className="text-base font-extrabold text-[#f0f6fc] font-mono">
+            <div className="px-3.5 py-1.5 rounded-lg bg-theme-elevated border border-amber-500/50 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-500 animate-pulse" />
+              <span className="text-base font-extrabold text-theme-primary font-mono">
                 {formatTimer(secondsRemaining)}
               </span>
             </div>
             <button
               onClick={handleSubmitSession}
               disabled={completing}
-              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#238636] hover:bg-[#2ea043] rounded-lg transition"
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition"
             >
               {completing ? 'Submitting...' : 'End & Grade Session'}
             </button>
@@ -300,37 +300,37 @@ export function MockInterviewView() {
         <div className="space-y-6">
           {/* If there is a just-completed session, show summary card */}
           {activeSession && activeSession.status === 'COMPLETED' && (
-            <div className="p-6 rounded-xl border border-[#30363d] bg-[#161b22]/60 relative overflow-hidden">
-              <div className="flex items-center justify-between pb-4 border-b border-[#30363d]">
+            <div className="p-6 rounded-xl border border-theme-border bg-theme-surface shadow-xs relative overflow-hidden">
+              <div className="flex items-center justify-between pb-4 border-b border-theme-border">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#3fb950]/30">
+                  <div className="p-3 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                     <Award className="w-6 h-6" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-[#f0f6fc]">
+                    <h2 className="text-lg font-bold text-theme-primary">
                       Interview Session Completed
                     </h2>
-                    <p className="text-xs text-[#8b949e]">
+                    <p className="text-xs text-theme-muted">
                       Track: {activeSession.track} &bull; Difficulty: {activeSession.difficulty}
                     </p>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-3xl font-extrabold text-[#3fb950] font-mono">
+                  <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
                     {activeSession.scorePercent}%
                   </span>
-                  <div className="text-xs text-[#8b949e]">
+                  <div className="text-xs text-theme-muted">
                     Time spent: {Math.round((activeSession.timeSpentSeconds || 0) / 60)} min
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 p-4 rounded-lg bg-[#0d1117] border border-[#30363d]/60">
-                <span className="text-xs font-semibold text-[#58a6ff] block mb-1">
+              <div className="mt-4 p-4 rounded-lg bg-theme-elevated border border-theme-border">
+                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 block mb-1">
                   Interviewer Assessment:
                 </span>
-                <p className="text-xs text-[#c9d1d9] leading-relaxed">
+                <p className="text-xs text-theme-secondary leading-relaxed">
                   {activeSession.feedback}
                 </p>
               </div>
@@ -338,7 +338,7 @@ export function MockInterviewView() {
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setActiveSession(null)}
-                  className="px-4 py-1.5 text-xs font-medium text-[#c9d1d9] bg-[#21262d] hover:bg-[#30363d] rounded-lg transition"
+                  className="px-4 py-1.5 text-xs font-medium text-theme-secondary hover:text-theme-primary bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded-lg transition"
                 >
                   Start Another Session
                 </button>
@@ -351,23 +351,23 @@ export function MockInterviewView() {
             {/* EASY */}
             <div
               onClick={() => setSelectedDifficulty('EASY')}
-              className={`p-5 rounded-xl border cursor-pointer transition ${
+              className={`p-5 rounded-xl border cursor-pointer transition shadow-xs ${
                 selectedDifficulty === 'EASY'
-                  ? 'border-[#3fb950] bg-[#161b22]'
-                  : 'border-[#30363d] bg-[#161b22]/40 hover:border-[#30363d]/80'
+                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-theme-surface'
+                  : 'border-theme-border bg-theme-surface hover:border-theme-border-strong'
               }`}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-[#3fb950] uppercase tracking-wider">
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
                   Warmup Session
                 </span>
-                <span className="text-xs text-[#8b949e] font-mono">30 Min</span>
+                <span className="text-xs text-theme-muted font-mono">30 Min</span>
               </div>
-              <h3 className="text-base font-bold text-[#f0f6fc] mb-1">Easy Difficulty</h3>
-              <p className="text-xs text-[#8b949e] leading-relaxed mb-4">
+              <h3 className="text-base font-bold text-theme-primary mb-1">Easy Difficulty</h3>
+              <p className="text-xs text-theme-muted leading-relaxed mb-4">
                 1 algorithmic problem focusing on fundamental data structures, array traversal, and two pointers.
               </p>
-              <div className="text-[11px] text-[#3fb950] font-medium flex items-center gap-1">
+              <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Ideal for daily momentum
               </div>
             </div>
@@ -375,23 +375,23 @@ export function MockInterviewView() {
             {/* MEDIUM */}
             <div
               onClick={() => setSelectedDifficulty('MEDIUM')}
-              className={`p-5 rounded-xl border cursor-pointer transition ${
+              className={`p-5 rounded-xl border cursor-pointer transition shadow-xs ${
                 selectedDifficulty === 'MEDIUM'
-                  ? 'border-[#f0883e] bg-[#161b22]'
-                  : 'border-[#30363d] bg-[#161b22]/40 hover:border-[#30363d]/80'
+                  ? 'border-amber-500 ring-2 ring-amber-500/20 bg-theme-surface'
+                  : 'border-theme-border bg-theme-surface hover:border-theme-border-strong'
               }`}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-[#f0883e] uppercase tracking-wider">
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
                   Industry Standard
                 </span>
-                <span className="text-xs text-[#8b949e] font-mono">45 Min</span>
+                <span className="text-xs text-theme-muted font-mono">45 Min</span>
               </div>
-              <h3 className="text-base font-bold text-[#f0f6fc] mb-1">Medium Difficulty</h3>
-              <p className="text-xs text-[#8b949e] leading-relaxed mb-4">
+              <h3 className="text-base font-bold text-theme-primary mb-1">Medium Difficulty</h3>
+              <p className="text-xs text-theme-muted leading-relaxed mb-4">
                 2 paired problems reflecting typical FAANG/Tier-1 screening rounds (BFS, Sliding Window, DP).
               </p>
-              <div className="text-[11px] text-[#f0883e] font-medium flex items-center gap-1">
+              <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
                 <Zap className="w-3.5 h-3.5" /> High Signal Interview Match
               </div>
             </div>
@@ -399,41 +399,41 @@ export function MockInterviewView() {
             {/* HARD */}
             <div
               onClick={() => setSelectedDifficulty('HARD')}
-              className={`p-5 rounded-xl border cursor-pointer transition ${
+              className={`p-5 rounded-xl border cursor-pointer transition shadow-xs ${
                 selectedDifficulty === 'HARD'
-                  ? 'border-[#f85149] bg-[#161b22]'
-                  : 'border-[#30363d] bg-[#161b22]/40 hover:border-[#30363d]/80'
+                  ? 'border-rose-500 ring-2 ring-rose-500/20 bg-theme-surface'
+                  : 'border-theme-border bg-theme-surface hover:border-theme-border-strong'
               }`}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-[#f85149] uppercase tracking-wider">
+                <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
                   Senior / Staff
                 </span>
-                <span className="text-xs text-[#8b949e] font-mono">60 Min</span>
+                <span className="text-xs text-theme-muted font-mono">60 Min</span>
               </div>
-              <h3 className="text-base font-bold text-[#f0f6fc] mb-1">Hard Difficulty</h3>
-              <p className="text-xs text-[#8b949e] leading-relaxed mb-4">
+              <h3 className="text-base font-bold text-theme-primary mb-1">Hard Difficulty</h3>
+              <p className="text-xs text-theme-muted leading-relaxed mb-4">
                 2 complex problems testing topological sorting, monotonic queues, and multi-dimensional dynamic programming.
               </p>
-              <div className="text-[11px] text-[#f85149] font-medium flex items-center gap-1">
+              <div className="text-[11px] text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1">
                 <Terminal className="w-3.5 h-3.5" /> Advanced Engineering Test
               </div>
             </div>
           </div>
 
           {/* Track selector & Launch button */}
-          <div className="p-5 rounded-xl border border-[#30363d] bg-[#161b22]/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="p-5 rounded-xl border border-theme-border bg-theme-surface shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-[#8b949e]">Select Problem Pool:</span>
+              <span className="text-xs font-semibold text-theme-muted">Select Problem Pool:</span>
               <div className="flex items-center gap-1">
                 {['Blind 75', 'NeetCode 150', 'Top Interview 150'].map((track) => (
                   <button
                     key={track}
                     onClick={() => setSelectedTrack(track)}
-                    className={`px-3 py-1 text-xs rounded-md font-medium transition ${
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition cursor-pointer ${
                       selectedTrack === track
-                        ? 'bg-[#21262d] text-[#58a6ff] border border-[#58a6ff]/30'
-                        : 'text-[#8b949e] hover:text-[#c9d1d9]'
+                        ? 'bg-theme-elevated text-blue-600 dark:text-blue-400 border border-blue-500/30 font-semibold shadow-xs'
+                        : 'text-theme-muted hover:text-theme-primary hover:bg-theme-elevated/50'
                     }`}
                   >
                     {track}
@@ -445,7 +445,7 @@ export function MockInterviewView() {
             <button
               onClick={handleStartInterview}
               disabled={starting}
-              className="px-6 py-2.5 text-xs font-bold text-white bg-[#238636] hover:bg-[#2ea043] rounded-lg transition flex items-center gap-2 shadow-sm disabled:opacity-50"
+              className="px-6 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition flex items-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
             >
               <Play className="w-4 h-4 fill-white" />
               {starting ? 'Configuring Session...' : `Start ${selectedDifficulty} Interview`}
@@ -453,13 +453,13 @@ export function MockInterviewView() {
           </div>
 
           {/* Past Sessions History Table */}
-          <div className="rounded-xl border border-[#30363d] bg-[#161b22]/50 p-5">
-            <h3 className="text-sm font-bold text-[#f0f6fc] mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#58a6ff]" />
+          <div className="rounded-xl border border-theme-border bg-theme-surface shadow-xs p-5">
+            <h3 className="text-sm font-bold text-theme-primary mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-500" />
               Recent Interview History
             </h3>
             {sessions.length === 0 ? (
-              <p className="text-xs text-[#8b949e] py-4 text-center">
+              <p className="text-xs text-theme-muted py-4 text-center">
                 No past interview sessions logged yet. Complete your first timed session above!
               </p>
             ) : (
@@ -467,31 +467,31 @@ export function MockInterviewView() {
                 {sessions.map((sess) => (
                   <div
                     key={sess.id}
-                    className="p-3 rounded-lg border border-[#30363d]/60 bg-[#0d1117] flex items-center justify-between"
+                    className="p-3 rounded-lg border border-theme-border bg-theme-elevated flex items-center justify-between"
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-[#f0f6fc]">
+                        <span className="text-xs font-semibold text-theme-primary">
                           {sess.track} &bull; {sess.difficulty}
                         </span>
                         <span
                           className={`text-[10px] px-2 py-0.2 rounded-full font-mono ${
                             sess.scorePercent === 100
-                              ? 'text-[#3fb950] bg-[#238636]/15'
+                              ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/15'
                               : sess.scorePercent >= 50
-                              ? 'text-[#f0883e] bg-[#f0883e]/15'
-                              : 'text-[#f85149] bg-[#da3633]/15'
+                              ? 'text-amber-600 dark:text-amber-400 bg-amber-500/15'
+                              : 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
                           }`}
                         >
                           Score: {sess.scorePercent}%
                         </span>
                       </div>
-                      <div className="text-[11px] text-[#8b949e] mt-0.5">
+                      <div className="text-[11px] text-theme-muted mt-0.5">
                         {sess.problems.length} problems &bull; {Math.round(sess.timeSpentSeconds / 60)} min spent &bull; {new Date(sess.startedAt).toLocaleDateString()}
                       </div>
                     </div>
 
-                    <div className="text-xs text-[#8b949e] font-mono">
+                    <div className="text-xs text-theme-muted font-mono">
                       {sess.problems.filter((p) => p.solved).length}/{sess.problems.length} Solved
                     </div>
                   </div>
@@ -506,7 +506,7 @@ export function MockInterviewView() {
           {/* Left Column: Problem Details & Problem Tabs */}
           <div className="lg:col-span-6 space-y-4">
             {/* Problem Navigation Tabs */}
-            <div className="flex items-center gap-2 pb-2 border-b border-[#30363d]">
+            <div className="flex items-center gap-2 pb-2 border-b border-theme-border">
               {activeSession.problems.map((p, idx) => {
                 const isSelected = currentProblemIdx === idx;
                 const isSolved = Boolean(problemSolvedState[p.slug]);
@@ -514,14 +514,14 @@ export function MockInterviewView() {
                   <button
                     key={p.slug}
                     onClick={() => handleSelectProblem(idx)}
-                    className={`px-3 py-1.5 text-xs rounded-lg font-medium transition flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 text-xs rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
                       isSelected
-                        ? 'bg-[#21262d] text-[#58a6ff] border border-[#58a6ff]/30'
-                        : 'text-[#8b949e] hover:text-[#c9d1d9]'
+                        ? 'bg-theme-elevated text-blue-600 dark:text-blue-400 border border-blue-500/30 font-semibold shadow-xs'
+                        : 'text-theme-muted hover:text-theme-primary'
                     }`}
                   >
                     <span>Problem {idx + 1}</span>
-                    {isSolved && <CheckCircle2 className="w-3.5 h-3.5 text-[#3fb950]" />}
+                    {isSolved && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                   </button>
                 );
               })}
@@ -534,36 +534,36 @@ export function MockInterviewView() {
               const isSolved = Boolean(problemSolvedState[currentProb.slug]);
 
               return (
-                <div className="p-5 rounded-xl border border-[#30363d] bg-[#161b22]/50 space-y-4">
+                <div className="p-5 rounded-xl border border-theme-border bg-theme-surface shadow-xs space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h2 className="text-base font-bold text-[#f0f6fc]">
+                        <h2 className="text-base font-bold text-theme-primary">
                           {currentProb.title}
                         </h2>
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded font-mono ${
                             currentProb.difficulty === 'Easy'
-                              ? 'text-[#3fb950] bg-[#238636]/15'
+                              ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/15'
                               : currentProb.difficulty === 'Medium'
-                              ? 'text-[#f0883e] bg-[#f0883e]/15'
-                              : 'text-[#f85149] bg-[#da3633]/15'
+                              ? 'text-amber-600 dark:text-amber-400 bg-amber-500/15'
+                              : 'text-rose-600 dark:text-rose-400 bg-rose-500/15'
                           }`}
                         >
                           {currentProb.difficulty}
                         </span>
                       </div>
-                      <span className="text-xs text-[#8b949e] font-mono">
+                      <span className="text-xs text-theme-muted font-mono">
                         Question #{currentProb.id || (currentProblemIdx + 1)}
                       </span>
                     </div>
 
                     <button
                       onClick={() => handleToggleSolved(currentProb.slug)}
-                      className={`px-3 py-1 text-xs rounded-lg font-semibold transition flex items-center gap-1.5 ${
+                      className={`px-3 py-1 text-xs rounded-lg font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                         isSolved
-                          ? 'bg-[#238636] text-white'
-                          : 'bg-[#21262d] text-[#c9d1d9] hover:bg-[#30363d] border border-[#30363d]'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-theme-elevated text-theme-secondary hover:text-theme-primary hover:bg-theme-surface border border-theme-border'
                       }`}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -571,15 +571,15 @@ export function MockInterviewView() {
                     </button>
                   </div>
 
-                  <div className="p-4 rounded-lg bg-[#0d1117] border border-[#30363d]/60 text-xs text-[#c9d1d9] leading-relaxed">
-                    <p className="font-semibold text-[#f0f6fc] mb-1.5">
+                  <div className="p-4 rounded-lg bg-theme-elevated border border-theme-border text-xs text-theme-secondary leading-relaxed">
+                    <p className="font-semibold text-theme-primary mb-1.5">
                       Interview Task:
                     </p>
                     <p className="mb-3">
                       Design an optimal algorithm to solve &ldquo;{currentProb.title}&rdquo; within time constraints. Explain your time and space complexity trade-offs clearly.
                     </p>
-                    <div className="pt-2 border-t border-[#30363d]/40 flex items-center gap-2 text-[11px] text-[#8b949e]">
-                      <HelpCircle className="w-3.5 h-3.5 text-[#58a6ff]" />
+                    <div className="pt-2 border-t border-theme-border flex items-center gap-2 text-[11px] text-theme-muted">
+                      <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
                       <span>Aim for optimal Big-O: Avoid quadratic iterations where linear or logarithmic algorithms apply.</span>
                     </div>
                   </div>
@@ -589,7 +589,7 @@ export function MockInterviewView() {
                       href={`https://leetcode.com/problems/${currentProb.slug}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-xs text-[#58a6ff] hover:underline flex items-center gap-1"
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
                     >
                       <ExternalLink className="w-3 h-3" />
                       View Full LeetCode Problem Spec
@@ -602,10 +602,10 @@ export function MockInterviewView() {
 
           {/* Right Column: Code Scratchpad & Solution Notes */}
           <div className="lg:col-span-6 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[#30363d]">
+            <div className="flex items-center justify-between pb-2 border-b border-theme-border">
               <div className="flex items-center gap-2">
-                <Code className="w-4 h-4 text-[#58a6ff]" />
-                <span className="text-xs font-semibold text-[#f0f6fc]">
+                <Code className="w-4 h-4 text-blue-500" />
+                <span className="text-xs font-semibold text-theme-primary">
                   Solution Scratchpad
                 </span>
               </div>
@@ -614,7 +614,7 @@ export function MockInterviewView() {
                   type="button"
                   onClick={handleResetBoilerplate}
                   title="Reset code to fresh language starter boilerplate"
-                  className="px-2 py-1 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded text-[11px] text-[#8b949e] hover:text-[#f0f6fc] flex items-center gap-1 transition"
+                  className="px-2 py-1 bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded text-[11px] text-theme-muted hover:text-theme-primary flex items-center gap-1 transition cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
                   <span>Reset Starter</span>
@@ -622,7 +622,7 @@ export function MockInterviewView() {
                 <select
                   value={selectedLanguage}
                   onChange={(e) => handleLanguageChange(e.target.value as SupportedLanguage)}
-                  className="px-2.5 py-1 bg-[#0d1117] border border-[#30363d] rounded text-xs text-[#f0f6fc] font-mono focus:outline-none focus:border-[#58a6ff]"
+                  className="px-2.5 py-1 bg-theme-surface border border-theme-border rounded text-xs text-theme-primary font-mono focus:outline-none focus:border-blue-500"
                 >
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <option key={lang.id} value={lang.id}>
@@ -638,10 +638,10 @@ export function MockInterviewView() {
               onChange={(e) => handleCodeChange(e.target.value)}
               rows={18}
               placeholder="Draft your algorithmic code here..."
-              className="w-full p-3.5 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-[#f0f6fc] font-mono leading-relaxed focus:outline-none focus:border-[#58a6ff]"
+              className="w-full p-3.5 bg-theme-surface border border-theme-border rounded-xl text-xs text-theme-primary font-mono leading-relaxed focus:outline-none focus:border-blue-500"
             />
 
-            <div className="p-3 rounded-lg bg-[#161b22]/50 border border-[#30363d]/50 flex items-center justify-between text-xs text-[#8b949e]">
+            <div className="p-3 rounded-lg bg-theme-elevated border border-theme-border flex items-center justify-between text-xs text-theme-muted">
               <span>Tip: Practice writing clean code without IDE autocomplete.</span>
               <span className="font-mono">Time Remaining: {formatTimer(secondsRemaining)}</span>
             </div>

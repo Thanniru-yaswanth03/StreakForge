@@ -383,12 +383,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
-  const refreshLeetCodeStats = useCallback(async (usernameOverride?: string) => {
+  const refreshLeetCodeStats = useCallback(async (usernameOverride?: string): Promise<void> => {
     try {
       const stats = await api.sync.refreshProfileStats(usernameOverride);
       setLeetcodeStats(stats);
     } catch (err) {
       console.warn('Failed refreshing LeetCode stats:', err);
+      throw err;
     }
   }, []);
 

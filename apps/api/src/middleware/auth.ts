@@ -83,3 +83,31 @@ export async function requireAuth(
   }
 }
 
+export async function optionalAuth(
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const payload = jwt.verify(token, ENV.JWT_SECRET) as { userId: string; jti?: string };
+    if (!isTokenRevoked(token)) {
+      const user = await User.findById(payload.userId);
+      if (user && user.isActive) {
+        req.user = user;
+        req.userId = user._id.toString();
+        req.token = token;
+      }
+    }
+  } catch {
+    // Permissive for unauthenticated guests
+  }
+  next();
+}
+
+

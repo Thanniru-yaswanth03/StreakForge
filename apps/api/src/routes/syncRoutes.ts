@@ -1,10 +1,10 @@
 import { Router, Response } from 'express';
 import { Types } from 'mongoose';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { requireAuth, optionalAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { LeetCodeSubmissionInputSchema } from '@streakforge/validation';
 import { processLeetCodeSubmission } from '../services/syncService.js';
-import { getOrRefreshLeetCodeStats, syncLeetCodeUserStats } from '../services/leetcodeService.js';
+import { getOrRefreshLeetCodeStats, syncLeetCodeUserStats, fetchLeetCodeUserStats } from '../services/leetcodeService.js';
 import { LeetCodeSubmission } from '../models/LeetCodeSubmission.js';
 
 export const syncRouter: Router = Router();
@@ -155,14 +155,37 @@ syncRouter.get(
  */
 syncRouter.post(
   '/leetcode/profile-stats/refresh',
-  requireAuth,
+  optionalAuth,
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
-      const username = (req.body?.username as string) || undefined;
-      const stats = await syncLeetCodeUserStats(req.userId!, username);
+      const username = (req.body?.username as string)?.trim() || undefined;
+
+      // Authenticated user: persist and sync to user document
+      if (req.userId) {
+        const stats = await syncLeetCodeUserStats(req.userId, username);
+        res.json({
+          success: true,
+          data: stats
+        });
+        return;
+      }
+
+      // Guest user: fetch authentic public stats directly without requiring session
+      if (!username) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'MISSING_USERNAME',
+            message: 'LeetCode username is required for guest profile lookup'
+          }
+        });
+        return;
+      }
+
+      const scraped = await fetchLeetCodeUserStats(username);
       res.json({
         success: true,
-        data: stats
+        data: scraped
       });
     } catch (error) {
       next(error);

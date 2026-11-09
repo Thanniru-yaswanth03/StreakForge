@@ -17,10 +17,10 @@ const revokedTokenIds = new Set<string>();
 /**
  * Generate a signed, tamper-proof CSRF state nonce for OAuth authorization
  */
-export function generateOAuthState(): string {
+export function generateOAuthState(returnTo?: string): string {
   const nonce = crypto.randomBytes(16).toString('hex');
   return jwt.sign(
-    { nonce, purpose: 'oauth_csrf' },
+    { nonce, purpose: 'oauth_csrf', returnTo },
     ENV.JWT_SECRET,
     { expiresIn: '15m' }
   );
@@ -35,6 +35,18 @@ export function verifyOAuthState(state: string): boolean {
     return payload.purpose === 'oauth_csrf';
   } catch {
     return false;
+  }
+}
+
+/**
+ * Extract safe return URL encoded in OAuth state token
+ */
+export function extractOAuthReturnTo(state: string): string | undefined {
+  try {
+    const payload = jwt.verify(state, ENV.JWT_SECRET) as { purpose?: string; returnTo?: string };
+    return payload.purpose === 'oauth_csrf' ? payload.returnTo : undefined;
+  } catch {
+    return undefined;
   }
 }
 

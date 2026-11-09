@@ -6,9 +6,11 @@ import { ENV } from './config/env.js';
 import {
   generateOAuthState,
   verifyOAuthState,
+  extractOAuthReturnTo,
   revokeSessionToken,
   isTokenRevoked
 } from './services/authService.js';
+import { resolveOAuthCallbackUrl } from './routes/authRoutes.js';
 import {
   verifyWebhookSignature,
   handleGitHubWebhook
@@ -42,6 +44,63 @@ describe('Phase 2 — GitHub Authentication & Integration', () => {
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toBe('CSRF_STATE_INVALID');
+    });
+
+    it('embeds and safely extracts returnTo within signed OAuth state', () => {
+      const returnUrl = 'https://streak-forge-six.vercel.app/dashboard';
+      const state = generateOAuthState(returnUrl);
+      expect(verifyOAuthState(state)).toBe(true);
+      expect(extractOAuthReturnTo(state)).toBe(returnUrl);
+    });
+
+    it('dynamically adapts callback URL for Render deployments', () => {
+      const mockReq = {
+        headers: {
+          'x-forwarded-host': 'streakforge-api-5uhs.onrender.com'
+        },
+        get: (h: string) => (h === 'host' ? 'streakforge-api-5uhs.onrender.com' : undefined)
+      } as any;
+
+      const callback = resolveOAuthCallbackUrl(mockReq);
+      expect(callback).toContain('streakforge-api-5uhs.onrender.com');
+      expect(callback).toContain('/api/v1/auth/github/callback');
+    });
+
+    it('provides diagnostic configuration status endpoint', async () => {
+      const res = await request(app).get('/api/v1/auth/config-status');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.activeCallbackUrl).toBeDefined();
+      expect(res.body.data.nodeEnv).toBeDefined();
+    });
+
+    it('handles OAuth access_denied error and redirects to frontend error page', async () => {
+      const state = generateOAuthState('https://streak-forge-six.vercel.app');
+      const res = await request(app)
+        .get('/api/v1/auth/github/callback')
+        .query({
+          error: 'access_denied',
+          error_description: 'The user has denied your application access.',
+          state
+        });
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toContain('https://streak-forge-six.vercel.app/auth/callback');
+      expect(res.headers.location).toContain('error=access_denied');
+    });
+
+    it('sanitizes trailing slashes and malformed paths in callback resolution', () => {
+      const mockReq = {
+        headers: {
+          'x-forwarded-host': 'streakforge-api-5uhs.onrender.com',
+          'x-forwarded-proto': 'https'
+        },
+        get: (h: string) => (h === 'host' ? 'streakforge-api-5uhs.onrender.com' : undefined)
+      } as any;
+
+      const callback = resolveOAuthCallbackUrl(mockReq);
+      expect(callback).toBe('https://streakforge-api-5uhs.onrender.com/api/v1/auth/github/callback');
+      expect(callback.endsWith('/')).toBe(false);
     });
 
     it('tracks revoked session tokens and marks them as invalid', () => {

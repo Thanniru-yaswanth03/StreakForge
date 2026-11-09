@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { ENV } from '../config/env.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
@@ -6,6 +6,7 @@ import { UserUpdatePreferencesSchema } from '@streakforge/validation';
 import {
   generateOAuthState,
   verifyOAuthState,
+  extractOAuthReturnTo,
   exchangeGitHubCode,
   revokeSessionToken,
   disconnectGitHubAccount,
@@ -18,7 +19,75 @@ import { logger } from '../utils/logger.js';
 
 export const authRouter: Router = Router();
 
-authRouter.get('/github', async (_req, res: Response, next) => {
+/**
+ * Resolve canonical OAuth callback URL taking into account reverse proxy headers
+ */
+export function resolveOAuthCallbackUrl(req: Request): string {
+  let callbackUrl = (ENV.GITHUB_CALLBACK_URL || '').trim().replace(/\/+$/, '');
+  const forwardedHost = ((req.headers['x-forwarded-host'] as string) || req.get('host') || '').trim();
+  const forwardedProto = ((req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http')).trim();
+
+  if (forwardedHost) {
+    if (forwardedHost.includes('onrender.com')) {
+      // If deployed on Render (*.onrender.com), align host with the active reverse-proxy host
+      if (callbackUrl.includes('onrender.com') && !callbackUrl.includes(forwardedHost)) {
+        callbackUrl = callbackUrl.replace(/https?:\/\/[^/]+/, `https://${forwardedHost}`);
+      } else if (callbackUrl.includes('localhost') || !callbackUrl) {
+        callbackUrl = `https://${forwardedHost}/api/v1/auth/github/callback`;
+      }
+    } else if (ENV.NODE_ENV === 'production' && (callbackUrl.includes('localhost') || !callbackUrl)) {
+      callbackUrl = `${forwardedProto}://${forwardedHost}/api/v1/auth/github/callback`;
+    }
+  }
+
+  if (!callbackUrl) {
+    callbackUrl = 'http://localhost:4000/api/v1/auth/github/callback';
+  } else if (!callbackUrl.includes('/auth/github/callback')) {
+    callbackUrl = `${callbackUrl}/api/v1/auth/github/callback`;
+  }
+
+  return callbackUrl.replace(/([^:]\/)\/+/g, '$1');
+}
+
+function getSafeRedirectUrl(returnTo: string | undefined): string {
+  if (returnTo) {
+    try {
+      const parsed = new URL(returnTo);
+      const isAllowed =
+        parsed.hostname === 'localhost' ||
+        parsed.hostname.endsWith('.vercel.app') ||
+        parsed.hostname === new URL(ENV.WEB_APP_URL).hostname;
+      if (isAllowed) {
+        return `${parsed.protocol}//${parsed.host}`;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  return ENV.WEB_APP_URL;
+}
+
+/**
+ * Diagnostic status endpoint for OAuth setup verification
+ */
+authRouter.get('/config-status', (req: Request, res: Response) => {
+  const forwardedHost = (req.headers['x-forwarded-host'] as string) || req.get('host');
+  const activeCallback = resolveOAuthCallbackUrl(req);
+  res.json({
+    success: true,
+    data: {
+      githubClientIdConfigured: Boolean(ENV.GITHUB_CLIENT_ID && ENV.GITHUB_CLIENT_ID !== 'dummy_client_id'),
+      githubClientIdPreview: ENV.GITHUB_CLIENT_ID ? `${ENV.GITHUB_CLIENT_ID.slice(0, 6)}...` : 'not_set',
+      detectedHost: forwardedHost || 'unknown',
+      activeCallbackUrl: activeCallback,
+      configuredCallbackUrl: ENV.GITHUB_CALLBACK_URL,
+      webAppUrl: ENV.WEB_APP_URL,
+      nodeEnv: ENV.NODE_ENV
+    }
+  });
+});
+
+authRouter.get('/github', async (req: Request, res: Response, next) => {
   // If GitHub OAuth credentials are dummy placeholders in development, use dev bypass
   const isDummyClient =
     !ENV.GITHUB_CLIENT_ID ||
@@ -43,17 +112,47 @@ authRouter.get('/github', async (_req, res: Response, next) => {
   }
 
   const scopes = ['repo', 'read:user', 'user:email'].join(' ');
-  const state = generateOAuthState();
+
+  // Capture return URL if caller requested one
+  const returnToParam = (req.query.return_to as string) || (req.headers.referer as string);
+  const state = generateOAuthState(returnToParam);
+
+  const callbackUrl = resolveOAuthCallbackUrl(req);
+
   const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${ENV.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-    ENV.GITHUB_CALLBACK_URL
+    callbackUrl
   )}&scope=${encodeURIComponent(scopes)}&state=${state}`;
 
   res.redirect(githubAuthUrl);
 });
 
-authRouter.get('/github/callback', async (req, res: Response, next) => {
+authRouter.get('/github/callback', async (req: Request, res: Response, next) => {
   const code = req.query.code as string;
   const state = req.query.state as string;
+  const oauthError = req.query.error as string;
+  const oauthErrorDesc = req.query.error_description as string;
+
+  // Handle GitHub OAuth authorization errors (e.g. user clicked cancel or denied access)
+  if (oauthError) {
+    logger.warn('[Auth] GitHub OAuth returned error', { error: oauthError, description: oauthErrorDesc });
+    const returnTo = state ? extractOAuthReturnTo(state) : undefined;
+    const targetBaseUrl = getSafeRedirectUrl(returnTo);
+
+    if (req.headers.accept?.includes('application/json')) {
+      res.status(400).json({
+        success: false,
+        error: { code: oauthError.toUpperCase(), message: oauthErrorDesc || 'GitHub authorization was denied' }
+      });
+      return;
+    }
+
+    res.redirect(
+      `${targetBaseUrl}/auth/callback?error=${encodeURIComponent(oauthError)}&error_description=${encodeURIComponent(
+        oauthErrorDesc || 'Authorization was cancelled by user'
+      )}`
+    );
+    return;
+  }
 
   if (!code) {
     res.status(400).json({
@@ -80,7 +179,8 @@ authRouter.get('/github/callback', async (req, res: Response, next) => {
     res.cookie('streakforge_token', token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
-      sameSite: 'lax'
+      sameSite: 'lax',
+      secure: ENV.NODE_ENV === 'production'
     });
 
     if (req.headers.accept === 'application/json') {
@@ -102,10 +202,26 @@ authRouter.get('/github/callback', async (req, res: Response, next) => {
       return;
     }
 
-    res.redirect(`${ENV.WEB_APP_URL}/auth/callback?token=${token}`);
+    const returnTo = extractOAuthReturnTo(state);
+    const targetBaseUrl = getSafeRedirectUrl(returnTo);
+    res.redirect(`${targetBaseUrl}/auth/callback?token=${token}`);
     return;
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    logger.error('[Auth] GitHub code exchange failed', { error: error?.message });
+    if (req.headers.accept === 'application/json') {
+      res.status(400).json({
+        success: false,
+        error: { code: 'AUTH_FAILED', message: error?.message || 'Failed to authenticate with GitHub' }
+      });
+      return;
+    }
+    const returnTo = state ? extractOAuthReturnTo(state) : undefined;
+    const targetBaseUrl = getSafeRedirectUrl(returnTo);
+    res.redirect(
+      `${targetBaseUrl}/auth/callback?error=AUTH_FAILED&error_description=${encodeURIComponent(
+        error?.message || 'Failed to authenticate with GitHub'
+      )}`
+    );
   }
 });
 

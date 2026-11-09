@@ -210,10 +210,10 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
   };
 
   const navContent = (
-    <div className="flex flex-col h-full justify-between select-none bg-[#0d1117] border-r border-[#30363d]/80">
+    <div className="flex flex-col h-full justify-between select-none bg-theme-bg border-r border-theme-border">
       {/* Top: Brand Header */}
       <div className="flex-1 overflow-y-auto">
-        <div className="h-14 px-4 flex items-center justify-between border-b border-[#30363d] bg-[#010409]">
+        <div className="h-14 px-4 flex items-center justify-between border-b border-theme-border bg-theme-surface">
           <div
             onClick={() => handleSelect('overview')}
             className="flex items-center gap-2.5 cursor-pointer group py-1"
@@ -224,10 +224,10 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">
-                <span className="font-bold text-sm tracking-tight text-[#f0f6fc]">
+                <span className="font-bold text-sm tracking-tight text-theme-primary">
                   Streak<span className="text-[#3fb950]">Forge</span>
                 </span>
-                <span className="text-[10px] text-[#8b949e] font-mono leading-none">
+                <span className="text-[10px] text-theme-muted font-mono leading-none">
                   v3.0 Ecosystem
                 </span>
               </div>
@@ -236,7 +236,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
 
           <button
             onClick={onMobileClose}
-            className="lg:hidden p-1.5 text-[#8b949e] hover:text-[#f0f6fc] hover:bg-[#21262d] rounded-md transition"
+            className="lg:hidden p-1.5 text-theme-muted hover:text-theme-primary hover:bg-theme-elevated rounded-md transition"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
@@ -248,7 +248,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
           {navGroups.map((group, gIdx) => (
             <div key={gIdx} className="space-y-0.5">
               {!isCollapsed && (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#7d8590]">
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-theme-muted">
                   {group.title}
                 </div>
               )}
@@ -263,8 +263,8 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                     title={isCollapsed ? item.label : undefined}
                     className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 relative group cursor-pointer ${
                       isActive
-                        ? 'bg-[#21262d] text-[#f0f6fc] font-semibold border border-[#30363d] shadow-[0_2px_8px_rgba(0,0,0,0.35)]'
-                        : 'text-[#c9d1d9] hover:text-[#f0f6fc] hover:bg-[#161b22] hover:border-[#30363d]/60 border border-transparent'
+                        ? 'bg-theme-elevated text-theme-primary font-semibold border border-theme-border shadow-xs'
+                        : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-surface hover:border-theme-border border border-transparent'
                     }`}
                   >
                     {/* Active Left Indicator */}
@@ -275,7 +275,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                     <div className="flex items-center gap-2.5 min-w-0">
                       <Icon
                         className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                          isActive ? 'text-[#3fb950]' : 'text-[#8b949e] group-hover:text-[#f0f6fc]'
+                          isActive ? 'text-[#3fb950]' : 'text-theme-muted group-hover:text-theme-primary'
                         }`}
                       />
                       {!isCollapsed && (
@@ -286,7 +286,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                     {!isCollapsed && item.badge !== undefined && (
                       <span
                         className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full border flex-shrink-0 transition-all ${
-                          item.badgeColor || 'bg-[#21262d] text-[#8b949e] border-[#30363d]'
+                          item.badgeColor || 'bg-theme-elevated text-theme-muted border-theme-border'
                         }`}
                       >
                         {item.badge}
@@ -301,10 +301,10 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
       </div>
 
       {/* Bottom: User Card & Collapser */}
-      <div className="p-3 border-t border-[#30363d] space-y-2 bg-[#161b22]/40">
+      <div className="p-3 border-t border-theme-border space-y-2 bg-theme-surface">
         <div
           onClick={() => handleSelect('settings')}
-          className="flex items-center gap-2.5 p-2 rounded-md hover:bg-[#21262d] border border-transparent hover:border-[#30363d] cursor-pointer transition-all group"
+          className="flex items-center gap-2.5 p-2 rounded-md hover:bg-theme-elevated border border-transparent hover:border-theme-border cursor-pointer transition-all group"
           title={user ? `Signed in as @${user.username}` : 'Sign in to your account'}
         >
           <div className="relative">
@@ -315,19 +315,19 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                 width={26}
                 height={26}
                 style={{ width: 26, height: 26, maxWidth: 26, maxHeight: 26, objectFit: 'cover' }}
-                className="w-6 h-6 rounded-full border border-[#30363d] flex-shrink-0 group-hover:border-[#58a6ff] transition-colors"
+                className="w-6 h-6 rounded-full border border-theme-border flex-shrink-0 group-hover:border-[#58a6ff] transition-colors"
               />
             ) : user ? (
-              <div className="w-6 h-6 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[10px] font-bold text-[#58a6ff]">
+              <div className="w-6 h-6 rounded-full bg-theme-elevated border border-theme-border flex items-center justify-center text-[10px] font-bold text-[#58a6ff]">
                 {user.username.charAt(0).toUpperCase()}
               </div>
             ) : (
-              <div className="w-6 h-6 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[#8b949e]">
+              <div className="w-6 h-6 rounded-full bg-theme-elevated border border-theme-border flex items-center justify-center text-theme-muted">
                 <UserIcon className="w-3.5 h-3.5" />
               </div>
             )}
             {user && (
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#238636] ring-1 ring-[#0d1117]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#238636] ring-1 ring-theme-bg" />
             )}
           </div>
 
@@ -335,7 +335,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
             <div className="truncate flex-1 text-left">
               {user ? (
                 <>
-                  <div className="text-xs font-bold text-[#f0f6fc] truncate group-hover:text-[#58a6ff] transition-colors">
+                  <div className="text-xs font-bold text-theme-primary truncate group-hover:text-[#58a6ff] transition-colors">
                     @{user.username}
                   </div>
                   <div className="text-[10px] text-[#3fb950] font-mono flex items-center gap-1">
@@ -345,7 +345,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                 </>
               ) : (
                 <>
-                  <div className="text-xs font-semibold text-[#8b949e] truncate group-hover:text-[#f0f6fc] transition-colors">
+                  <div className="text-xs font-semibold text-theme-muted truncate group-hover:text-theme-primary transition-colors">
                     Guest Developer
                   </div>
                   <div className="text-[10px] text-[#58a6ff] font-mono flex items-center gap-1">
@@ -360,7 +360,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
         <div className="flex items-center justify-between pt-1">
           <button
             onClick={toggleTheme}
-            className="p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d]"
+            className="p-1.5 text-theme-muted hover:text-theme-primary rounded-md transition hover:bg-theme-elevated"
             title={effectiveTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           >
             {effectiveTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -368,7 +368,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
 
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d] text-xs font-mono"
+            className="hidden lg:flex p-1.5 text-theme-muted hover:text-theme-primary rounded-md transition hover:bg-theme-elevated text-xs font-mono"
             title="Toggle sidebar [ ]"
           >
             {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}

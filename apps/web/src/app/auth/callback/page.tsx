@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { setStoredToken } from '../../../lib/utils';
+import { setStoredToken, API_BASE_URL } from '../../../lib/utils';
+import { AlertCircle, RefreshCw, ArrowRight, ShieldAlert } from 'lucide-react';
 
 function CallbackHandler() {
   const searchParams = useSearchParams();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const handleProceed = () => {
     try {
@@ -24,19 +27,76 @@ function CallbackHandler() {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const token = urlParams.get('token') || searchParams.get('token');
+      const error = urlParams.get('error') || searchParams.get('error');
+      const errorDesc =
+        urlParams.get('error_description') || searchParams.get('error_description');
+
+      if (error) {
+        setErrorCode(error);
+        setErrorMessage(
+          errorDesc ||
+            (error === 'access_denied'
+              ? 'GitHub authorization was denied or cancelled.'
+              : `Authentication error: ${error}`)
+        );
+        return;
+      }
+
       if (token) {
         setStoredToken(token);
+        const timer = setTimeout(() => {
+          window.location.href = '/';
+        }, 150);
+        return () => clearTimeout(timer);
       }
-    } catch {
-      // ignore
+
+      // No token and no error in params
+      setErrorCode('NO_TOKEN');
+      setErrorMessage('No authentication token received from authorization server.');
+    } catch (err: any) {
+      setErrorCode('CLIENT_ERROR');
+      setErrorMessage(err?.message || 'An unexpected client error occurred during callback processing.');
     }
-
-    const timer = setTimeout(() => {
-      window.location.href = '/';
-    }, 150);
-
-    return () => clearTimeout(timer);
   }, [searchParams]);
+
+  if (errorMessage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 p-4">
+        <div className="flex flex-col items-center gap-4 max-w-md w-full text-center p-6 rounded-xl border border-red-500/30 bg-slate-900/90 shadow-2xl">
+          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-white">GitHub Authentication Issue</h2>
+            {errorCode && (
+              <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-red-500/20 text-red-300 border border-red-500/30">
+                {errorCode}
+              </span>
+            )}
+            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+              {errorMessage}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full mt-2">
+            <a
+              href={`${API_BASE_URL}/auth/github`}
+              className="w-full sm:flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry GitHub Login</span>
+            </a>
+            <button
+              onClick={() => (window.location.href = '/')}
+              className="w-full sm:flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-xs rounded-lg border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>Dashboard Home</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 p-4">
@@ -50,9 +110,10 @@ function CallbackHandler() {
         </div>
         <button
           onClick={handleProceed}
-          className="mt-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition shadow-lg cursor-pointer"
+          className="mt-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition shadow-lg cursor-pointer flex items-center gap-1.5"
         >
-          Proceed to Dashboard &rarr;
+          <span>Proceed to Dashboard</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

@@ -62,13 +62,13 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
   const unreadCount = notifications?.filter((n) => !n.isRead).length || 0;
 
   return (
-    <header className="sticky top-0 z-30 select-none bg-[#0d1117]/95 backdrop-blur-xl border-b border-[#30363d]/80 shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
+    <header className="sticky top-0 z-30 select-none bg-theme-bg/95 backdrop-blur-xl border-b border-theme-border shadow-xs">
       <div className="h-14 px-4 sm:px-6 flex items-center justify-between gap-4">
         {/* Left: Mobile Hamburger + Breadcrumb + Target Repo Pill */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onMobileMenuOpen}
-            className="lg:hidden p-1.5 text-[#8b949e] hover:text-[#f0f6fc] hover:bg-[#21262d] rounded-md transition"
+            className="lg:hidden p-1.5 text-theme-muted hover:text-theme-primary hover:bg-theme-elevated rounded-md transition"
             aria-label="Open navigation menu"
           >
             <Menu className="w-5 h-5" />
@@ -76,9 +76,9 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
 
           {/* Clean App Breadcrumb */}
           <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold truncate">
-            <span className="text-[#8b949e] font-medium hidden sm:inline">StreakForge</span>
-            <span className="text-[#30363d] hidden sm:inline">/</span>
-            <span className="text-[#f0f6fc] font-bold tracking-tight truncate">
+            <span className="text-theme-muted font-medium hidden sm:inline">StreakForge</span>
+            <span className="text-theme-border hidden sm:inline">/</span>
+            <span className="text-theme-primary font-bold tracking-tight truncate">
               {tabTitles[currentTab] || 'Dashboard'}
             </span>
           </div>
@@ -89,17 +89,17 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
               href={`https://github.com/${primaryTargetRepo.repoFullName}`}
               target="_blank"
               rel="noreferrer"
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] rounded-full text-xs text-[#8b949e] hover:text-[#58a6ff] transition font-mono group ml-2"
+              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface hover:bg-theme-elevated border border-theme-border rounded-full text-xs text-theme-muted hover:text-blue-500 transition font-mono group ml-2"
               title="Active target repository for LeetCode commits"
             >
-              <span className="w-2 h-2 rounded-full bg-[#3fb950] group-hover:animate-ping" />
-              <span className="text-[#c9d1d9] font-medium">{primaryTargetRepo.repoFullName}</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 group-hover:animate-ping" />
+              <span className="text-theme-secondary font-medium">{primaryTargetRepo.repoFullName}</span>
               <ExternalLink className="w-3 h-3 opacity-60" />
             </a>
           ) : user ? (
             <button
               onClick={() => onTabChange('repos')}
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#161b22] hover:bg-[#21262d] border border-dashed border-[#30363d] hover:border-[#58a6ff] rounded-full text-xs text-[#8b949e] hover:text-[#58a6ff] transition font-mono group ml-2 cursor-pointer"
+              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-theme-surface hover:bg-theme-elevated border border-dashed border-theme-border hover:border-blue-500 rounded-full text-xs text-theme-muted hover:text-blue-500 transition font-mono group ml-2 cursor-pointer"
               title="Select a target repository for LeetCode solution tracking"
             >
               <span>+ Select Target Repo</span>
@@ -114,12 +114,12 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
             onClick={() => onTabChange('calendar')}
             className={`cursor-pointer flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
               verifiedStreak > 0
-                ? 'bg-gradient-to-b from-[#2ea043]/20 to-[#238636]/10 border border-[#2ea043]/50 text-[#3fb950] hover:scale-105 hover:border-[#3fb950] shadow-[0_0_12px_rgba(46,160,67,0.25)]'
-                : 'bg-[#161b22] border border-[#30363d] text-[#8b949e] hover:text-[#f0f6fc]'
+                ? 'bg-gradient-to-b from-emerald-500/20 to-emerald-600/10 border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 hover:scale-105 hover:border-emerald-500 shadow-xs'
+                : 'bg-theme-surface border border-theme-border text-theme-muted hover:text-theme-primary'
             }`}
             title={verifiedStreak > 0 ? `${verifiedStreak} active days streak` : '0 active days verified'}
           >
-            <Flame className={`w-3.5 h-3.5 ${verifiedStreak > 0 ? 'fill-[#3fb950] text-[#3fb950] animate-pulse' : 'text-[#8b949e]'}`} />
+            <Flame className={`w-3.5 h-3.5 ${verifiedStreak > 0 ? 'fill-emerald-500 text-emerald-500 animate-pulse' : 'text-theme-muted'}`} />
             <span className="tabular-nums font-mono">{verifiedStreak}d Streak</span>
           </div>
 
@@ -127,38 +127,38 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
           <button
             onClick={() => refreshData()}
             disabled={isLoading}
-            className="p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d] border border-transparent hover:border-[#30363d] disabled:opacity-50 cursor-pointer"
+            className="p-1.5 text-theme-muted hover:text-theme-primary rounded-md transition hover:bg-theme-elevated border border-transparent hover:border-theme-border disabled:opacity-50 cursor-pointer"
             title="Refresh GitHub & LeetCode telemetry"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-[#58a6ff]' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
 
           {/* Notifications Button */}
           <button
             onClick={() => onTabChange('notifications')}
-            className="p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d] border border-transparent hover:border-[#30363d] relative cursor-pointer"
+            className="p-1.5 text-theme-muted hover:text-theme-primary rounded-md transition hover:bg-theme-elevated border border-transparent hover:border-theme-border relative cursor-pointer"
             title="Notifications"
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#58a6ff] ring-2 ring-[#0d1117]" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-theme-bg" />
             )}
           </button>
 
           {/* Quick Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-1.5 text-[#8b949e] hover:text-[#f0f6fc] rounded-md transition hover:bg-[#21262d] border border-transparent hover:border-[#30363d] cursor-pointer"
+            className="p-1.5 text-theme-muted hover:text-theme-primary rounded-md transition hover:bg-theme-elevated border border-transparent hover:border-theme-border cursor-pointer"
             title="Toggle Theme"
           >
-            {effectiveTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-[#e3b341]" />}
+            {effectiveTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-amber-500" />}
           </button>
 
           {/* User Profile Avatar with Connected Indicator */}
           {user ? (
             <div
               onClick={() => onTabChange('settings')}
-              className="flex items-center gap-2 pl-2 border-l border-[#30363d] cursor-pointer group"
+              className="flex items-center gap-2 pl-2 border-l border-theme-border cursor-pointer group"
               title={`Signed in as @${user.username}`}
             >
               <div className="relative">
@@ -169,14 +169,14 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
                     width={28}
                     height={28}
                     style={{ width: 28, height: 28, maxWidth: 28, maxHeight: 28, objectFit: 'cover' }}
-                    className="w-7 h-7 rounded-full border border-[#30363d] object-cover group-hover:border-[#58a6ff] transition-all group-hover:scale-105"
+                    className="w-7 h-7 rounded-full border border-theme-border object-cover group-hover:border-blue-500 transition-all group-hover:scale-105"
                   />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center text-xs font-bold text-[#58a6ff]">
+                  <div className="w-7 h-7 rounded-full bg-theme-elevated border border-theme-border flex items-center justify-center text-xs font-bold text-blue-500">
                     {user.username.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#238636] ring-2 ring-[#0d1117]" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-theme-bg" />
               </div>
             </div>
           ) : (

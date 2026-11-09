@@ -29,6 +29,7 @@ export function LeetCodeStatsCard() {
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [customUsername, setCustomUsername] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hoveredCalDay, setHoveredCalDay] = useState<{ date: string; count: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -76,9 +77,12 @@ export function LeetCodeStatsCard() {
   const handleSaveUsername = async () => {
     if (!customUsername.trim()) return;
     setIsRefreshing(true);
+    setErrorMessage(null);
     try {
       await refreshLeetCodeStats(customUsername.trim());
       setIsEditingUsername(false);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to connect LeetCode profile. Please check the handle.');
     } finally {
       setIsRefreshing(false);
     }
@@ -213,6 +217,11 @@ export function LeetCodeStatsCard() {
             <span>Connect Profile</span>
           </button>
         </form>
+        {errorMessage && (
+          <p className="text-xs text-[#f85149] bg-[#f85149]/10 border border-[#f85149]/30 rounded-md py-1 px-3 max-w-sm mx-auto">
+            {errorMessage}
+          </p>
+        )}
       </div>
     );
   }

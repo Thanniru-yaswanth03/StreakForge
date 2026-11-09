@@ -4,14 +4,14 @@
 
 @layer base {
   :root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f6f8fa;
+    --bg-primary: #f6f8fa;
+    --bg-secondary: #ffffff;
     --bg-tertiary: #eaeef2;
     --border-subtle: #d0d7de;
-    --border-strong: #afb8c1;
+    --border-strong: #8c959f;
     --text-primary: #1f2328;
-    --text-secondary: #656d76;
-    --text-muted: #8c959f;
+    --text-secondary: #424a53;
+    --text-muted: #57606a;
     --accent: #1f883d;
     --accent-hover: #1a7f37;
     --accent-subtle: rgba(31, 136, 61, 0.12);
@@ -85,7 +85,7 @@ body {
 .btn-primary, .github-glossy-button-primary {
   position: relative;
   background: linear-gradient(180deg, #2ea043 0%, #238636 100%);
-  color: #ffffff;
+  color: #ffffff !important;
   border: 1px solid rgba(240, 246, 252, 0.15);
   border-radius: 6px;
   font-weight: 600;
@@ -182,3 +182,216 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #8b949e;
 }
+
+/* =========================================================================
+   LIGHT THEME REMAPPING ENGINE (High-Contrast, Authentic GitHub Light)
+   ========================================================================= */
+html:not(.dark) {
+  /* Surfaces & Canvas */
+  body, .bg-theme-bg {
+    background-color: #f6f8fa !important;
+    color: #1f2328 !important;
+  }
+
+  /* Header & Navigation Bar */
+  header {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-color: #d0d7de !important;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.08) !important;
+  }
+
+  /* Sidebar */
+  aside, aside > div {
+    background-color: #ffffff !important;
+    border-color: #d0d7de !important;
+  }
+
+  /* Footer */
+  footer {
+    border-color: #d0d7de !important;
+    color: #57606a !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Dark Tokens -> Pure Crisp Light Cards */
+  .bg-\[\#0d1117\],
+  .bg-\[\#010409\] {
+    background-color: #ffffff !important;
+  }
+  .bg-\[\#0d1117\]\/95,
+  .bg-\[\#0d1117\]\/90,
+  .bg-\[\#0d1117\]\/80,
+  .bg-\[\#0d1117\]\/70,
+  .bg-\[\#0d1117\]\/60 {
+    background-color: #ffffff !important;
+  }
+
+  .bg-\[\#161b22\],
+  .bg-\[\#161b22\]\/90,
+  .bg-\[\#161b22\]\/80,
+  .bg-\[\#161b22\]\/70,
+  .bg-\[\#161b22\]\/60,
+  .bg-\[\#161b22\]\/50,
+  .bg-\[\#161b22\]\/40,
+  .bg-\[\#161b22\]\/30 {
+    background-color: #ffffff !important;
+  }
+
+  .bg-\[\#21262d\],
+  .bg-\[\#21262d\]\/80,
+  .bg-\[\#21262d\]\/60,
+  .bg-\[\#21262d\]\/50 {
+    background-color: #f6f8fa !important;
+  }
+
+  .bg-\[\#30363d\],
+  .bg-\[\#30363d\]\/40,
+  .bg-\[\#30363d\]\/50 {
+    background-color: #eaeef2 !important;
+  }
+
+  /* Hover States */
+  .hover\:bg-\[\#161b22\]:hover,
+  .hover\:bg-\[\#161b22\]\/70:hover,
+  .hover\:bg-\[\#21262d\]:hover,
+  .hover\:bg-\[\#21262d\]\/60:hover,
+  .hover\:bg-\[\#30363d\]:hover {
+    background-color: #f3f4f6 !important;
+  }
+
+  /* Borders */
+  .border-\[\#30363d\],
+  .border-\[\#30363d\]\/80,
+  .border-\[\#30363d\]\/60,
+  .border-\[\#30363d\]\/50,
+  .border-\[\#30363d\]\/40,
+  .border-\[\#21262d\],
+  .border-\[\#21262d\]\/70,
+  .border-\[\#21262d\]\/60,
+  .border-white\/10,
+  .border-white\/20 {
+    border-color: #d0d7de !important;
+  }
+
+  /* High-Contrast Typography */
+  .text-\[\#f0f6fc\],
+  h1, h2, h3, h4, h5, h6 {
+    color: #1f2328 !important;
+  }
+
+  .text-\[\#c9d1d9\],
+  .text-slate-200,
+  .text-slate-300 {
+    color: #32383f !important;
+  }
+
+  .text-\[\#8b949e\],
+  .text-\[\#7d8590\],
+  .text-slate-400 {
+    color: #57606a !important;
+  }
+
+  /* Accent Colors tuned for Light Backgrounds */
+  .text-\[\#3fb950\] {
+    color: #1a7f37 !important;
+  }
+  .text-\[\#58a6ff\] {
+    color: #0969da !important;
+  }
+  .text-\[\#f0883e\] {
+    color: #bc4c00 !important;
+  }
+  .text-\[\#f85149\] {
+    color: #cf222e !important;
+  }
+  .text-\[\#e3b341\] {
+    color: #9a6700 !important;
+  }
+
+  /* Selected Card Accent Tints in Light Mode */
+  [class*="border-[#3fb950]"] {
+    border-color: #1a7f37 !important;
+    background-color: rgba(26, 127, 55, 0.04) !important;
+  }
+  [class*="border-[#f0883e]"] {
+    border-color: #bc4c00 !important;
+    background-color: rgba(188, 76, 0, 0.04) !important;
+  }
+  [class*="border-[#f85149]"] {
+    border-color: #cf222e !important;
+    background-color: rgba(207, 34, 46, 0.04) !important;
+  }
+  [class*="border-[#58a6ff]"] {
+    border-color: #0969da !important;
+    background-color: rgba(9, 105, 218, 0.04) !important;
+  }
+
+  /* Cards */
+  .github-glossy-card {
+    background: #ffffff !important;
+    border-color: #d0d7de !important;
+    box-shadow: 0 1px 3px rgba(31, 35, 40, 0.12), 0 8px 24px rgba(66, 74, 83, 0.08) !important;
+  }
+
+  .github-glossy-card:hover {
+    border-color: #0969da !important;
+    box-shadow: 0 4px 12px rgba(31, 35, 40, 0.15), 0 12px 32px rgba(66, 74, 83, 0.12) !important;
+  }
+
+  /* Action Buttons (Secondary) */
+  .btn-secondary,
+  .github-glossy-button-secondary {
+    background: linear-gradient(180deg, #ffffff 0%, #f6f8fa 100%) !important;
+    color: #24292f !important;
+    border-color: #d0d7de !important;
+    box-shadow: 0 1px 0 rgba(31, 35, 40, 0.04) !important;
+  }
+  .btn-secondary:hover,
+  .github-glossy-button-secondary:hover {
+    background: #f3f4f6 !important;
+    border-color: #8c959f !important;
+    color: #1f2328 !important;
+  }
+
+  /* Badges & Pills */
+  .github-pill {
+    background: #eaeef2 !important;
+    border-color: #d0d7de !important;
+    color: #24292f !important;
+  }
+
+  /* Inputs, Selects & Textareas */
+  input, select, textarea {
+    background-color: #ffffff !important;
+    color: #1f2328 !important;
+    border-color: #d0d7de !important;
+  }
+  input::placeholder, textarea::placeholder {
+    color: #8c959f !important;
+  }
+
+  /* Preserve Green Primary Button Text Contrast */
+  .btn-primary,
+  .btn-primary *,
+  .github-glossy-button-primary,
+  .github-glossy-button-primary *,
+  button[class*="bg-[#238636]"],
+  button[class*="bg-[#238636]"] *,
+  button[class*="bg-[#2ea043]"],
+  button[class*="bg-[#2ea043]"] *,
+  button[class*="bg-emerald"],
+  button[class*="bg-emerald"] *,
+  a[class*="bg-[#238636]"],
+  a[class*="bg-[#238636]"] * {
+    color: #ffffff !important;
+  }
+
+  /* Scrollbars in Light Mode */
+  ::-webkit-scrollbar-thumb {
+    background: #d0d7de;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #8c959f;
+  }
+}
+

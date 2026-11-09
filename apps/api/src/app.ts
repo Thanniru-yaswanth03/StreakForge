@@ -99,6 +99,18 @@ export function createApp(): Express {
   );
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+  // Root Service Check
+  app.get('/', (_req: Request, res: Response) => {
+    res.status(200).json({
+      success: true,
+      service: 'streakforge-api',
+      version: '3.0.0',
+      status: 'healthy',
+      healthCheck: '/health',
+      docs: '/api/v1'
+    });
+  });
+
   // Comprehensive Liveness & Readiness Health Check
   app.get('/health', (_req: Request, res: Response) => {
     const isDbConnected = mongoose.connection.readyState === 1;
