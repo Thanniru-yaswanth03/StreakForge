@@ -1,39 +1,40 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import { setStoredToken } from '../../../lib/utils';
 import { ArrowRight, ShieldAlert } from 'lucide-react';
 import { GitHubConnectButton } from '../../../components/GitHubConnectButton';
 
 function CallbackHandler() {
-  const searchParams = useSearchParams();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const handledRef = useRef(false);
+  const capturedTokenRef = useRef<string | null>(null);
 
   const handleProceed = () => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token') || searchParams.get('token');
+      const token = capturedTokenRef.current || urlParams.get('token');
       if (token) {
         setStoredToken(token);
-        window.history.replaceState({}, '', '/auth/callback');
       }
     } catch {
       // ignore
     }
-    window.location.href = '/';
+    window.location.replace('/');
   };
 
   useEffect(() => {
+    if (handledRef.current) return;
+
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token') || searchParams.get('token');
-      const error = urlParams.get('error') || searchParams.get('error');
-      const errorDesc =
-        urlParams.get('error_description') || searchParams.get('error_description');
+      const token = urlParams.get('token');
+      const error = urlParams.get('error');
+      const errorDesc = urlParams.get('error_description');
 
       if (error) {
+        handledRef.current = true;
         setErrorCode(error);
         setErrorMessage(
           errorDesc ||
@@ -45,14 +46,16 @@ function CallbackHandler() {
       }
 
       if (token) {
+        handledRef.current = true;
+        capturedTokenRef.current = token;
         setStoredToken(token);
-        // Strip raw JWT query parameter immediately from URL history/referer exposure
-        window.history.replaceState({}, '', '/auth/callback');
         window.postMessage({ type: 'STREAKFORGE_TRIGGER_PAIR' }, window.location.origin);
-        const timer = setTimeout(() => {
-          window.location.href = '/';
-        }, 150);
-        return () => clearTimeout(timer);
+        // Use window.location.replace('/') instead of history.replaceState before redirect:
+        // Next.js App Router patches replaceState to emit searchParams updates, which can race with navigation.
+        setTimeout(() => {
+          window.location.replace('/');
+        }, 120);
+        return;
       }
 
       // No token and no error in params
@@ -62,7 +65,7 @@ function CallbackHandler() {
       setErrorCode('CLIENT_ERROR');
       setErrorMessage(err?.message || 'An unexpected client error occurred during callback processing.');
     }
-  }, [searchParams]);
+  }, []);
 
   if (errorMessage) {
     return (
