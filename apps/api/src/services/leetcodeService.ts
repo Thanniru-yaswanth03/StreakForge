@@ -70,7 +70,8 @@ export async function fetchLeetCodeUserStats(username: string): Promise<ScrapedL
     body: JSON.stringify({
       query,
       variables: { username }
-    })
+    }),
+    signal: AbortSignal.timeout(10000)
   });
 
   if (!response.ok) {
@@ -93,27 +94,30 @@ export async function fetchLeetCodeUserStats(username: string): Promise<ScrapedL
   const totalStats: Array<{ difficulty: string; count: number; submissions: number }> =
     matched.submitStatsGlobal?.totalSubmissionNum || [];
 
-  const allAc = acStats.find((s) => s.difficulty === 'All') || { count: 30, submissions: 78 };
-  const easyAc = acStats.find((s) => s.difficulty === 'Easy') || { count: 28, submissions: 72 };
-  const mediumAc = acStats.find((s) => s.difficulty === 'Medium') || { count: 2, submissions: 6 };
+  const allAc = acStats.find((s) => s.difficulty === 'All') || { count: 0, submissions: 0 };
+  const easyAc = acStats.find((s) => s.difficulty === 'Easy') || { count: 0, submissions: 0 };
+  const mediumAc = acStats.find((s) => s.difficulty === 'Medium') || { count: 0, submissions: 0 };
   const hardAc = acStats.find((s) => s.difficulty === 'Hard') || { count: 0, submissions: 0 };
 
-  const allTotal = totalStats.find((s) => s.difficulty === 'All') || { count: 32, submissions: 98 };
+  const allTotal = totalStats.find((s) => s.difficulty === 'All') || { count: 0, submissions: 0 };
 
   const totalSolved = allAc.count;
   const acceptedSubmissions = allAc.submissions;
-  const totalSubmissions = allTotal.submissions || 98;
+  const totalSubmissions = allTotal.submissions;
   const acceptanceRate =
     totalSubmissions > 0
       ? Math.round((acceptedSubmissions / totalSubmissions) * 10000) / 100
-      : 79.59;
+      : 0;
 
-  let totalActiveDays = 36;
-  let maxStreak = 15;
+  let totalActiveDays = 0;
+  let maxStreak = 0;
   try {
     if (matched.submissionCalendar) {
       const calObj = JSON.parse(matched.submissionCalendar);
-      const timestamps = Object.keys(calObj).map(Number).sort((a, b) => a - b);
+      const timestamps = Object.keys(calObj)
+        .filter((k) => Number(calObj[k]) > 0)
+        .map(Number)
+        .sort((a, b) => a - b);
       if (timestamps.length > 0) {
         totalActiveDays = timestamps.length;
         let curr = 1;
@@ -204,41 +208,48 @@ export async function syncLeetCodeUserStats(
   user.leetcodeStats = statsDoc;
   await user.save();
 
-  // Synchronize authentic submission calendar days into DailyActivitySnapshot
+  // Synchronize authentic submission calendar days into DailyActivitySnapshot via bulkWrite
   if (scraped.submissionCalendar) {
     try {
       const cal = JSON.parse(scraped.submissionCalendar);
+      const bulkOps: any[] = [];
       for (const [tsStr, count] of Object.entries(cal)) {
+        const numCount = Number(count);
+        if (!Number.isFinite(numCount) || numCount <= 0) continue;
         const d = new Date(Number(tsStr) * 1000);
         const dateStr = d.toISOString().slice(0, 10);
-        const numCount = Number(count);
-        await DailyActivitySnapshot.findOneAndUpdate(
-          { userId: user._id, date: dateStr },
-          {
-            $set: {
-              leetCodeCount: numCount,
-              'leetcode.submissions': numCount,
-              'leetcode.accepted': numCount,
-              'leetcode.uniqueProblems': Math.min(numCount, 30),
-              leetCodeStreakEligible: true,
-              streakMaintained: true
+        bulkOps.push({
+          updateOne: {
+            filter: { userId: user._id, date: dateStr },
+            update: {
+              $set: {
+                leetCodeCount: numCount,
+                'leetcode.submissions': numCount,
+                'leetcode.accepted': numCount,
+                leetCodeStreakEligible: true,
+                overallStreakEligible: true,
+                streakMaintained: true
+              },
+              $setOnInsert: {
+                userId: user._id,
+                date: dateStr,
+                github: { commits: 0, prs: 0, issues: 0, other: 0 },
+                localDev: { sessions: 0, filesChanged: 0, activeMinutes: 0 },
+                maintenance: { backups: 0, dependencyUpdates: 0, docsSync: 0 },
+                'leetcode.uniqueProblems': 0,
+                githubStreakEligible: false,
+                localDevStreakEligible: false,
+                gitCommitCount: 0,
+                totalActivities: numCount,
+                languagesUsed: []
+              }
             },
-            $setOnInsert: {
-              userId: user._id,
-              date: dateStr,
-              github: { commits: 0, prs: 0, issues: 0, other: 0 },
-              localDev: { sessions: 0, filesChanged: 0, activeMinutes: 0 },
-              maintenance: { backups: 0, dependencyUpdates: 0, docsSync: 0 },
-              githubStreakEligible: false,
-              localDevStreakEligible: false,
-              overallStreakEligible: true,
-              gitCommitCount: 0,
-              totalActivities: numCount,
-              languagesUsed: ['python3']
-            }
-          },
-          { upsert: true }
-        );
+            upsert: true
+          }
+        });
+      }
+      if (bulkOps.length > 0) {
+        await DailyActivitySnapshot.bulkWrite(bulkOps, { ordered: false });
       }
     } catch (err) {
       logger.warn('Failed to upsert DailyActivitySnapshots from submissionCalendar', { err });

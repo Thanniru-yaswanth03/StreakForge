@@ -24,12 +24,14 @@ import { api } from '../lib/api';
 
 export function StreakCalendarView() {
   const { heatmap, overview, user, refreshData } = useData();
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const currentYear = new Date().getUTCFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'GITHUB' | 'AGENT' | 'LEETCODE' | 'MAINTENANCE'>('ALL');
   const [selectedDate, setSelectedDate] = useState<HeatmapDay | null>(null);
   const [dayRecords, setDayRecords] = useState<ActivityRecord[]>([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState<boolean>(false);
   const [isRecalculating, setIsRecalculating] = useState<boolean>(false);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   // Month labels mapping
   const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -49,23 +51,25 @@ export function StreakCalendarView() {
   // Recalculate streaks trigger
   const handleRecalculate = async () => {
     setIsRecalculating(true);
+    setStatusNotice(null);
     try {
       const res = await api.analytics.recalculate(user?.timezone);
-      alert(res.message);
+      setStatusNotice(res.message || 'Streaks recalculated.');
       await refreshData();
+      setTimeout(() => setStatusNotice(null), 4000);
     } catch (err: any) {
-      alert(`Recalculation failed: ${err.message}`);
+      setStatusNotice(`Recalculation failed: ${err.message}`);
     } finally {
       setIsRecalculating(false);
     }
   };
 
-  // Filter calculations
+  // Filter calculations (strictly zero-fabrication — never multiply or estimate from gitCommits)
   const filteredHeatmap = heatmap.map((d) => {
     let effectiveCount = d.count;
     if (activeFilter === 'GITHUB') effectiveCount = d.verifiedGitHub?.commits ?? d.gitCommits;
     else if (activeFilter === 'LEETCODE') effectiveCount = d.leetCode?.submissions ?? d.leetCodeSubmissions;
-    else if (activeFilter === 'AGENT') effectiveCount = d.localDev?.sessions ?? Math.floor(d.gitCommits * 0.7);
+    else if (activeFilter === 'AGENT') effectiveCount = d.localDev?.sessions ?? 0;
     else if (activeFilter === 'MAINTENANCE') effectiveCount = d.maintenance?.backups ?? 0;
 
     let level: 0 | 1 | 2 | 3 | 4 = 0;
@@ -113,6 +117,18 @@ export function StreakCalendarView() {
 
   return (
     <div className="space-y-6">
+      {statusNotice && (
+        <div className="p-3 bg-theme-elevated border border-theme-border rounded-xl text-xs text-theme-secondary flex items-center justify-between gap-2">
+          <span>{statusNotice}</span>
+          <button
+            type="button"
+            onClick={() => setStatusNotice(null)}
+            className="text-theme-muted hover:text-theme-primary text-[11px] font-semibold"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Top Controls & Category Filters */}
       <div className="bg-theme-surface border border-theme-border rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -157,8 +173,8 @@ export function StreakCalendarView() {
             </button>
             <span className="font-bold text-sm text-theme-primary px-2">{selectedYear}</span>
             <button
-              onClick={() => setSelectedYear((y) => Math.min(2026, y + 1))}
-              disabled={selectedYear >= 2026}
+              onClick={() => setSelectedYear((y) => Math.min(currentYear, y + 1))}
+              disabled={selectedYear >= currentYear}
               className="p-1.5 border border-theme-border hover:bg-theme-elevated rounded-lg text-theme-muted hover:text-theme-primary transition disabled:opacity-40"
               title="Next Year"
             >

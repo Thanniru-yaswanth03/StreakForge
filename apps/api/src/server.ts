@@ -1,12 +1,14 @@
 import { createApp } from './app.js';
 import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { ENV } from './config/env.js';
+import { hydrateRevokedTokens } from './services/authService.js';
 import { SchedulerService } from './services/schedulerService.js';
 import { logger } from './utils/logger.js';
 
 async function bootstrap() {
   try {
     await connectDatabase();
+    await hydrateRevokedTokens();
     const app = createApp();
 
     // Start background scheduler and worker loops

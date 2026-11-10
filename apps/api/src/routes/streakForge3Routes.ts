@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { Types } from 'mongoose';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { WeaknessDetectorService } from '../services/weaknessDetectorService.js';
 import { PlannerService } from '../services/plannerService.js';
@@ -11,6 +12,8 @@ import { WeeklyReportService } from '../services/weeklyReportService.js';
 import { PatternService } from '../services/patternService.js';
 import { CareerReadinessService } from '../services/careerReadinessService.js';
 import { PublicProfileService } from '../services/publicProfileService.js';
+import { getStreakOverview } from '../services/streakService.js';
+import { DailyActivitySnapshot } from '../models/DailyActivitySnapshot.js';
 import type { PeriodType, InterviewDifficulty } from '@streakforge/shared-types';
 
 export const streakForge3Router: Router = Router();
@@ -25,32 +28,74 @@ streakForge3Router.get(
     try {
       const period = (req.query.period as PeriodType) || 'weekly';
       const days = period === 'daily' ? 7 : period === 'monthly' ? 30 : period === 'yearly' ? 365 : 14;
+      const userId = new Types.ObjectId(req.userId!);
+
+      const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const yearSince = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+
+      const [overview, snapshots, yearActiveCount] = await Promise.all([
+        getStreakOverview(req.userId!),
+        DailyActivitySnapshot.find({ userId, date: { $gte: since } }).sort({ date: 1 }).lean(),
+        DailyActivitySnapshot.countDocuments({ userId, date: { $gte: yearSince }, totalActivities: { $gt: 0 } })
+      ]);
+
+      const snapMap = new Map<string, any>();
+      snapshots.forEach((s) => snapMap.set(s.date, s));
 
       const cadence = [];
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      for (let i = days - 1; i >= 0; i--) {
+      const weekdayTotals: Record<string, number> = {};
+
+      for (let i = Math.min(days, 14) - 1; i >= 0; i--) {
         const d = new Date(Date.now() - i * 86400000);
-        const label = period === 'yearly' ? d.toLocaleDateString('en-US', { month: 'short' }) : dayNames[d.getDay()];
+        const dateKey = d.toISOString().slice(0, 10);
+        const snap = snapMap.get(dateKey);
+        const dayName = dayNames[d.getUTCDay()];
+        const label = period === 'yearly' ? d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }) : dayName;
+
+        const commits = snap?.gitCommitCount || 0;
+        const solves = snap?.leetCodeCount || 0;
+        const total = commits + solves;
+        weekdayTotals[dayName] = (weekdayTotals[dayName] || 0) + total;
+
         cadence.push({
           label,
-          count: Math.floor(Math.random() * 4) + 1,
-          genuineCommits: Math.floor(Math.random() * 3) + 1,
-          leetCodeSolves: Math.floor(Math.random() * 2),
+          count: total,
+          genuineCommits: commits,
+          leetCodeSolves: solves,
           codeforcesSolves: 0
         });
       }
 
+      let mostProductiveDay = 'No activity yet';
+      let topDayScore = 0;
+      for (const [dayName, score] of Object.entries(weekdayTotals)) {
+        if (score > topDayScore) {
+          topDayScore = score;
+          mostProductiveDay = dayName;
+        }
+      }
+
+      const recent7 = cadence.slice(-7);
+      const recent7Solves = recent7.reduce((sum, item) => sum + item.leetCodeSolves, 0);
+      const weeklyAverageSolves = Math.round((recent7Solves / 7) * 10) / 10;
+
+      const prev7 = cadence.slice(0, 7);
+      const prevTotal = prev7.reduce((sum, item) => sum + item.count, 0);
+      const currTotal = recent7.reduce((sum, item) => sum + item.count, 0);
+      const trend = currTotal > prevTotal ? 'UPWARD' : currTotal < prevTotal ? 'DOWNWARD' : 'STEADY';
+
       res.json({
         success: true,
         data: {
-          consistencyScore: 92,
-          streakDays: 2,
-          longestStreakDays: 15,
-          activeDaysPastYear: 37,
-          weeklyAverageSolves: 4.8,
-          mostProductiveDay: 'Wednesday',
-          activityCadence: cadence.slice(-14),
-          trend: 'UPWARD'
+          consistencyScore: overview.weeklyConsistencyPercent || 0,
+          streakDays: overview.currentStreak || 0,
+          longestStreakDays: overview.longestStreak || 0,
+          activeDaysPastYear: yearActiveCount,
+          weeklyAverageSolves,
+          mostProductiveDay,
+          activityCadence: cadence,
+          trend
         }
       });
     } catch (err) {
@@ -219,7 +264,7 @@ streakForge3Router.post(
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
       const { sessionId, timeSpentSeconds, problemResults } = req.body;
-      const session = await MockInterviewService.completeSession(sessionId, timeSpentSeconds, problemResults);
+      const session = await MockInterviewService.completeSession(req.userId!, sessionId, timeSpentSeconds, problemResults);
       res.json({ success: true, data: session });
     } catch (err) {
       next(err);

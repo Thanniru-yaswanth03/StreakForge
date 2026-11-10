@@ -3,7 +3,9 @@
 import React from 'react';
 import { Flame, GitBranch, Terminal, ShieldCheck, Settings, LogOut, CheckCircle2 } from 'lucide-react';
 import type { User } from '@streakforge/shared-types';
-import { clearStoredToken, API_BASE_URL } from '../lib/utils';
+import { clearStoredToken } from '../lib/utils';
+import { api } from '../lib/api';
+import { GitHubConnectButton } from './GitHubConnectButton';
 
 interface NavbarProps {
   user: User | null;
@@ -22,8 +24,14 @@ export function Navbar({ user, activeTab, onTabChange, currentStreak }: NavbarPr
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // Clear local session state even if backend revocation request fails or is sleeping
+    }
     clearStoredToken();
+    window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
     window.location.reload();
   };
 
@@ -97,12 +105,11 @@ export function Navbar({ user, activeTab, onTabChange, currentStreak }: NavbarPr
               </button>
             </div>
           ) : (
-            <a
-              href={`${API_BASE_URL}/auth/github`}
+            <GitHubConnectButton
+              label="Connect GitHub"
               className="flex items-center gap-2 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition shadow-md shadow-indigo-600/20"
-            >
-              <span>Connect GitHub</span>
-            </a>
+              iconClassName="w-3.5 h-3.5"
+            />
           )}
         </div>
       </div>

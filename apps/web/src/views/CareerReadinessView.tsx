@@ -106,7 +106,7 @@ export function CareerReadinessView() {
               Overall Readiness Index
             </span>
             <div className="flex items-baseline gap-2">
-              <span className={`text-6xl font-black font-mono ${getScoreColor(readiness?.overallScore ?? 50)}`}>
+              <span className={`text-6xl font-black font-mono ${getScoreColor(readiness?.overallScore ?? 0)}`}>
                 {readiness?.overallScore ?? 0}%
               </span>
               <span className="text-xs text-[#8b949e] font-mono">/ 100</span>

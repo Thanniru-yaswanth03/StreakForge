@@ -121,10 +121,13 @@ studyRouter.get('/intelligence', requireAuth, async (req: AuthenticatedRequest, 
     const repoFullName = targetRepo?.repoFullName || '';
     const catalogItems = repoFullName ? await CatalogService.getCatalogItems(userId, repoFullName) : [];
 
+    const overview = await (await import('../services/streakService.js')).getStreakOverview(userId);
+    const totalReviews = queue.totalMastered + queue.totalNeedsRevision;
+
     const summary: LearningIntelligenceSummary = {
       totalSolvedLeetCode: user?.leetcodeStats?.totalSolved || 0,
-      authenticStreakDays: user?.leetcodeStats?.totalActiveDays ? 1 : 0,
-      longestStreakDays: user?.leetcodeStats?.maxStreak || 0,
+      authenticStreakDays: overview.currentStreak || 0,
+      longestStreakDays: Math.max(overview.longestStreak || 0, user?.leetcodeStats?.maxStreak || 0),
       curriculumProgress: {
         blind75: {
           solved: blind75Data.solvedCount,
@@ -147,9 +150,7 @@ studyRouter.get('/intelligence', requireAuth, async (req: AuthenticatedRequest, 
         dueTodayCount: queue.dueToday.length,
         overdueCount: queue.overdue.length,
         masteredCount: queue.totalMastered,
-        retentionRatePercent: Math.round(
-          (queue.totalMastered / Math.max(1, queue.totalMastered + queue.totalNeedsRevision)) * 100
-        ) || 94
+        retentionRatePercent: totalReviews > 0 ? Math.round((queue.totalMastered / totalReviews) * 100) : 0
       },
       catalogStatus: {
         repoFullName,

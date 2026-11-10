@@ -46,7 +46,7 @@ export class ReminderService {
         urgency: hoursLeft <= 1 ? 'CRITICAL' : 'WARNING',
         timestamp: now.toISOString(),
         dueInHours: hoursLeft,
-        actionLink: '/leetcode'
+        actionLink: '/?tab=leetcode'
       });
     }
 
@@ -64,7 +64,7 @@ export class ReminderService {
         message: `${pendingSubsCount} accepted submission(s) are queued and awaiting export to GitHub.`,
         urgency: 'INFO',
         timestamp: now.toISOString(),
-        actionLink: '/repos'
+        actionLink: '/?tab=repos'
       });
     }
 
@@ -84,7 +84,7 @@ export class ReminderService {
         message: `Failed to export solution for "${sub.questionTitle}": ${sub.syncErrorMessage || 'Unknown error'}.`,
         urgency: 'WARNING',
         timestamp: sub.updatedAt.toISOString(),
-        actionLink: '/leetcode'
+        actionLink: '/?tab=leetcode'
       });
     }
 
@@ -106,7 +106,7 @@ export class ReminderService {
             message: `Desktop companion "${agent.name}" on ${agent.hostname} has not sent a heartbeat in ${Math.round(minutesSinceHeartbeat)} minutes. Run streakforge-agent start to resume monitoring.`,
             urgency: 'INFO',
             timestamp: now.toISOString(),
-            actionLink: '/automation'
+            actionLink: '/?tab=automation'
           });
         }
       }
@@ -129,7 +129,7 @@ export class ReminderService {
           message: `Repository ${repo.repoFullName} is monitored for automated snapshots (interval: ${repo.syncPolicy.intervalMinutes}m).`,
           urgency: 'INFO',
           timestamp: now.toISOString(),
-          actionLink: '/repos'
+          actionLink: '/?tab=repos'
         });
         break; // Only report once
       }

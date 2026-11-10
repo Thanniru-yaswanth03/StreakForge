@@ -26,14 +26,19 @@ async function updateActionBadge(): Promise<void> {
 /**
  * Synchronizes user authentication profile, target repository, and submission history from StreakForge API
  */
-async function syncWithBackend(authToken: string, serverUrl: string = 'http://localhost:4000') {
+async function syncWithBackend(
+  authToken: string,
+  serverUrl: string = 'https://streakforge-api-5uhs.onrender.com',
+  webAppUrl?: string
+) {
   const base = serverUrl.replace(/\/+$/, '');
 
   // 1. Fetch user profile
   let userProfile = undefined;
   try {
     const userRes = await fetch(`${base}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: AbortSignal.timeout(10000)
     });
     if (userRes.ok) {
       const uJson = await userRes.json();
@@ -53,7 +58,8 @@ async function syncWithBackend(authToken: string, serverUrl: string = 'http://lo
   let targetRepoFullName: string | undefined = undefined;
   try {
     const reposRes = await fetch(`${base}/api/v1/repos`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: AbortSignal.timeout(10000)
     });
     if (reposRes.ok) {
       const rJson = await reposRes.json();
@@ -73,7 +79,8 @@ async function syncWithBackend(authToken: string, serverUrl: string = 'http://lo
   let mappedHistory: any[] = [];
   try {
     const histRes = await fetch(`${base}/api/v1/sync/leetcode/history?limit=100`, {
-      headers: { Authorization: `Bearer ${authToken}` }
+      headers: { Authorization: `Bearer ${authToken}` },
+      signal: AbortSignal.timeout(10000)
     });
     if (histRes.ok) {
       const hJson = await histRes.json();
@@ -108,6 +115,7 @@ async function syncWithBackend(authToken: string, serverUrl: string = 'http://lo
     authToken,
     serverUrl: base
   };
+  if (webAppUrl) updatePayload.webAppUrl = webAppUrl.replace(/\/+$/, '');
   if (userProfile) updatePayload.userProfile = userProfile;
   if (targetRepoFullName !== undefined) updatePayload.targetRepoFullName = targetRepoFullName;
 
@@ -119,14 +127,48 @@ async function syncWithBackend(authToken: string, serverUrl: string = 'http://lo
   return { config: updatedCfg, historyCount: mappedHistory.length };
 }
 
+function isTrustedWebBridgeSender(sender: chrome.runtime.MessageSender): boolean {
+  if (!sender?.tab) return true; // Internal extension popup/options
+  const tabUrl = sender.tab.url || '';
+  return (
+    tabUrl.startsWith('http://localhost:') ||
+    tabUrl.startsWith('http://127.0.0.1:') ||
+    tabUrl.startsWith('https://streak-forge-six.vercel.app')
+  );
+}
+
 // 1. Message Dispatcher
 chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
   (async () => {
     try {
       if (message.type === 'AUTO_PAIR_TOKEN') {
-        const result = await syncWithBackend(message.payload.token, message.payload.serverUrl);
+        if (!isTrustedWebBridgeSender(sender)) {
+          sendResponse({ success: false, error: 'Untrusted pairing origin' });
+          return;
+        }
+        const result = await syncWithBackend(
+          message.payload.token,
+          message.payload.serverUrl,
+          message.payload.webAppUrl
+        );
         await updateActionBadge();
         sendResponse({ success: true, ...result });
+        return;
+      }
+
+      if (message.type === 'CLEAR_AUTH_TOKEN') {
+        if (!isTrustedWebBridgeSender(sender)) {
+          sendResponse({ success: false, error: 'Untrusted origin' });
+          return;
+        }
+        await StorageManager.updateConfig({
+          authToken: '',
+          userProfile: undefined,
+          targetRepoFullName: ''
+        });
+        await StorageManager.setSyncedHistory([]);
+        await updateActionBadge();
+        sendResponse({ success: true });
         return;
       }
 

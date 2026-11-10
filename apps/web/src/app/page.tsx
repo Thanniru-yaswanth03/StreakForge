@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 import { OnboardingModal } from '../components/OnboardingModal';
@@ -31,11 +31,49 @@ import { PublicProfileView } from '../views/PublicProfileView';
 import { SyncToast } from '../components/SyncToast';
 import { useData } from '../context/DataContext';
 
+const VALID_TABS = new Set([
+  'overview',
+  'intelligence',
+  'curriculum',
+  'revision',
+  'catalog',
+  'badges',
+  'planner',
+  'vault',
+  'patterns',
+  'mock',
+  'career',
+  'achievements',
+  'reports',
+  'platforms',
+  'profile',
+  'github',
+  'leetcode',
+  'repos',
+  'automation',
+  'calendar',
+  'analytics',
+  'journal',
+  'notifications',
+  'settings'
+]);
+
 export default function DashboardPage() {
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [onboardingOpen, setOnboardingOpen] = useState<boolean>(false);
   const { connectedRepos, githubRepos, refreshData } = useData();
+
+  useEffect(() => {
+    try {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam && VALID_TABS.has(tabParam)) {
+        setCurrentTab(tabParam);
+      }
+    } catch {
+      // Ignore query parse error
+    }
+  }, []);
 
   const renderActiveView = () => {
     switch (currentTab) {

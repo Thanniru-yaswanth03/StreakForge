@@ -173,7 +173,7 @@ export class DeveloperAnalyticsService {
       weeklyCommits,
       monthlyCommits,
       repositoryActivity,
-      languages: languages.length > 0 ? languages : [{ language: 'TypeScript', count: 1, percentage: 100 }],
+      languages: languages,
       pullRequests,
       issues,
       repositoryGrowth,
@@ -287,14 +287,14 @@ export class DeveloperAnalyticsService {
     const avgSubmissionsPerSolved =
       uniqueProblemsSolved > 0
         ? Math.round((totalSubmissions / uniqueProblemsSolved) * 10) / 10
-        : 1.0;
+        : 0;
 
     // Consistency metrics
     const user = await User.findById(userId).lean();
     const tz = user?.timezone || 'UTC';
     const snapshots = await DailyActivitySnapshot.find({
       userId: userObjectId,
-      'breakdown.leetCodeAccepted': { $gt: 0 }
+      'leetcode.accepted': { $gt: 0 }
     }).lean();
 
     const currentStreakDays = StreakEngine.calculateStreak(snapshots, tz).currentStreak;
@@ -409,7 +409,7 @@ export class DeveloperAnalyticsService {
       weeklyCodingDurationMinutes,
       activeCodingDays: distinctDays,
       repositoryActivity,
-      languageUsage: languageUsage.length > 0 ? languageUsage : [{ language: 'TypeScript', count: 1, percentage: 100 }],
+      languageUsage: languageUsage,
       sessionHistory,
       durationNotice
     };
@@ -671,10 +671,10 @@ export class DeveloperAnalyticsService {
         consistencyScore:
           snapshots.length > 0
             ? Math.round((activeDaysCount / snapshots.length) * 100)
-            : 100,
+            : 0,
         longestStreak: StreakEngine.calculateStreak(snapshots, tz).longestStreak,
-        topLanguages: topLanguages.length > 0 ? topLanguages : [{ name: 'TypeScript', count: 1, percentage: 100 }],
-        topRepositories: topRepositories.length > 0 ? topRepositories : [{ name: 'primary-workspace', count: 1, percentage: 100 }]
+        topLanguages: topLanguages,
+        topRepositories: topRepositories
       },
       activityBreakdown
     };

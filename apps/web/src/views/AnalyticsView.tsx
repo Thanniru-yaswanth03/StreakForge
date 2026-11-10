@@ -85,17 +85,18 @@ export function AnalyticsView() {
       .finally(() => setIsLoading(false));
   }, [reportPeriod]);
 
-  // Hourly focus distribution
-  const hourlyData = [
-    { hour: '08:00', actions: 2 },
-    { hour: '10:00', actions: 8 },
-    { hour: '12:00', actions: 14 },
-    { hour: '14:00', actions: 19 },
-    { hour: '16:00', actions: 12 },
-    { hour: '18:00', actions: 16 },
-    { hour: '20:00', actions: 22 },
-    { hour: '22:00', actions: 9 }
-  ];
+  // Compute genuine hour-of-day distribution from recorded report/submissions (zero static fake bars)
+  const hourlyCounts: Record<string, number> = {
+    '00:00': 0, '04:00': 0, '08:00': 0, '12:00': 0, '16:00': 0, '20:00': 0
+  };
+  (leetcodeAnalytics?.submissionHistory || []).forEach((s: any) => {
+    if (s.submittedAt) {
+      const hr = new Date(s.submittedAt).getHours();
+      const bucket = `${String(Math.floor(hr / 4) * 4).padStart(2, '0')}:00`;
+      if (bucket in hourlyCounts) hourlyCounts[bucket]++;
+    }
+  });
+  const hourlyData = Object.entries(hourlyCounts).map(([hour, actions]) => ({ hour, actions }));
 
   // Dynamic Day of week distribution computed from authentic heatmap activity for selected date range
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -254,7 +255,7 @@ export function AnalyticsView() {
                 <Zap className="w-4 h-4 text-amber-500" />
               </div>
               <div className="text-2xl font-bold text-emerald-500 mt-2">
-                {overview?.weeklyActivityScore ?? 92}/100
+                {overview?.weeklyActivityScore ?? 0}/100
               </div>
               <div className="text-xs text-theme-muted mt-1">Weighted 7-day consistency</div>
             </div>
@@ -265,7 +266,7 @@ export function AnalyticsView() {
                 <GitCommit className="w-4 h-4 text-indigo-500" />
               </div>
               <div className="text-2xl font-bold text-theme-primary mt-2">
-                {overview?.totalGitCommitsTracked ?? 164}
+                {overview?.totalGitCommitsTracked ?? 0}
               </div>
               <div className="text-xs text-theme-muted mt-1">Across default/monitored branches</div>
             </div>
@@ -276,7 +277,7 @@ export function AnalyticsView() {
                 <Award className="w-4 h-4 text-emerald-500" />
               </div>
               <div className="text-2xl font-bold text-theme-primary mt-2">
-                {leetcodeAnalytics?.uniqueProblemsSolved ?? overview?.totalLeetCodeSolved ?? 58}
+                {leetcodeAnalytics?.uniqueProblemsSolved ?? overview?.totalLeetCodeSolved ?? 0}
               </div>
               <div className="text-xs text-emerald-500 mt-1">Strict unique problem count</div>
             </div>
@@ -287,7 +288,7 @@ export function AnalyticsView() {
                 <Calendar className="w-4 h-4 text-purple-500" />
               </div>
               <div className="text-2xl font-bold text-theme-primary mt-2">
-                {overview?.githubStreak?.activeDays ?? 45} Days
+                {overview?.githubStreak?.activeDays ?? 0} Days
               </div>
               <div className="text-xs text-theme-muted mt-1">Calendar days with recorded work</div>
             </div>
@@ -369,7 +370,7 @@ export function AnalyticsView() {
                 Total Commits
               </div>
               <div className="text-2xl font-bold text-theme-primary mt-1">
-                {githubAnalytics?.totalCommits ?? 164}
+                {githubAnalytics?.totalCommits ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">Verified authored commits</div>
             </div>
@@ -424,33 +425,12 @@ export function AnalyticsView() {
             </div>
 
             <div className="divide-y divide-theme-border text-xs">
-              {(
-                githubAnalytics?.repositoryActivity ?? [
-                  {
-                    repoFullName: 'user/streakforge-core',
-                    commitsCount: 94,
-                    pullRequestsCount: 16,
-                    issuesCount: 8,
-                    percentageOfTotal: 57.3,
-                    lastCommitAt: '2026-11-04T12:30:00Z'
-                  },
-                  {
-                    repoFullName: 'user/leetcode-solutions',
-                    commitsCount: 58,
-                    pullRequestsCount: 6,
-                    issuesCount: 2,
-                    percentageOfTotal: 35.4,
-                    lastCommitAt: '2026-11-04T11:15:00Z'
-                  },
-                  {
-                    repoFullName: 'user/dotfiles',
-                    commitsCount: 12,
-                    pullRequestsCount: 2,
-                    issuesCount: 2,
-                    percentageOfTotal: 7.3,
-                    lastCommitAt: '2026-11-02T09:00:00Z'
-                  }
-                ]
+              {(githubAnalytics?.repositoryActivity || []).length === 0 ? (
+                <div className="p-6 text-center text-theme-muted text-xs">
+                  No repository commit activity recorded yet.
+                </div>
+              ) : (
+                githubAnalytics?.repositoryActivity || []
               ).map((repo) => (
                 <div
                   key={repo.repoFullName}
@@ -484,13 +464,12 @@ export function AnalyticsView() {
               Language Distribution Across Workspaces
             </h3>
             <div className="space-y-3 mt-3">
-              {(
-                githubAnalytics?.languages ?? [
-                  { language: 'TypeScript', count: 110, percentage: 67.1 },
-                  { language: 'Python', count: 34, percentage: 20.7 },
-                  { language: 'Go', count: 12, percentage: 7.3 },
-                  { language: 'Rust', count: 8, percentage: 4.9 }
-                ]
+              {(githubAnalytics?.languages || []).length === 0 ? (
+                <div className="py-4 text-center text-theme-muted text-xs">
+                  No language activity recorded yet.
+                </div>
+              ) : (
+                githubAnalytics?.languages || []
               ).map((lang) => (
                 <div key={lang.language} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
@@ -534,7 +513,7 @@ export function AnalyticsView() {
                 Unique Solved
               </div>
               <div className="text-2xl font-bold text-emerald-400 mt-1">
-                {leetcodeAnalytics?.uniqueProblemsSolved ?? 58}
+                {leetcodeAnalytics?.uniqueProblemsSolved ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">Distinct problem IDs</div>
             </div>
@@ -544,10 +523,10 @@ export function AnalyticsView() {
                 Total Submissions
               </div>
               <div className="text-2xl font-bold text-theme-primary mt-1">
-                {leetcodeAnalytics?.totalSubmissions ?? 76}
+                {leetcodeAnalytics?.totalSubmissions ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">
-                {leetcodeAnalytics?.acceptedSubmissions ?? 58} accepted ({leetcodeAnalytics?.acceptanceRate ?? 76.3}%)
+                {leetcodeAnalytics?.acceptedSubmissions ?? 0} accepted ({leetcodeAnalytics?.acceptanceRate ?? 0}%)
               </div>
             </div>
 
@@ -556,7 +535,7 @@ export function AnalyticsView() {
                 Avg. Submissions / Problem
               </div>
               <div className="text-2xl font-bold text-amber-400 mt-1">
-                {leetcodeAnalytics?.avgSubmissionsPerSolved ?? 1.3}
+                {leetcodeAnalytics?.avgSubmissionsPerSolved ?? 0}
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">Attempts per solved problem</div>
             </div>
@@ -631,14 +610,12 @@ export function AnalyticsView() {
               </div>
 
               <div className="space-y-2 mt-2">
-                {(
-                  leetcodeAnalytics?.topicDistribution ?? [
-                    { topic: 'Array', solvedCount: 24, percentage: 35.0 },
-                    { topic: 'Dynamic Programming', solvedCount: 14, percentage: 20.0 },
-                    { topic: 'Hash Table', solvedCount: 12, percentage: 17.0 },
-                    { topic: 'Tree & Graphs', solvedCount: 10, percentage: 14.0 },
-                    { topic: 'Linked List', solvedCount: 8, percentage: 11.0 }
-                  ]
+                {(leetcodeAnalytics?.topicDistribution || []).length === 0 ? (
+                  <div className="py-8 text-center text-theme-muted text-xs">
+                    No LeetCode topic breakdown recorded yet. Connect LeetCode or sync an Accepted submission.
+                  </div>
+                ) : (
+                  leetcodeAnalytics?.topicDistribution || []
                 ).map((t) => (
                   <div key={t.topic} className="space-y-0.5">
                     <div className="flex items-center justify-between text-xs">
@@ -706,7 +683,7 @@ export function AnalyticsView() {
                 Active Coding Days
               </div>
               <div className="text-2xl font-bold text-emerald-400 mt-1">
-                {codingAnalytics?.activeCodingDays ?? 45} Days
+                {codingAnalytics?.activeCodingDays ?? 0} Days
               </div>
               <div className="text-[10px] text-theme-muted mt-0.5">Days with confirmed engineering work</div>
             </div>
@@ -718,11 +695,12 @@ export function AnalyticsView() {
               Monitored Local Workspace Activity
             </h3>
             <div className="divide-y divide-theme-border text-xs">
-              {(
-                codingAnalytics?.repositoryActivity ?? [
-                  { repoName: 'C:\\Users\\dev\\projects\\streakforge', sessionCount: 38, filesModified: 142 },
-                  { repoName: 'C:\\Users\\dev\\projects\\leetcode-solutions', sessionCount: 24, filesModified: 58 }
-                ]
+              {(codingAnalytics?.repositoryActivity || []).length === 0 ? (
+                <div className="py-4 text-center text-theme-muted text-xs">
+                  No monitored local workspace sessions recorded yet.
+                </div>
+              ) : (
+                codingAnalytics?.repositoryActivity || []
               ).map((repo) => (
                 <div key={repo.repoName} className="py-2.5 flex items-center justify-between">
                   <div className="font-mono text-theme-primary truncate max-w-md">{repo.repoName}</div>

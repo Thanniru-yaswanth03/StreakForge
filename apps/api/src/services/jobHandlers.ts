@@ -245,7 +245,7 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
             severity: 'WARNING',
             title: `Health Warning: ${repo.repoFullName}`,
             message: `Repository health score is ${health.healthScore}/100. ${health.recommendations[0] || 'Review repository settings.'}`,
-            link: `/repositories`
+            link: '/?tab=repos'
           });
         }
       } catch (err: any) {
@@ -386,7 +386,7 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
       severity: 'INFO',
       title: 'Weekly Analytics Ready',
       message: `Your weekly coding score is ${overview.weeklyActivityScore}/100 with a ${overview.currentStreak}-day active streak.`,
-      link: '/analytics'
+      link: '/?tab=analytics'
     });
 
     return {

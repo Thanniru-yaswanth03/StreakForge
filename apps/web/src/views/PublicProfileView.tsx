@@ -31,7 +31,9 @@ export function PublicProfileView() {
   const username = user?.username || '';
   const publicUrl = typeof window !== 'undefined' && username
     ? `${window.location.origin}/u/${username}`
-    : `https://streakforge.app/u/${username || 'developer'}`;
+    : username
+    ? `https://streak-forge-six.vercel.app/u/${username}`
+    : 'https://streak-forge-six.vercel.app';
 
   const fetchProfile = async () => {
     if (!username) {
@@ -86,20 +88,28 @@ export function PublicProfileView() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyLink}
-            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#238636] hover:bg-[#2ea043] rounded-lg transition flex items-center gap-1.5 shadow-sm"
+            disabled={!username}
+            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#238636] hover:bg-[#2ea043] disabled:opacity-40 rounded-lg transition flex items-center gap-1.5 shadow-sm"
           >
             {copiedUrl ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             {copiedUrl ? 'Copied Public URL' : 'Copy Profile URL'}
           </button>
-          <a
-            href={`/u/${username}`}
-            target="_blank"
-            rel="noreferrer"
-            className="px-3 py-1.5 text-xs font-medium text-[#c9d1d9] bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-lg transition flex items-center gap-1.5"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            Open Page
-          </a>
+          {username ? (
+            <a
+              href={`/u/${username}`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 text-xs font-medium text-[#c9d1d9] bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-lg transition flex items-center gap-1.5"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open Page
+            </a>
+          ) : (
+            <span className="px-3 py-1.5 text-xs font-medium text-[#8b949e] bg-[#21262d]/60 border border-[#30363d] rounded-lg flex items-center gap-1.5 cursor-not-allowed">
+              <ExternalLink className="w-3.5 h-3.5" />
+              Connect GitHub First
+            </span>
+          )}
         </div>
       </div>
 

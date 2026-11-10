@@ -22,6 +22,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 export function createApp(): Express {
   const app = express();
 
+  // Trust Render / Vercel / Cloudflare reverse proxy headers so rate limiters key by real client IP
+  app.set('trust proxy', 1);
+
   // Security Middleware
   app.use(
     helmet({
@@ -29,7 +32,12 @@ export function createApp(): Express {
     })
   );
 
-  const allowedOrigins = ENV.CORS_ORIGIN.split(',').map((o) => o.trim());
+  const allowedOrigins = Array.from(
+    new Set([
+      ...ENV.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean),
+      ENV.WEB_APP_URL.trim().replace(/\/+$/, '')
+    ])
+  );
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -56,12 +64,13 @@ export function createApp(): Express {
     })
   );
 
-  // Rate Limiting (General API tier)
+  // Rate Limiting (General API tier, keyed per real client IP via trust proxy)
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200,
+    max: 600,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
     message: {
       success: false,
       error: {
@@ -72,12 +81,13 @@ export function createApp(): Express {
   });
   app.use('/api/', limiter);
 
-  // Strict Authentication Rate Limiting (Mitigate brute-force & credential stuffing)
+  // Strict Authentication Rate Limiting for credential-bearing POST attempts
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 30,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
     message: {
       success: false,
       error: {
@@ -86,7 +96,8 @@ export function createApp(): Express {
       }
     }
   });
-  app.use('/api/v1/auth/', authLimiter);
+  app.use('/api/v1/auth/github/pat', authLimiter);
+  app.use('/api/v1/auth/leetcode', authLimiter);
 
   // Body Parsing (with raw body buffer preservation for webhook signature checks)
   app.use(

@@ -148,7 +148,11 @@ export type ExtensionMessage =
       payload: {
         token: string;
         serverUrl?: string;
+        webAppUrl?: string;
       };
+    }
+  | {
+      type: 'CLEAR_AUTH_TOKEN';
     }
   | {
       type: 'SYNC_FROM_BACKEND';

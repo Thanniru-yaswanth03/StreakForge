@@ -110,15 +110,46 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
   }
 
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-  const res = await fetch(url, { ...options, headers });
-  const data = await res.json();
+  const controller = !options.signal ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
 
-  if (!res.ok || !data.success) {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers,
+      signal: options.signal || controller?.signal
+    });
+  } catch (networkErr: any) {
+    if (timeoutId) clearTimeout(timeoutId);
+    const isTimeout = networkErr?.name === 'AbortError';
     throw new ApiError(
-      data.error?.code || 'API_ERROR',
-      data.error?.message || `Request failed with status ${res.status}`,
+      isTimeout ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR',
+      isTimeout
+        ? 'Server request timed out (backend may be waking up from cold start).'
+        : networkErr?.message || 'Unable to reach StreakForge API server.',
+      0
+    );
+  }
+  if (timeoutId) clearTimeout(timeoutId);
+
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    throw new ApiError(
+      res.status >= 500 ? 'SERVER_UNAVAILABLE' : 'INVALID_RESPONSE',
+      `Server returned HTTP ${res.status} without valid JSON`,
+      res.status
+    );
+  }
+
+  if (!res.ok || !data?.success) {
+    throw new ApiError(
+      data?.error?.code || 'API_ERROR',
+      data?.error?.message || `Request failed with status ${res.status}`,
       res.status,
-      data.error?.details
+      data?.error?.details
     );
   }
 
@@ -140,10 +171,11 @@ export const api = {
       }),
     logout: () => apiFetch('/auth/logout', { method: 'POST' }),
     disconnect: () => apiFetch('/auth/disconnect', { method: 'POST' }),
+    deleteAccount: () => apiFetch<{ message: string }>('/auth/account', { method: 'DELETE' }),
     linkLeetCode: (username: string) =>
       apiFetch<{ message: string; leetcodeUsername: string; leetcodeStats: any }>('/auth/leetcode', {
         method: 'POST',
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ leetcodeUsername: username, username })
       }),
     disconnectLeetCode: () =>
       apiFetch<{ message: string }>('/auth/leetcode', {

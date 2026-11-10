@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { setStoredToken, API_BASE_URL } from '../../../lib/utils';
-import { AlertCircle, RefreshCw, ArrowRight, ShieldAlert } from 'lucide-react';
+import { setStoredToken } from '../../../lib/utils';
+import { ArrowRight, ShieldAlert } from 'lucide-react';
+import { GitHubConnectButton } from '../../../components/GitHubConnectButton';
 
 function CallbackHandler() {
   const searchParams = useSearchParams();
@@ -16,6 +17,7 @@ function CallbackHandler() {
       const token = urlParams.get('token') || searchParams.get('token');
       if (token) {
         setStoredToken(token);
+        window.history.replaceState({}, '', '/auth/callback');
       }
     } catch {
       // ignore
@@ -44,6 +46,9 @@ function CallbackHandler() {
 
       if (token) {
         setStoredToken(token);
+        // Strip raw JWT query parameter immediately from URL history/referer exposure
+        window.history.replaceState({}, '', '/auth/callback');
+        window.postMessage({ type: 'STREAKFORGE_TRIGGER_PAIR' }, window.location.origin);
         const timer = setTimeout(() => {
           window.location.href = '/';
         }, 150);
@@ -78,13 +83,10 @@ function CallbackHandler() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full mt-2">
-            <a
-              href={`${API_BASE_URL}/auth/github`}
+            <GitHubConnectButton
+              label="Retry GitHub Login"
               className="w-full sm:flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry GitHub Login</span>
-            </a>
+            />
             <button
               onClick={() => (window.location.href = '/')}
               className="w-full sm:flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-xs rounded-lg border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"

@@ -39,6 +39,7 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
   const [autoPush, setAutoPush] = useState<boolean>(false);
   const [intervalMinutes, setIntervalMinutes] = useState<number>(15);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
 
   // Health Diagnostics Modal State
   const [diagnosticsResult, setDiagnosticsResult] = useState<RepoHealthDiagnosticsResult | null>(null);
@@ -59,12 +60,13 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
     if (!singleRepo) return;
 
     try {
+      setRepoError(null);
       setIsSubmitting(true);
       const chosen = githubAvailable.find((r) => r.fullName === singleRepo) || {
         fullName: singleRepo,
-        id: Math.floor(Math.random() * 1000000),
+        id: 0,
         description: '',
-        primaryLanguage: 'TypeScript',
+        primaryLanguage: undefined,
         cloneUrl: `https://github.com/${singleRepo}.git`,
         permissions: { admin: false, push: true, pull: true }
       };
@@ -93,7 +95,7 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
       setSingleRepo('');
       onRefresh();
     } catch (err: any) {
-      alert(`Failed to connect repository: ${err.message}`);
+      setRepoError(`Failed to connect repository: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -103,11 +105,12 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
     if (selectedRepos.length === 0) return;
 
     try {
+      setRepoError(null);
       setIsSubmitting(true);
       for (const repoFullName of selectedRepos) {
         const chosen = githubAvailable.find((r) => r.fullName === repoFullName) || {
           fullName: repoFullName,
-          id: Math.floor(Math.random() * 1000000),
+          id: 0,
           permissions: { admin: false, push: true, pull: true }
         };
 
@@ -117,7 +120,7 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
           description: chosen.description,
           primaryLanguage: chosen.primaryLanguage,
           cloneUrl: chosen.cloneUrl,
-          defaultBranch: branch,
+          defaultBranch: chosen.defaultBranch || branch,
           solutionPathPattern: pathPattern,
           isTargetForLeetCode: false,
           category,
@@ -126,7 +129,7 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
           syncPolicy: {
             autoCommit,
             autoPush,
-            branch,
+            branch: chosen.defaultBranch || branch,
             pathPattern,
             intervalMinutes
           }
@@ -136,7 +139,7 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
       setSelectedRepos([]);
       onRefresh();
     } catch (err: any) {
-      alert(`Batch connect failed: ${err.message}`);
+      setRepoError(`Batch connect failed: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -147,21 +150,23 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
       return;
     }
     try {
+      setRepoError(null);
       await api.repos.disconnect(id);
       onRefresh();
     } catch (err: any) {
-      alert(`Failed to disconnect: ${err.message}`);
+      setRepoError(`Failed to disconnect: ${err.message}`);
     }
   };
 
   const handleRunDiagnostics = async (repoFullName: string) => {
     try {
+      setRepoError(null);
       setDiagnosingRepoName(repoFullName);
       setIsDiagnosing(true);
       const res = await api.github.diagnoseRepo({ repoFullName });
       setDiagnosticsResult(res);
     } catch (err: any) {
-      alert(`Diagnostics failed: ${err.message}`);
+      setRepoError(`Diagnostics failed: ${err.message}`);
     } finally {
       setIsDiagnosing(false);
     }
@@ -169,6 +174,21 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
 
   return (
     <div className="space-y-6">
+      {repoError && (
+        <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs rounded-xl flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{repoError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRepoError(null)}
+            className="text-[11px] font-semibold underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* 1. Connected Repositories Section */}
       <div className="bg-theme-surface border border-theme-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
@@ -292,7 +312,14 @@ export function RepoManager({ connected, githubAvailable, onRefresh }: RepoManag
               {githubAvailable.length > 0 ? (
                 <select
                   value={singleRepo}
-                  onChange={(e) => setSingleRepo(e.target.value)}
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    setSingleRepo(selected);
+                    const match = githubAvailable.find((r) => r.fullName === selected);
+                    if (match?.defaultBranch) {
+                      setBranch(match.defaultBranch);
+                    }
+                  }}
                   required
                   className="w-full px-3 py-2 bg-theme-elevated border border-theme-border rounded-lg text-theme-primary text-xs focus:outline-none focus:border-theme-accent"
                 >

@@ -15,9 +15,10 @@ export class KnowledgeVaultService {
     if (tag) query.tags = tag;
     if (folder && folder !== 'All') query.folder = folder;
     if (search) {
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { content: { $regex: search, $options: 'i' } }
+        { title: { $regex: escapedSearch, $options: 'i' } },
+        { content: { $regex: escapedSearch, $options: 'i' } }
       ];
     }
 

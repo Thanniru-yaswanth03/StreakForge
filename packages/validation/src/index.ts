@@ -75,7 +75,7 @@ export type LeetCodeSubmissionInputType = z.infer<typeof LeetCodeSubmissionInput
 
 export const ConnectRepositoryInputSchema = z.object({
   repoFullName: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/, 'Invalid repo format (owner/repo)'),
-  githubRepoId: z.number().int().positive('GitHub repo ID must be positive integer'),
+  githubRepoId: z.number().int().nonnegative('GitHub repo ID must be a non-negative integer').optional(),
   description: z.string().optional(),
   primaryLanguage: z.string().optional(),
   cloneUrl: z.string().url().optional(),

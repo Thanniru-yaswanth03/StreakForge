@@ -79,7 +79,7 @@ export function GitHubActivityView() {
       setDiagResult(res);
       setActiveTab('diagnostics');
     } catch (err: any) {
-      alert(`Commit attribution diagnosis failed: ${err.message}`);
+      setSyncStatusMsg(`Commit attribution diagnosis failed: ${err.message}`);
     } finally {
       setDiagLoading(false);
     }
@@ -125,9 +125,28 @@ export function GitHubActivityView() {
       </div>
 
       {syncStatusMsg && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs rounded-xl flex items-center gap-2 font-medium">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{syncStatusMsg}</span>
+        <div
+          className={`p-3 text-xs rounded-xl flex items-center justify-between gap-2 font-medium border ${
+            syncStatusMsg.toLowerCase().includes('failed')
+              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+              : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {syncStatusMsg.toLowerCase().includes('failed') ? (
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            )}
+            <span>{syncStatusMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSyncStatusMsg('')}
+            className="text-[11px] underline opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -169,12 +188,28 @@ export function GitHubActivityView() {
         <div className="bg-theme-surface border border-theme-border rounded-xl p-3.5">
           <div className="flex items-center justify-between text-[11px] text-theme-muted font-medium uppercase tracking-wider">
             <span>Sync Status</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            {!user ? (
+              <AlertCircle className="w-4 h-4 text-theme-muted" />
+            ) : failedSyncs.length > 0 ? (
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            )}
           </div>
-          <div className="text-2xl font-bold text-emerald-500 mt-1">
-            Healthy
+          <div
+            className={`text-2xl font-bold mt-1 ${
+              !user ? 'text-theme-muted' : failedSyncs.length > 0 ? 'text-amber-400' : 'text-emerald-500'
+            }`}
+          >
+            {!user ? 'Not Connected' : failedSyncs.length > 0 ? 'Needs Attention' : 'Healthy'}
           </div>
-          <div className="text-[10px] text-theme-muted mt-0.5">Automated cursor active</div>
+          <div className="text-[10px] text-theme-muted mt-0.5">
+            {!user
+              ? 'Connect GitHub to track syncs'
+              : failedSyncs.length > 0
+              ? `${failedSyncs.length} failed sync(s) pending retry`
+              : `${connectedRepos.length} connected repo(s) synced`}
+          </div>
         </div>
       </div>
 

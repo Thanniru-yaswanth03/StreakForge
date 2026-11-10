@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type {
   User,
   LeetCodeUserStats,
@@ -11,7 +11,7 @@ import type {
   LocalAgentInstance,
   AuditLog
 } from '@streakforge/shared-types';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { getStoredToken, clearStoredToken } from '../lib/utils';
 
 export interface AutomationJob {
@@ -122,8 +122,10 @@ interface DataContextValue {
   extensionStatus: ExtensionDetectionStatus;
   isLoading: boolean;
   isDemoMode: boolean;
+  backendError: string | null;
   refreshData: () => Promise<void>;
   refreshLeetCodeStats: (usernameOverride?: string) => Promise<void>;
+  logout: () => Promise<void>;
   updateJournalNote: (date: string, note: string) => void;
   toggleAutomation: (id: string) => void;
   deleteAutomation: (id: string) => void;
@@ -382,6 +384,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [extensionStatus, setExtensionStatus] = useState<ExtensionDetectionStatus>('NOT_INSTALLED');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [backendError, setBackendError] = useState<string | null>(null);
+
+  const userRef = useRef<User | null>(null);
+  const submissionsRef = useRef<LeetCodeSubmission[]>([]);
+  userRef.current = user;
+  submissionsRef.current = submissions;
 
   const refreshLeetCodeStats = useCallback(async (usernameOverride?: string): Promise<void> => {
     try {
@@ -393,29 +401,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Generate 365-day heatmap
-  const generateInitialHeatmap = useCallback(() => {
+  // Build deterministic 365-day empty heatmap (zero fabrication when no activity is recorded)
+  const buildEmptyHeatmap = useCallback(() => {
     const days: HeatmapDay[] = [];
     const now = new Date();
     for (let i = 365; i >= 0; i--) {
       const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const isPast = i > 0;
-      // Realistic activity distribution
-      const rand = Math.random();
-      const count = isPast ? (rand > 0.35 ? Math.floor(Math.random() * 5) + 1 : 0) : 4;
-      let level: 0 | 1 | 2 | 3 | 4 = 0;
-      if (count >= 5) level = 4;
-      else if (count >= 3) level = 3;
-      else if (count >= 2) level = 2;
-      else if (count >= 1) level = 1;
-
+      d.setUTCDate(d.getUTCDate() - i);
       days.push({
         date: d.toISOString().split('T')[0],
-        count,
-        gitCommits: Math.floor(count * 0.6),
-        leetCodeSubmissions: Math.ceil(count * 0.4),
-        level
+        count: 0,
+        gitCommits: 0,
+        leetCodeSubmissions: 0,
+        level: 0
       });
     }
     return days;
@@ -427,16 +425,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setOverview(EMPTY_OVERVIEW);
       setConnectedRepos([]);
+      setGithubRepos([]);
       setSubmissions([]);
+      setAgents([]);
+      setAuditLogs([]);
+      setAutomations([]);
+      setNotifications([]);
       setLeetcodeStats(null);
       setIsDemoMode(false);
-      setHeatmap([]);
+      setBackendError(null);
+      setHeatmap(buildEmptyHeatmap());
       setIsLoading(false);
       return;
     }
 
     try {
       setIsLoading(true);
+      setBackendError(null);
       const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes, rulesRes, notifsRes, lcStatsRes] =
         await Promise.allSettled([
           api.auth.getMe(),
@@ -454,27 +459,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       if (meRes.status === 'fulfilled') {
         setUser(meRes.value.user);
-        if (meRes.value.user.leetcodeStats) {
-          setLeetcodeStats(meRes.value.user.leetcodeStats);
-        }
+        setLeetcodeStats(meRes.value.user.leetcodeStats || null);
         setIsDemoMode(false);
+        setBackendError(null);
       } else {
-        setUser(null);
-        setOverview(EMPTY_OVERVIEW);
-        setLeetcodeStats(null);
+        const err = meRes.reason;
+        const status = err instanceof ApiError ? err.status : 0;
+        const isAuthInvalid = status === 401;
+
+        if (isAuthInvalid) {
+          setUser(null);
+          setOverview(EMPTY_OVERVIEW);
+          setLeetcodeStats(null);
+          setConnectedRepos([]);
+          setSubmissions([]);
+          setIsDemoMode(false);
+          clearStoredToken();
+          if (typeof window !== 'undefined') {
+            window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
+          }
+          setIsLoading(false);
+          return;
+        }
+
+        // Preserve session across transient 429 rate-limit / Render 503 cold-start / network outages
+        const msg =
+          status === 429
+            ? 'API rate limit reached temporarily. Please wait a moment and click Retry Sync.'
+            : 'Backend server is waking up or temporarily unreachable. Your session is preserved — click Retry Sync.';
+        setBackendError(msg);
         setIsDemoMode(false);
-        clearStoredToken();
       }
 
-      if (lcStatsRes.status === 'fulfilled') {
+      if (lcStatsRes.status === 'fulfilled' && lcStatsRes.value) {
         setLeetcodeStats(lcStatsRes.value);
       }
 
       if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value);
       if (heatmapRes.status === 'fulfilled' && heatmapRes.value.length > 0) {
         setHeatmap(heatmapRes.value);
-      } else {
-        setHeatmap(generateInitialHeatmap());
+      } else if (meRes.status === 'fulfilled') {
+        setHeatmap(buildEmptyHeatmap());
       }
       if (reposRes.status === 'fulfilled') {
         setConnectedRepos(reposRes.value.connected);
@@ -599,63 +624,79 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           });
         }
       }
-    } catch {
-      setIsDemoMode(true);
+    } catch (err: any) {
+      setIsDemoMode(false);
+      setBackendError(err?.message || 'Unable to load dashboard data from server.');
     } finally {
       setIsLoading(false);
     }
-  }, [generateInitialHeatmap]);
+  }, [buildEmptyHeatmap]);
+
+  const logout = useCallback(async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // Proceed with local cleanup even if backend request fails
+    }
+    clearStoredToken();
+    setUser(null);
+    setOverview(EMPTY_OVERVIEW);
+    setConnectedRepos([]);
+    setGithubRepos([]);
+    setSubmissions([]);
+    setAgents([]);
+    setAuditLogs([]);
+    setAutomations([]);
+    setNotifications([]);
+    setLeetcodeStats(null);
+    setBackendError(null);
+    setHeatmap(buildEmptyHeatmap());
+    if (typeof window !== 'undefined') {
+      window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
+    }
+  }, [buildEmptyHeatmap]);
 
   useEffect(() => {
-    // Load journal from localStorage
+    // Load saved personal journal notes from localStorage (strictly empty by default — zero fabricated entries)
     const savedJournal = localStorage.getItem('streakforge_journal');
     if (savedJournal) {
       try {
         setJournalEntries(JSON.parse(savedJournal));
       } catch {
-        // ignore
+        setJournalEntries([]);
       }
-    } else {
-      // Default today entry
-      const todayStr = new Date().toISOString().split('T')[0];
-      setJournalEntries([
-        {
-          id: 'j-1',
-          date: todayStr,
-          codingDurationMinutes: 195,
-          commitsCount: 4,
-          problemsSolvedCount: 2,
-          notes: 'Solved Two Sum & LRU Cache on LeetCode; refactored local agent git staging filters to prevent secret leaks.',
-          syncEventsCount: 6,
-          updatedAt: new Date().toISOString()
-        }
-      ]);
     }
 
     refreshData();
+  }, [refreshData]);
 
-    // Extension detection & real-time live sync listeners
+  useEffect(() => {
+    // Extension detection & real-time live sync listeners using refs to avoid re-triggering refreshData loops
     const evaluateExtensionStatus = () => {
-      const hasAttr = typeof document !== 'undefined' && document.documentElement.getAttribute('data-streakforge-extension') === 'active';
+      const hasAttr =
+        typeof document !== 'undefined' &&
+        document.documentElement.getAttribute('data-streakforge-extension') === 'active';
       const token = getStoredToken();
-      const hasFailed = submissions.some((s) => s.syncStatus === 'FAILED');
+      const activeUser = userRef.current;
+      const currentSubs = submissionsRef.current;
+      const hasFailed = currentSubs.some((s) => s.syncStatus === 'FAILED');
 
       if (hasFailed) {
         setExtensionStatus('SYNC_FAILED');
       } else if (hasAttr) {
-        if (token && user) {
+        if (token && activeUser) {
           setExtensionStatus('CONNECTED');
         } else {
           setExtensionStatus('INSTALLED_DISCONNECTED');
         }
-      } else if (submissions.length > 0 && user) {
+      } else if (currentSubs.length > 0 && activeUser) {
         setExtensionStatus('CONNECTED');
       } else {
         setExtensionStatus('NOT_INSTALLED');
       }
 
       if (typeof window !== 'undefined') {
-        window.postMessage({ type: 'STREAKFORGE_REQUEST_EXTENSION_STATUS' }, '*');
+        window.postMessage({ type: 'STREAKFORGE_REQUEST_EXTENSION_STATUS' }, window.location.origin);
       }
     };
 
@@ -663,9 +704,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const statusInterval = setInterval(evaluateExtensionStatus, 3000);
 
     const handleSyncEvent = (event: MessageEvent) => {
+      if (event.source !== window) return;
       if (event.data?.type === 'STREAKFORGE_EXTENSION_ACTIVE') {
         const token = getStoredToken();
-        if (token && user) {
+        if (token && userRef.current) {
           setExtensionStatus('CONNECTED');
         } else {
           setExtensionStatus('INSTALLED_DISCONNECTED');
@@ -684,7 +726,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       clearInterval(statusInterval);
       window.removeEventListener('message', handleSyncEvent);
     };
-  }, [refreshData, user, submissions]);
+  }, [refreshData]);
 
   const updateJournalNote = (date: string, note: string) => {
     // Attempt backend sync
@@ -782,8 +824,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         extensionStatus,
         isLoading,
         isDemoMode,
+        backendError,
         refreshData,
         refreshLeetCodeStats,
+        logout,
         updateJournalNote,
         toggleAutomation,
         deleteAutomation,

@@ -67,8 +67,11 @@ export function LeetCodeStatsCard() {
   const handleRefresh = async () => {
     if (!username) return;
     setIsRefreshing(true);
+    setErrorMessage(null);
     try {
       await refreshLeetCodeStats(username);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to refresh LeetCode stats.');
     } finally {
       setIsRefreshing(false);
     }
@@ -107,8 +110,11 @@ export function LeetCodeStatsCard() {
       monthLabel?: string;
     }> = [];
 
-    const now = new Date(Date.UTC(2026, 10, 6)); // Nov 6, 2026
-    const endDate = new Date(Date.UTC(2026, 10, 7)); // Saturday Nov 7, 2026
+    const today = new Date();
+    const now = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const dayOffsetToSat = (6 - now.getUTCDay() + 7) % 7;
+    const endDate = new Date(now);
+    endDate.setUTCDate(endDate.getUTCDate() + dayOffsetToSat);
 
     const startDate = new Date(now);
     startDate.setUTCDate(startDate.getUTCDate() - 364);
@@ -312,26 +318,25 @@ export function LeetCodeStatsCard() {
                 <div className="text-xs text-[#8b949e] mt-1.5 flex items-center gap-1.5" suppressHydrationWarning>
                   <span>Rank</span>
                   <span className="font-bold text-[#f0f6fc] font-mono" suppressHydrationWarning>
-                    {mounted ? formatRank(ranking) : '3,777,525'}
+                    {mounted ? formatRank(ranking) : 'Loading...'}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Bio & Social Stats */}
+            {/* Bio & Verified Handle Metadata */}
             <div className="mt-3.5 pt-3 border-t border-[#30363d]/70 text-xs">
               <p className="text-[#c9d1d9] italic text-[11px] leading-relaxed">
                 &ldquo;{aboutMe}&rdquo;
               </p>
 
-              <div className="flex items-center gap-3 text-[11px] text-[#8b949e] mt-2.5">
-                <span className="flex items-center gap-1">
-                  <Users className="w-3 h-3" />
-                  <strong className="text-[#f0f6fc]">3</strong> Following
+              <div className="flex items-center gap-3 text-[11px] text-[#8b949e] mt-2.5 font-mono">
+                <span>
+                  Max Streak: <strong className="text-[#f0f6fc]">{maxStreak}d</strong>
                 </span>
                 <span>•</span>
                 <span>
-                  <strong className="text-[#f0f6fc]">0</strong> Followers
+                  Active Days: <strong className="text-[#f0f6fc]">{totalActiveDays}</strong>
                 </span>
               </div>
             </div>
@@ -504,10 +509,10 @@ export function LeetCodeStatsCard() {
 
             <div className="min-w-0">
               <div className="text-[10px] text-[#8b949e] uppercase font-mono tracking-wider">
-                Locked Badge
+                LeetCode Badges
               </div>
               <div className="text-xs font-semibold text-[#f0f6fc] truncate">
-                Nov LeetCoding Challenge
+                {badgesCount > 0 ? `${badgesCount} Earned Badge${badgesCount === 1 ? '' : 's'}` : 'No badges unlocked yet'}
               </div>
             </div>
           </div>

@@ -26,6 +26,8 @@ export interface IRepositoryConnectionDocument extends Document {
     pathPattern: string;
     intervalMinutes: number;
   };
+  previousReadmeContent?: string;
+  lastCatalogSyncedAt?: Date;
   lastSyncedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +59,8 @@ const RepositoryConnectionSchema = new Schema<IRepositoryConnectionDocument>(
       pathPattern: { type: String, default: 'solutions/{difficulty}/{id}-{slug}' },
       intervalMinutes: { type: Number, default: 15 }
     },
+    previousReadmeContent: { type: String },
+    lastCatalogSyncedAt: { type: Date },
     lastSyncedAt: { type: Date }
   },
   {

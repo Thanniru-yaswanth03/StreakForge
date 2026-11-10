@@ -9,7 +9,8 @@ import type {
 
 export const DEFAULT_CONFIG: ExtensionConfig = {
   authToken: '',
-  serverUrl: 'http://localhost:4000',
+  serverUrl: 'https://streakforge-api-5uhs.onrender.com',
+  webAppUrl: 'https://streak-forge-six.vercel.app',
   autoSyncEnabled: true,
   targetRepoFullName: '',
   targetBranch: 'main',

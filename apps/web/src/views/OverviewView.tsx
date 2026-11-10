@@ -32,9 +32,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
-import { API_BASE_URL } from '../lib/utils';
 import { GitHubContributionGraph } from '../components/GitHubContributionGraph';
 import { LeetCodeStatsCard } from '../components/LeetCodeStatsCard';
+import { GitHubConnectButton } from '../components/GitHubConnectButton';
 
 interface OverviewViewProps {
   onNavigate?: (tab: string) => void;
@@ -172,13 +172,10 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
               <span>Refresh Metrics</span>
             </button>
           ) : (
-            <a
-              href={`${API_BASE_URL}/auth/github`}
+            <GitHubConnectButton
+              label="Sign In with GitHub"
               className="github-glossy-button-primary px-3.5 py-1.5 text-xs flex items-center gap-1.5"
-            >
-              <Github className="w-3.5 h-3.5" />
-              <span>Sign In with GitHub</span>
-            </a>
+            />
           )}
         </div>
       </div>
@@ -253,13 +250,10 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
                   &check; OAuth 2.0 Authenticated
                 </div>
               ) : (
-                <a
-                  href={`${API_BASE_URL}/auth/github`}
+                <GitHubConnectButton
+                  label="Connect GitHub"
                   className="w-full py-1.5 px-2 bg-[#238636] hover:bg-[#2ea043] text-white rounded text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
-                >
-                  <Github className="w-3.5 h-3.5" />
-                  <span>Connect GitHub</span>
-                </a>
+                />
               )}
             </div>
 

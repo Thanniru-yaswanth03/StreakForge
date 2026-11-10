@@ -72,16 +72,33 @@ export class MockInterviewService {
   }
 
   public static async completeSession(
+    userId: string | Types.ObjectId,
     sessionId: string,
     timeSpentSeconds: number,
     problemResults: Array<{ slug: string; solved: boolean; notes?: string }>
   ): Promise<MockInterviewSessionType> {
-    const doc = await MockInterviewSession.findById(sessionId);
-    if (!doc) throw new Error('Interview session not found');
+    if (!Types.ObjectId.isValid(sessionId)) {
+      const err: any = new Error('Interview session not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const doc = await MockInterviewSession.findOne({
+      _id: new Types.ObjectId(sessionId),
+      userId: new Types.ObjectId(userId.toString())
+    });
+    if (!doc) {
+      const err: any = new Error('Interview session not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const safeResults = Array.isArray(problemResults) ? problemResults : [];
+    const safeTimeSpent = Math.max(0, Math.round(Number(timeSpentSeconds) || 0));
 
     let solvedCount = 0;
     doc.problems = doc.problems.map((p: any) => {
-      const res = problemResults.find((r) => r.slug === p.slug);
+      const res = safeResults.find((r) => r.slug === p.slug);
       if (res && res.solved) {
         solvedCount++;
         return { ...p, solved: true, notes: res.notes || p.notes };
@@ -90,7 +107,7 @@ export class MockInterviewService {
     });
 
     const scorePercent = Math.round((solvedCount / (doc.problems.length || 1)) * 100);
-    doc.timeSpentSeconds = timeSpentSeconds;
+    doc.timeSpentSeconds = safeTimeSpent;
     doc.status = 'COMPLETED';
     doc.scorePercent = scorePercent;
     doc.completedAt = new Date();

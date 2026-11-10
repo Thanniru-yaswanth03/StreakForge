@@ -18,11 +18,15 @@ export class CatalogService {
   ): Promise<CatalogItem[]> {
     const userObjectId = new Types.ObjectId(userId.toString());
 
-    // Fetch all authentic accepted submissions
-    const submissions = await LeetCodeSubmission.find({
-      userId: userObjectId,
-      status: 'Accepted'
-    }).sort({ submittedAt: -1 }).lean();
+    const [repoConn, submissions] = await Promise.all([
+      RepositoryConnection.findOne({ userId: userObjectId, repoFullName }).lean(),
+      LeetCodeSubmission.find({
+        userId: userObjectId,
+        status: 'Accepted'
+      }).sort({ submittedAt: -1 }).lean()
+    ]);
+
+    const branch = repoConn?.defaultBranch || 'main';
 
     // Map each submission to a CatalogItem
     const itemMap = new Map<number, CatalogItem>();
@@ -60,7 +64,7 @@ export class CatalogService {
           solutionPath = `solutions/${difficulty}/${num}-${slug}/${slug}.${ext}`;
         }
 
-        const githubUrl = `https://github.com/${repoFullName}/blob/main/${solutionPath}`;
+        const githubUrl = `https://github.com/${repoFullName}/blob/${branch}/${solutionPath}`;
 
         itemMap.set(num, {
           number: num,
@@ -121,7 +125,14 @@ export class CatalogService {
     userId: string | Types.ObjectId,
     repoFullName: string
   ): Promise<CatalogPreview> {
-    const items = await this.getCatalogItems(userId, repoFullName);
+    const [repoConn, items] = await Promise.all([
+      RepositoryConnection.findOne({
+        userId: new Types.ObjectId(userId.toString()),
+        repoFullName
+      }).lean(),
+      this.getCatalogItems(userId, repoFullName)
+    ]);
+    const branch = repoConn?.defaultBranch || 'main';
     const catalogBlock = this.renderCatalogTableMarkdown(items);
 
     // Fetch existing README from GitHub
@@ -147,7 +158,7 @@ export class CatalogService {
 
     return {
       repoFullName,
-      branch: 'main',
+      branch,
       totalCount: items.length,
       items,
       markdownPreview: updatedContent,
@@ -163,9 +174,17 @@ export class CatalogService {
     userId: string | Types.ObjectId,
     repoFullName: string
   ): Promise<CatalogSyncResult> {
+    // Capture prior README content before overwriting so rollback restores the true previous state
+    let priorReadmeContent: string | undefined;
+    try {
+      const existingFile = await GitHubService.getFile(userId, repoFullName, 'README.md');
+      priorReadmeContent = existingFile.content;
+    } catch {
+      priorReadmeContent = '';
+    }
+
     const preview = await this.previewCatalog(userId, repoFullName);
 
-    // Save previous snapshot in RepositoryConnection metadata for instant 1-click rollback
     const repoConn = await RepositoryConnection.findOne({
       userId: new Types.ObjectId(userId.toString()),
       repoFullName
@@ -183,8 +202,8 @@ export class CatalogService {
     );
 
     if (repoConn) {
-      (repoConn as any).previousReadmeContent = preview.markdownPreview;
-      (repoConn as any).lastCatalogSyncedAt = new Date();
+      repoConn.previousReadmeContent = priorReadmeContent;
+      repoConn.lastCatalogSyncedAt = new Date();
       await repoConn.save();
     }
 
@@ -192,7 +211,7 @@ export class CatalogService {
       success: true,
       repoFullName,
       commitSha: result.commitSha || 'latest',
-      commitUrl: `https://github.com/${repoFullName}/commit/${result.commitSha || 'main'}`,
+      commitUrl: `https://github.com/${repoFullName}/commit/${result.commitSha || preview.branch}`,
       itemsCataloged: preview.totalCount,
       syncedAt: new Date().toISOString()
     };
@@ -210,8 +229,8 @@ export class CatalogService {
       repoFullName
     });
 
-    const previous = (repoConn as any)?.previousReadmeContent;
-    if (!previous) {
+    const previous = repoConn?.previousReadmeContent;
+    if (!repoConn || previous === undefined || previous === null) {
       throw new Error('No previous README snapshot available for rollback.');
     }
 
@@ -224,6 +243,9 @@ export class CatalogService {
       'revert(catalog): rollback StreakForge solutions catalog',
       fileData.sha
     );
+
+    repoConn.previousReadmeContent = fileData.content;
+    await repoConn.save();
 
     return {
       success: true,

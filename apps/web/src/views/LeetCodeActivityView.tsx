@@ -49,15 +49,21 @@ export function LeetCodeActivityView() {
     ? ((totalSolved / totalSubmissions) * 100).toFixed(2)
     : '0.00';
 
-  // Authentic algorithm & topic breakdown (mapped to user's 30 solved problems)
-  const baseCategories = [
-    { name: 'Arrays & Hashing', color: '#3fb950', count: 14 },
-    { name: 'Two Pointers', color: '#58a6ff', count: 7 },
-    { name: 'Dynamic Programming', color: '#a371f7', count: 3 },
-    { name: 'Trees & Graphs', color: '#d29922', count: 3 },
-    { name: 'Stack & Queue', color: '#f85149', count: 2 },
-    { name: 'Binary Search', color: '#388bfd', count: 1 }
-  ];
+  // Derive topic & language breakdown strictly from user's genuine synced/accepted submissions
+  const topicColorPalette = ['#3fb950', '#58a6ff', '#a371f7', '#d29922', '#f85149', '#388bfd'];
+  const langMap = new Map<string, number>();
+  submissions.forEach((s) => {
+    const lang = s.language || 'Unknown';
+    langMap.set(lang, (langMap.get(lang) || 0) + 1);
+  });
+  const baseCategories = Array.from(langMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, count], idx) => ({
+      name,
+      color: topicColorPalette[idx % topicColorPalette.length],
+      count
+    }));
 
   const filteredSubmissions = submissions.filter((sub) => {
     const matchesSearch =
@@ -172,26 +178,32 @@ export function LeetCodeActivityView() {
           </h3>
         </div>
         <p className="text-[11px] text-[#8b949e] mb-3">
-          Authentic algorithmic distribution across 30 solved problems on LeetCode
+          Language distribution across your {submissions.length} synced submission{submissions.length === 1 ? '' : 's'}
         </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          {baseCategories.map((t) => (
-            <div
-              key={t.name}
-              className="p-3 bg-[#0d1117]/80 border border-[#30363d]/80 hover:border-[#58a6ff]/40 rounded-lg text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-default"
-            >
-              <div className="flex items-center gap-1.5 text-[#c9d1d9] font-medium truncate">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-                <span className="truncate text-[11px]">{t.name}</span>
+        {baseCategories.length === 0 ? (
+          <div className="p-4 text-center text-xs text-[#8b949e] bg-[#0d1117]/60 border border-dashed border-[#30363d] rounded-lg">
+            No synced submissions recorded yet. Solve a problem on LeetCode with the extension active to see your language distribution.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {baseCategories.map((t) => (
+              <div
+                key={t.name}
+                className="p-3 bg-[#0d1117]/80 border border-[#30363d]/80 hover:border-[#58a6ff]/40 rounded-lg text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md cursor-default"
+              >
+                <div className="flex items-center gap-1.5 text-[#c9d1d9] font-medium truncate">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                  <span className="truncate text-[11px] font-mono">{t.name}</span>
+                </div>
+                <div className="text-base font-bold text-[#f0f6fc] mt-1.5 tabular-nums flex items-baseline gap-1">
+                  <span>{t.count}</span>
+                  <span className="text-[10px] font-normal text-[#8b949e]">exported</span>
+                </div>
               </div>
-              <div className="text-base font-bold text-[#f0f6fc] mt-1.5 tabular-nums flex items-baseline gap-1">
-                <span>{t.count}</span>
-                <span className="text-[10px] font-normal text-[#8b949e]">solved</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* In-app Notification Banner */}

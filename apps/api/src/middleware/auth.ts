@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env.js';
 import { User, IUserDocument } from '../models/User.js';
-import { isTokenRevoked } from '../services/authService.js';
+import { isTokenRevokedAsync } from '../services/authService.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: IUserDocument;
@@ -43,7 +43,7 @@ export async function requireAuth(
     return;
   }
 
-  if (isTokenRevoked(token)) {
+  if (await isTokenRevokedAsync(token)) {
     res.status(401).json({
       success: false,
       error: {
@@ -96,7 +96,7 @@ export async function optionalAuth(
   const token = authHeader.split(' ')[1];
   try {
     const payload = jwt.verify(token, ENV.JWT_SECRET) as { userId: string; jti?: string };
-    if (!isTokenRevoked(token)) {
+    if (!(await isTokenRevokedAsync(token))) {
       const user = await User.findById(payload.userId);
       if (user && user.isActive) {
         req.user = user;

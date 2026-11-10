@@ -81,16 +81,38 @@ export function isTokenRevoked(token: string): boolean {
 }
 
 /**
+ * Check if a token has been revoked against both memory cache and durable MongoDB blacklist
+ */
+export async function isTokenRevokedAsync(token: string): Promise<boolean> {
+  try {
+    const decoded = jwt.decode(token) as { jti?: string };
+    if (!decoded?.jti) return false;
+    if (revokedTokenIds.has(decoded.jti)) return true;
+
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      const exists = await RevokedToken.exists({ jti: decoded.jti });
+      if (exists) {
+        revokedTokenIds.add(decoded.jti);
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Revoke session token and persist to durable MongoDB blacklist with TTL auto-expiration
  */
-export function revokeSessionToken(token: string): void {
+export async function revokeSessionToken(token: string): Promise<void> {
   try {
     const decoded = jwt.decode(token) as { jti?: string; exp?: number };
     if (decoded?.jti) {
       revokedTokenIds.add(decoded.jti);
       if (mongoose.connection && mongoose.connection.readyState === 1) {
         const expiresAt = decoded.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        RevokedToken.findOneAndUpdate(
+        await RevokedToken.findOneAndUpdate(
           { jti: decoded.jti },
           { jti: decoded.jti, revokedAt: new Date(), expiresAt },
           { upsert: true }
@@ -164,7 +186,7 @@ export async function exchangeGitHubCode(
     throw new Error('Invalid or expired OAuth state parameter (CSRF protection failed)');
   }
 
-  // 2. Request access token from GitHub
+  // 2. Request access token from GitHub (with network timeout)
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
@@ -175,8 +197,13 @@ export async function exchangeGitHubCode(
       client_id: ENV.GITHUB_CLIENT_ID,
       client_secret: ENV.GITHUB_CLIENT_SECRET,
       code
-    })
+    }),
+    signal: AbortSignal.timeout(10000)
   });
+
+  if (!tokenRes.ok) {
+    throw new Error(`GitHub OAuth token endpoint returned HTTP ${tokenRes.status}`);
+  }
 
   const tokenData = (await tokenRes.json()) as any;
   if (!tokenData.access_token) {
@@ -185,14 +212,15 @@ export async function exchangeGitHubCode(
   }
 
   const accessToken = tokenData.access_token;
-  const scopes = (tokenData.scope || '').split(',').map((s: string) => s.trim());
+  const scopes = (tokenData.scope || '').split(',').map((s: string) => s.trim()).filter(Boolean);
 
   // 3. Fetch authenticated user profile
   const userRes = await fetch('https://api.github.com/user', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'User-Agent': 'StreakForge-App'
-    }
+    },
+    signal: AbortSignal.timeout(10000)
   });
 
   if (!userRes.ok) {
@@ -210,7 +238,8 @@ export async function exchangeGitHubCode(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'User-Agent': 'StreakForge-App'
-      }
+      },
+      signal: AbortSignal.timeout(10000)
     });
 
     if (emailsRes.ok) {
@@ -240,7 +269,7 @@ export async function exchangeGitHubCode(
     verifiedEmails.push(primaryEmail.toLowerCase());
   }
 
-  // 5. Upsert User
+  // 5. Upsert User strictly by immutable GitHub numeric ID
   let user = await User.findOne({ githubId: ghUser.id.toString() });
   if (!user) {
     user = new User({
@@ -257,6 +286,12 @@ export async function exchangeGitHubCode(
     user.name = ghUser.name || user.name;
     user.avatarUrl = ghUser.avatar_url || user.avatarUrl;
     user.verifiedEmails = verifiedEmails;
+    if (primaryEmail && user.email !== primaryEmail) {
+      const conflict = await User.exists({ email: primaryEmail, _id: { $ne: user._id } });
+      if (!conflict) {
+        user.email = primaryEmail;
+      }
+    }
   }
   await user.save();
 
@@ -272,8 +307,11 @@ export async function exchangeGitHubCode(
     { upsert: true, new: true }
   );
 
-  // Auto-discover repositories for smooth onboarding
+  // Auto-discover repositories for smooth onboarding (at most one auto-designated LeetCode target)
   try {
+    let hasTargetRepo = Boolean(
+      await RepositoryConnection.exists({ userId: user._id, isTargetForLeetCode: true })
+    );
     const octokit = new Octokit({ auth: accessToken });
     const reposRes = await octokit.rest.repos.listForAuthenticatedUser({
       sort: 'updated',
@@ -286,6 +324,11 @@ export async function exchangeGitHubCode(
         githubRepoId: r.id
       });
       if (!existing) {
+        const matchesTargetName =
+          r.name.toLowerCase().includes('leetcode') || r.name.toLowerCase().includes('solution');
+        const assignTarget = !hasTargetRepo && matchesTargetName;
+        if (assignTarget) hasTargetRepo = true;
+
         await RepositoryConnection.create({
           userId: user._id,
           githubRepoId: r.id,
@@ -293,8 +336,8 @@ export async function exchangeGitHubCode(
           description: r.description || undefined,
           primaryLanguage: r.language || undefined,
           defaultBranch: r.default_branch || 'main',
-          isTargetForLeetCode:
-            r.name.toLowerCase().includes('leetcode') || r.name.toLowerCase().includes('solution'),
+          isPrivate: Boolean(r.private),
+          isTargetForLeetCode: assignTarget,
           autoCommitEnabled: false,
           category: 'Personal'
         });
@@ -334,6 +377,67 @@ export async function disconnectGitHubAccount(userId: string): Promise<void> {
 }
 
 /**
+ * Permanently delete a StreakForge user account and all tenant-isolated records
+ */
+export async function deleteUserAccount(userId: string): Promise<void> {
+  const [
+    { ActivityRecord },
+    { AuditLog },
+    { AutomationRule },
+    { CodingGoal },
+    { DailyActivitySnapshot },
+    { JobRecord },
+    { JournalEntry },
+    { KnowledgeNote },
+    { LeetCodeSubmission },
+    { LocalAgentInstance },
+    { MockInterviewSession },
+    { Notification },
+    { ProblemSolutionRecord },
+    { StudyProgress },
+    { UserAchievement }
+  ] = await Promise.all([
+    import('../models/ActivityRecord.js'),
+    import('../models/AuditLog.js'),
+    import('../models/AutomationRule.js'),
+    import('../models/CodingGoal.js'),
+    import('../models/DailyActivitySnapshot.js'),
+    import('../models/JobRecord.js'),
+    import('../models/JournalEntry.js'),
+    import('../models/KnowledgeNote.js'),
+    import('../models/LeetCodeSubmission.js'),
+    import('../models/LocalAgentInstance.js'),
+    import('../models/MockInterviewSession.js'),
+    import('../models/Notification.js'),
+    import('../models/ProblemSolutionRecord.js'),
+    import('../models/StudyProgress.js'),
+    import('../models/UserAchievement.js')
+  ]);
+
+  await Promise.all([
+    Account.deleteMany({ userId }),
+    RepositoryConnection.deleteMany({ userId }),
+    ActivityRecord.deleteMany({ userId }),
+    AuditLog.deleteMany({ userId }),
+    AutomationRule.deleteMany({ userId }),
+    CodingGoal.deleteMany({ userId }),
+    DailyActivitySnapshot.deleteMany({ userId }),
+    JobRecord.deleteMany({ userId }),
+    JournalEntry.deleteMany({ userId }),
+    KnowledgeNote.deleteMany({ userId }),
+    LeetCodeSubmission.deleteMany({ userId }),
+    LocalAgentInstance.deleteMany({ userId }),
+    MockInterviewSession.deleteMany({ userId }),
+    Notification.deleteMany({ userId }),
+    ProblemSolutionRecord.deleteMany({ userId }),
+    StudyProgress.deleteMany({ userId }),
+    UserAchievement.deleteMany({ userId })
+  ]);
+
+  await User.deleteOne({ _id: userId });
+}
+
+/**
  * Authenticate or connect a real GitHub account using a Personal Access Token (PAT).
  * Automatically pulls genuine GitHub profile info, verified emails, and repositories.
  */
@@ -358,17 +462,15 @@ export async function connectGitHubWithPAT(
   let emails: string[] = [];
   try {
     const emailsRes = await octokit.rest.users.listEmailsForAuthenticatedUser();
-    emails = emailsRes.data.filter((e) => e.verified).map((e) => e.email);
+    emails = emailsRes.data.filter((e) => e.verified).map((e) => e.email.toLowerCase());
   } catch {
-    if (ghUser.email) emails = [ghUser.email];
+    if (ghUser.email) emails = [ghUser.email.toLowerCase()];
   }
 
   const primaryEmail = emails[0] || ghUser.email || `${ghUser.login}@users.noreply.github.com`;
 
+  // Strictly match by immutable numeric GitHub user ID (never match by mutable username)
   let user = await User.findOne({ githubId: ghUser.id.toString() });
-  if (!user) {
-    user = await User.findOne({ username: ghUser.login });
-  }
 
   if (!user) {
     user = new User({
@@ -383,8 +485,12 @@ export async function connectGitHubWithPAT(
     });
   } else {
     user.githubId = ghUser.id.toString();
+    user.username = ghUser.login;
     user.name = ghUser.name || user.name;
-    user.email = primaryEmail;
+    if (primaryEmail && user.email !== primaryEmail) {
+      const conflict = await User.exists({ email: primaryEmail, _id: { $ne: user._id } });
+      if (!conflict) user.email = primaryEmail;
+    }
     user.avatarUrl = ghUser.avatar_url || user.avatarUrl;
     user.verifiedEmails = emails.length > 0 ? emails : user.verifiedEmails;
   }
@@ -401,8 +507,11 @@ export async function connectGitHubWithPAT(
     { upsert: true, new: true }
   );
 
-  // Auto-discover repositories
+  // Auto-discover repositories (at most one auto-designated target repo)
   try {
+    let hasTargetRepo = Boolean(
+      await RepositoryConnection.exists({ userId: user._id, isTargetForLeetCode: true })
+    );
     const reposRes = await octokit.rest.repos.listForAuthenticatedUser({
       sort: 'updated',
       per_page: 30
@@ -414,6 +523,11 @@ export async function connectGitHubWithPAT(
         githubRepoId: r.id
       });
       if (!existing) {
+        const matchesTargetName =
+          r.name.toLowerCase().includes('leetcode') || r.name.toLowerCase().includes('solution');
+        const assignTarget = !hasTargetRepo && matchesTargetName;
+        if (assignTarget) hasTargetRepo = true;
+
         await RepositoryConnection.create({
           userId: user._id,
           githubRepoId: r.id,
@@ -421,8 +535,8 @@ export async function connectGitHubWithPAT(
           description: r.description || undefined,
           primaryLanguage: r.language || undefined,
           defaultBranch: r.default_branch || 'main',
-          isTargetForLeetCode:
-            r.name.toLowerCase().includes('leetcode') || r.name.toLowerCase().includes('solution'),
+          isPrivate: Boolean(r.private),
+          isTargetForLeetCode: assignTarget,
           autoCommitEnabled: false,
           category: 'Personal'
         });

@@ -10,6 +10,7 @@ import {
   exchangeGitHubCode,
   revokeSessionToken,
   disconnectGitHubAccount,
+  deleteUserAccount,
   getOrCreateDevUser,
   connectGitHubWithPAT
 } from '../services/authService.js';
@@ -92,6 +93,7 @@ authRouter.get('/github', async (req: Request, res: Response, next) => {
   const isDummyClient =
     !ENV.GITHUB_CLIENT_ID ||
     ENV.GITHUB_CLIENT_ID === 'dummy_client_id' ||
+    ENV.GITHUB_CLIENT_ID === 'dummy-client-id' ||
     ENV.GITHUB_CLIENT_ID === 'your_github_client_id_here';
 
   if (isDummyClient && ENV.NODE_ENV !== 'production') {
@@ -101,6 +103,7 @@ authRouter.get('/github', async (req: Request, res: Response, next) => {
       res.cookie('streakforge_token', token, {
         maxAge: 7 * 24 * 60 * 60 * 1000,
         path: '/',
+        httpOnly: true,
         sameSite: 'lax'
       });
       res.redirect(`${ENV.WEB_APP_URL}/auth/callback?token=${token}`);
@@ -109,6 +112,17 @@ authRouter.get('/github', async (req: Request, res: Response, next) => {
       next(err);
       return;
     }
+  }
+
+  if (isDummyClient && ENV.NODE_ENV === 'production') {
+    const returnToParam = (req.query.return_to as string) || (req.headers.referer as string);
+    const targetBaseUrl = getSafeRedirectUrl(returnToParam);
+    res.redirect(
+      `${targetBaseUrl}/auth/callback?error=OAUTH_NOT_CONFIGURED&error_description=${encodeURIComponent(
+        'GitHub OAuth Client ID is not configured on the backend server.'
+      )}`
+    );
+    return;
   }
 
   const scopes = ['repo', 'read:user', 'user:email'].join(' ');
@@ -179,6 +193,7 @@ authRouter.get('/github/callback', async (req: Request, res: Response, next) => 
     res.cookie('streakforge_token', token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
+      httpOnly: true,
       sameSite: 'lax',
       secure: ENV.NODE_ENV === 'production'
     });
@@ -240,7 +255,9 @@ authRouter.post('/github/pat', async (req: AuthenticatedRequest, res: Response, 
     res.cookie('streakforge_token', token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
-      sameSite: 'lax'
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: ENV.NODE_ENV === 'production'
     });
     res.json({
       success: true,
@@ -269,6 +286,12 @@ authRouter.post('/logout', requireAuth, async (req: AuthenticatedRequest, res: R
   if (req.token) {
     await revokeSessionToken(req.token);
   }
+  res.clearCookie('streakforge_token', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: ENV.NODE_ENV === 'production'
+  });
   res.json({
     success: true,
     data: { message: 'Logged out successfully' }
@@ -281,9 +304,36 @@ authRouter.post('/disconnect', requireAuth, async (req: AuthenticatedRequest, re
     if (req.token) {
       await revokeSessionToken(req.token);
     }
+    res.clearCookie('streakforge_token', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: ENV.NODE_ENV === 'production'
+    });
     res.json({
       success: true,
       data: { message: 'GitHub account disconnected and credentials safely purged' }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.delete('/account', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    if (req.token) {
+      await revokeSessionToken(req.token);
+    }
+    await deleteUserAccount(req.userId!);
+    res.clearCookie('streakforge_token', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: ENV.NODE_ENV === 'production'
+    });
+    res.json({
+      success: true,
+      data: { message: 'Account and all associated data permanently deleted' }
     });
   } catch (error) {
     next(error);
@@ -316,21 +366,47 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Respon
 
 authRouter.post('/leetcode', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
   try {
-    const { leetcodeUsername } = req.body;
-    if (!leetcodeUsername || typeof leetcodeUsername !== 'string' || !leetcodeUsername.trim()) {
+    const rawUsername = req.body?.leetcodeUsername ?? req.body?.username;
+    if (!rawUsername || typeof rawUsername !== 'string' || !rawUsername.trim()) {
       res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'Valid LeetCode username is required' } });
       return;
     }
-    const cleanUsername = leetcodeUsername.trim();
-    const stats = await syncLeetCodeUserStats(req.userId!, cleanUsername);
-    const updatedUser = await User.findById(req.userId);
-    res.json({
-      success: true,
-      data: {
-        leetcodeUsername: updatedUser?.leetcodeUsername,
-        leetcodeStats: stats
+    const cleanUsername = rawUsername.trim();
+    if (!/^[a-zA-Z0-9_-]{1,50}$/.test(cleanUsername)) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'LeetCode username may only contain letters, numbers, hyphens, and underscores.' }
+      });
+      return;
+    }
+    try {
+      const stats = await syncLeetCodeUserStats(req.userId!, cleanUsername);
+      const updatedUser = await User.findById(req.userId);
+      res.json({
+        success: true,
+        data: {
+          leetcodeUsername: updatedUser?.leetcodeUsername,
+          leetcodeStats: stats
+        }
+      });
+    } catch (syncErr: any) {
+      const msg = syncErr?.message || 'Failed to fetch LeetCode profile';
+      if (msg.includes('not exist') || msg.includes('not found') || msg.includes('private')) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'LEETCODE_USER_NOT_FOUND', message: msg }
+        });
+        return;
       }
-    });
+      if (msg.includes('HTTP 429') || msg.includes('rate')) {
+        res.status(429).json({
+          success: false,
+          error: { code: 'LEETCODE_RATE_LIMITED', message: msg }
+        });
+        return;
+      }
+      throw syncErr;
+    }
   } catch (err: any) {
     next(err);
   }

@@ -28,7 +28,7 @@ import type {
 export function Options() {
   const [config, setConfig] = useState<ExtensionConfig | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
-  const [serverUrl, setServerUrl] = useState<string>('http://localhost:4000');
+  const [serverUrl, setServerUrl] = useState<string>('https://streakforge-api-5uhs.onrender.com');
   const [targetRepo, setTargetRepo] = useState<string>('');
   const [targetBranch, setTargetBranch] = useState<string>('main');
   const [template, setTemplate] = useState<string>(
@@ -52,7 +52,7 @@ export function Options() {
       const cfg = await StorageManager.getConfig();
       setConfig(cfg);
       setAuthToken(cfg.authToken || '');
-      setServerUrl(cfg.serverUrl || 'http://localhost:4000');
+      setServerUrl(cfg.serverUrl || 'https://streakforge-api-5uhs.onrender.com');
       setTargetRepo(cfg.targetRepoFullName || '');
       setTargetBranch(cfg.targetBranch || 'main');
       setTemplate(
@@ -180,7 +180,7 @@ export function Options() {
         </div>
 
         <a
-          href={serverUrl}
+          href={config?.webAppUrl || 'https://streak-forge-six.vercel.app'}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-semibold text-slate-200 transition"

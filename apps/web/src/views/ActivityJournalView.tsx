@@ -48,7 +48,7 @@ export function ActivityJournalView() {
       setJournalData(data);
       setNoteContent(data.notes || '');
     } catch {
-      // Fallback to local DataContext entry if API is offline or demo
+      // Fallback strictly empty when API is offline or unauthenticated (Zero Fabrication)
       const localEntry = journalEntries.find((j) => j.date === date);
       const fallback: DailyJournalData = {
         date,
@@ -57,52 +57,17 @@ export function ActivityJournalView() {
         durationTracked: localEntry ? localEntry.codingDurationMinutes > 0 : false,
         githubActivity: {
           commitsCount: localEntry?.commitsCount || 0,
-          commits:
-            (localEntry?.commitsCount || 0) > 0
-              ? [
-                  {
-                    sha: '8f7d9a1',
-                    message: 'feat(sync): add dual detection observer for LeetCode DOM',
-                    repo: 'alexdeveloper/streakforge',
-                    timestamp: `${date}T12:30:00Z`
-                  },
-                  {
-                    sha: '3c4b5a6',
-                    message: 'refactor(agent): improve loopback nonce signature verification',
-                    repo: 'alexdeveloper/streakforge',
-                    timestamp: `${date}T16:15:00Z`
-                  }
-                ]
-              : [],
-          prsCount: 1,
+          commits: [],
+          prsCount: 0,
           issuesCount: 0
         },
         leetCodeActivity: {
           acceptedCount: localEntry?.problemsSolvedCount || 0,
-          uniqueProblems:
-            (localEntry?.problemsSolvedCount || 0) > 0
-              ? [
-                  {
-                    questionId: '146',
-                    questionTitle: 'LRU Cache',
-                    difficulty: 'Medium',
-                    language: 'TypeScript'
-                  },
-                  {
-                    questionId: '1',
-                    questionTitle: 'Two Sum',
-                    difficulty: 'Easy',
-                    language: 'TypeScript'
-                  }
-                ]
-              : []
+          uniqueProblems: []
         },
-        repositoriesModified:
-          (localEntry?.commitsCount || 0) > 0
-            ? ['alexdeveloper/streakforge', 'alexdeveloper/leetcode-solutions']
-            : [],
-        syncEventsCount: localEntry?.syncEventsCount || (localEntry?.commitsCount ? 4 : 0),
-        updatedAt: localEntry?.updatedAt || new Date().toISOString()
+        repositoriesModified: [],
+        syncEventsCount: localEntry?.syncEventsCount || 0,
+        updatedAt: localEntry?.updatedAt || ''
       };
 
       setJournalData(fallback);

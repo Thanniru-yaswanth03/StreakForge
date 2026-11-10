@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { api } from '../lib/api';
-import { API_BASE_URL } from '../lib/utils';
+import { setStoredToken, API_BASE_URL } from '../lib/utils';
 import { BrandLogo } from './BrandLogo';
+import { GitHubConnectButton } from './GitHubConnectButton';
 
 interface OnboardingModalProps {
   isOpen: boolean;
@@ -194,13 +195,11 @@ export function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <a
-                    href={`${API_BASE_URL}/auth/github`}
+                  <GitHubConnectButton
+                    label="Authorize via GitHub OAuth"
                     className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition shadow-xs"
-                  >
-                    <Github className="w-4 h-4" />
-                    <span>Authorize via GitHub OAuth</span>
-                  </a>
+                    iconClassName="w-4 h-4"
+                  />
 
                   <div className="text-center">
                     <button

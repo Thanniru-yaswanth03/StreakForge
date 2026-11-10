@@ -4,92 +4,96 @@ import { User } from '../models/User.js';
 import { LeetCodeSubmission } from '../models/LeetCodeSubmission.js';
 import { DailyActivitySnapshot } from '../models/DailyActivitySnapshot.js';
 import { BadgeService } from '../services/badgeService.js';
+import { getStreakOverview } from '../services/streakService.js';
 import type { BadgeTheme } from '@streakforge/shared-types';
 
 export const badgeRouter: Router = Router();
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 badgeRouter.get('/streak.svg', async (req: Request, res: Response) => {
   try {
-    const usernameQuery = (req.query.user as string || '').trim();
+    const usernameQuery = ((req.query.user as string) || '').trim();
     const theme = (req.query.theme as BadgeTheme) || 'dark';
 
     if (!usernameQuery) {
-      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
       res.status(400).send(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="60"><rect width="300" height="60" fill="#21262d"/><text x="15" y="35" fill="#f85149" font-family="sans-serif" font-size="12">Missing ?user=username parameter</text></svg>`
+        `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="60"><rect width="320" height="60" fill="#21262d"/><text x="15" y="35" fill="#f85149" font-family="sans-serif" font-size="12">Missing ?user=username parameter</text></svg>`
       );
       return;
     }
 
-    // Look up user by GitHub username or LeetCode username
-    let user = await User.findOne({
+    const exactInsensitive = new RegExp(`^${escapeRegex(usernameQuery)}$`, 'i');
+
+    // Look up strictly matching user by GitHub username or LeetCode username (no cross-user fallback)
+    const user = await User.findOne({
       $or: [
-        { username: new RegExp(`^${usernameQuery}$`, 'i') },
-        { leetcodeUsername: new RegExp(`^${usernameQuery}$`, 'i') },
-        { 'leetcodeStats.username': new RegExp(`^${usernameQuery}$`, 'i') }
+        { username: exactInsensitive },
+        { leetcodeUsername: exactInsensitive },
+        { 'leetcodeStats.username': exactInsensitive }
       ]
     }).lean();
 
-    // Fallback if not found: try first active user in dev mode
     if (!user) {
-      user = await User.findOne({}).lean();
+      res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+      res.status(404).send(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="60"><rect width="380" height="60" rx="8" fill="#21262d"/><text x="15" y="35" fill="#8b949e" font-family="sans-serif" font-size="12">StreakForge profile not found for @${escapeXml(usernameQuery)}</text></svg>`
+      );
+      return;
     }
 
-    let currentStreak = 1;
-    let longestStreak = 1;
-    let totalSolved = 0;
-    let easySolved = 0;
-    let mediumSolved = 0;
-    let hardSolved = 0;
-    let lastActivityDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const overview = await getStreakOverview(user._id);
+    const currentStreak = overview.currentStreak || 0;
+    const longestStreak = overview.longestStreak || 0;
 
-    if (user) {
-      // Fetch authentic stats from leetcodeStats
-      if (user.leetcodeStats) {
-        totalSolved = user.leetcodeStats.totalSolved || 0;
-        easySolved = user.leetcodeStats.easySolved || 0;
-        mediumSolved = user.leetcodeStats.mediumSolved || 0;
-        hardSolved = user.leetcodeStats.hardSolved || 0;
-      }
+    let totalSolved = user.leetcodeStats?.totalSolved ?? 0;
+    let easySolved = user.leetcodeStats?.easySolved ?? 0;
+    let mediumSolved = user.leetcodeStats?.mediumSolved ?? 0;
+    let hardSolved = user.leetcodeStats?.hardSolved ?? 0;
 
-      // Fetch snapshot stats for streak
-      const snapshots = await DailyActivitySnapshot.find({ userId: user._id })
-        .sort({ date: -1 })
-        .limit(60)
-        .lean();
+    if (totalSolved === 0 && !user.leetcodeStats) {
+      const [easyC, medC, hardC] = await Promise.all([
+        LeetCodeSubmission.countDocuments({ userId: user._id, difficulty: 'Easy', syncStatus: { $in: ['SYNCED', 'SKIPPED', 'PENDING'] } }),
+        LeetCodeSubmission.countDocuments({ userId: user._id, difficulty: 'Medium', syncStatus: { $in: ['SYNCED', 'SKIPPED', 'PENDING'] } }),
+        LeetCodeSubmission.countDocuments({ userId: user._id, difficulty: 'Hard', syncStatus: { $in: ['SYNCED', 'SKIPPED', 'PENDING'] } })
+      ]);
+      easySolved = easyC;
+      mediumSolved = medC;
+      hardSolved = hardC;
+      totalSolved = easyC + medC + hardC;
+    }
 
-      if (snapshots.length > 0) {
-        lastActivityDate = new Date(snapshots[0].date).toLocaleDateString('en-US', {
+    const latestActive = await DailyActivitySnapshot.findOne({
+      userId: user._id,
+      totalActivities: { $gt: 0 }
+    })
+      .sort({ date: -1 })
+      .lean();
+
+    const lastActivityDate = latestActive?.date
+      ? new Date(`${latestActive.date}T00:00:00Z`).toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
-          year: 'numeric'
-        });
-      }
-
-      // Calculate streak
-      let streak = 0;
-      for (const s of snapshots) {
-        if (s.streakMaintained || (s.totalActivities && s.totalActivities > 0)) {
-          streak++;
-        } else {
-          break;
-        }
-      }
-      currentStreak = Math.max(1, streak);
-      longestStreak = Math.max(currentStreak, 18);
-
-      if (totalSolved === 0) {
-        // Fallback to counting accepted submissions
-        const count = await LeetCodeSubmission.countDocuments({ userId: user._id, status: 'Accepted' });
-        totalSolved = Math.max(count, 32);
-        easySolved = Math.max(easySolved, 30);
-        mediumSolved = Math.max(mediumSolved, 2);
-      }
-    }
+          year: 'numeric',
+          timeZone: 'UTC'
+        })
+      : 'No activity yet';
 
     const svg = BadgeService.generateBadgeSvg(
       {
-        username: user?.username || usernameQuery,
+        username: user.username,
         currentStreak,
         longestStreak,
         totalSolved,
@@ -109,13 +113,13 @@ badgeRouter.get('/streak.svg', async (req: Request, res: Response) => {
     }
 
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800, stale-while-revalidate=3600');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
     res.setHeader('ETag', etag);
     res.status(200).send(svg);
   } catch (error: any) {
-    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
     res.status(500).send(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="60"><rect width="300" height="60" fill="#21262d"/><text x="15" y="35" fill="#f85149" font-family="sans-serif" font-size="12">StreakForge Badge Error: ${error.message}</text></svg>`
+      `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="60"><rect width="380" height="60" fill="#21262d"/><text x="15" y="35" fill="#f85149" font-family="sans-serif" font-size="12">StreakForge Badge Error: ${escapeXml(error?.message || 'Internal error')}</text></svg>`
     );
   }
 });

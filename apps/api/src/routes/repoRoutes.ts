@@ -88,13 +88,14 @@ repoRouter.post(
   validateBody(ConnectRepositoryInputSchema),
   async (req: AuthenticatedRequest, res: Response, next) => {
     try {
-      const {
+      let {
         repoFullName,
         githubRepoId,
         description,
         primaryLanguage,
         cloneUrl,
         defaultBranch = 'main',
+        isPrivate = false,
         isTargetForLeetCode = true,
         solutionPathPattern = 'solutions/{difficulty}/{id}-{slug}',
         autoCommitEnabled = false,
@@ -102,6 +103,88 @@ repoRouter.post(
         permissions = { admin: false, push: true, pull: true },
         syncPolicy
       } = req.body;
+
+      // Verify genuine GitHub repository ownership/permissions and branch existence when GitHub account is linked
+      const account = await Account.findOne({
+        userId: new Types.ObjectId(req.userId),
+        provider: 'github'
+      });
+
+      if (account?.accessTokenEncrypted && process.env.NODE_ENV !== 'test') {
+        const rawToken = decryptToken(account.accessTokenEncrypted);
+        if (rawToken && rawToken !== 'gho_dummy_token_for_local_development_mode') {
+          const [owner, repo] = repoFullName.split('/');
+          if (!owner || !repo) {
+            res.status(400).json({
+              success: false,
+              error: { code: 'INVALID_REPO_NAME', message: 'Repository name must be in owner/repo format.' }
+            });
+            return;
+          }
+
+          const octokit = new Octokit({ auth: rawToken });
+          let repoData: any;
+          try {
+            const repoRes = await octokit.rest.repos.get({ owner, repo });
+            repoData = repoRes.data;
+          } catch (ghErr: any) {
+            const status = ghErr?.status === 404 ? 404 : ghErr?.status === 401 ? 401 : 400;
+            res.status(status).json({
+              success: false,
+              error: {
+                code: status === 401 ? 'GITHUB_TOKEN_INVALID' : 'GITHUB_REPO_INACCESSIBLE',
+                message:
+                  status === 401
+                    ? 'Your GitHub access token is invalid or revoked. Please reconnect GitHub.'
+                    : `Unable to access GitHub repository "${repoFullName}": ${ghErr?.message || 'Not found or permission denied'}`
+              }
+            });
+            return;
+          }
+
+          if (repoData.permissions && !repoData.permissions.push && !repoData.permissions.admin) {
+            res.status(403).json({
+              success: false,
+              error: {
+                code: 'GITHUB_PUSH_PERMISSION_DENIED',
+                message: `Your GitHub account lacks write/push permissions for "${repoFullName}".`
+              }
+            });
+            return;
+          }
+
+          const targetBranch = defaultBranch || repoData.default_branch || 'main';
+          try {
+            await octokit.rest.repos.getBranch({ owner, repo, branch: targetBranch });
+          } catch (branchErr: any) {
+            res.status(400).json({
+              success: false,
+              error: {
+                code: 'GITHUB_BRANCH_NOT_FOUND',
+                message: `Branch "${targetBranch}" does not exist in repository "${repoFullName}".`
+              }
+            });
+            return;
+          }
+
+          githubRepoId = repoData.id;
+          defaultBranch = targetBranch;
+          isPrivate = Boolean(repoData.private);
+          description = description ?? (repoData.description || undefined);
+          primaryLanguage = primaryLanguage ?? (repoData.language || undefined);
+          cloneUrl = cloneUrl ?? repoData.clone_url;
+          permissions = repoData.permissions || permissions;
+        }
+      }
+
+      if (!githubRepoId || githubRepoId <= 0) {
+        // Deterministic positive numeric identifier for local/test connections without remote GitHub lookup
+        let hash = 0;
+        for (let i = 0; i < repoFullName.length; i += 1) {
+          hash = (hash * 31 + repoFullName.charCodeAt(i)) % 2147483647;
+        }
+        githubRepoId = Math.max(1, Math.abs(hash));
+      }
 
       // If designating as primary target for LeetCode, unset previous targets
       if (isTargetForLeetCode) {
@@ -119,6 +202,7 @@ repoRouter.post(
           primaryLanguage,
           cloneUrl,
           defaultBranch,
+          isPrivate,
           isTargetForLeetCode,
           solutionPathPattern,
           autoCommitEnabled,

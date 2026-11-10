@@ -157,8 +157,14 @@ function checkSubmissionResult(): void {
 
 // 1. Listen for Main World Interceptor Messages (Direct API Interception)
 window.addEventListener('message', (event) => {
+  if (event.source !== window) return;
   if (event.data?.type === 'STREAKFORGE_VERIFIED_SUBMISSION') {
     const raw = event.data.payload;
+    if (!raw || raw.verdict !== 'Accepted') {
+      isUserSubmitting = false;
+      return;
+    }
+
     const problem = LeetCodeDomExtractor.extractProblemDetails();
     const code = raw.code || cachedSubmitCode || LeetCodeDomExtractor.extractEditorCode();
     const language = raw.language || LeetCodeDomExtractor.extractLanguage(code) || 'javascript';
@@ -171,10 +177,10 @@ window.addEventListener('message', (event) => {
       difficulty: problem.difficulty,
       language,
       code,
-      runtimeMs: raw.runtimeMs || 50,
-      runtimePercentile: raw.runtimePercentile || 75,
-      memoryBytes: raw.memoryBytes || 16777216,
-      memoryPercentile: raw.memoryPercentile || 70,
+      runtimeMs: raw.runtimeMs || 0,
+      runtimePercentile: raw.runtimePercentile || 0,
+      memoryBytes: raw.memoryBytes || 0,
+      memoryPercentile: raw.memoryPercentile || 0,
       verdict: 'Accepted',
       topicTags: problem.topicTags,
       submittedAt: raw.submittedAt || new Date().toISOString(),
@@ -260,30 +266,59 @@ function showOnScreenToast(data: {
   `;
 
   const shortSha = data.commitSha ? data.commitSha.slice(0, 7) : 'verified';
-  const commitLink = data.commitUrl || (data.repo ? `https://github.com/${data.repo}` : '#');
+  const rawLink = data.commitUrl || (data.repo ? `https://github.com/${data.repo}` : '#');
+  const commitLink = rawLink.startsWith('https://') ? rawLink : '#';
 
-  toast.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <div style="width: 22px; height: 22px; border-radius: 50%; background: #238636; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; color: #fff;">✓</div>
-        <span style="font-size: 13px; font-weight: 700; color: #3fb950; letter-spacing: 0.2px;">StreakForge Synced to GitHub!</span>
-      </div>
-      <button id="streakforge-toast-close" style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px;">✕</button>
-    </div>
-    <div style="font-size: 12px; color: #c9d1d9; font-weight: 600;">
-      ${data.title} <span style="font-size: 11px; font-weight: normal; color: #8b949e;">(${data.language})</span>
-    </div>
-    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #8b949e; margin-top: 2px;">
-      <span>Repo: <strong style="color: #e6edf3;">${data.repo || 'Target Repo'}</strong></span>
-      <a href="${commitLink}" target="_blank" rel="noopener noreferrer" style="color: #58a6ff; text-decoration: none; font-weight: 600; display: flex; align-items: center; gap: 2px;">
-        Commit ${shortSha} ↗
-      </a>
-    </div>
-  `;
+  // Build DOM nodes with textContent to avoid HTML injection from problem/repo names
+  const headerRow = document.createElement('div');
+  headerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+
+  const titleWrap = document.createElement('div');
+  titleWrap.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+  const badgeIcon = document.createElement('div');
+  badgeIcon.style.cssText = 'width: 22px; height: 22px; border-radius: 50%; background: #238636; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; color: #fff;';
+  badgeIcon.textContent = '✓';
+  const badgeText = document.createElement('span');
+  badgeText.style.cssText = 'font-size: 13px; font-weight: 700; color: #3fb950; letter-spacing: 0.2px;';
+  badgeText.textContent = 'StreakForge Synced to GitHub!';
+  titleWrap.append(badgeIcon, badgeText);
+
+  const closeButton = document.createElement('button');
+  closeButton.id = 'streakforge-toast-close';
+  closeButton.style.cssText = 'background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px;';
+  closeButton.textContent = '✕';
+  headerRow.append(titleWrap, closeButton);
+
+  const detailRow = document.createElement('div');
+  detailRow.style.cssText = 'font-size: 12px; color: #c9d1d9; font-weight: 600;';
+  detailRow.textContent = `${data.title} `;
+  const langSpan = document.createElement('span');
+  langSpan.style.cssText = 'font-size: 11px; font-weight: normal; color: #8b949e;';
+  langSpan.textContent = `(${data.language})`;
+  detailRow.appendChild(langSpan);
+
+  const footerRow = document.createElement('div');
+  footerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #8b949e; margin-top: 2px;';
+  const repoSpan = document.createElement('span');
+  repoSpan.textContent = 'Repo: ';
+  const repoStrong = document.createElement('strong');
+  repoStrong.style.color = '#e6edf3';
+  repoStrong.textContent = data.repo || 'Target Repo';
+  repoSpan.appendChild(repoStrong);
+
+  const commitAnchor = document.createElement('a');
+  commitAnchor.href = commitLink;
+  commitAnchor.target = '_blank';
+  commitAnchor.rel = 'noopener noreferrer';
+  commitAnchor.style.cssText = 'color: #58a6ff; text-decoration: none; font-weight: 600; display: flex; align-items: center; gap: 2px;';
+  commitAnchor.textContent = `Commit ${shortSha} ↗`;
+  footerRow.append(repoSpan, commitAnchor);
+
+  toast.append(headerRow, detailRow, footerRow);
 
   document.body.appendChild(toast);
 
-  const closeBtn = toast.querySelector('#streakforge-toast-close');
+  const closeBtn = closeButton;
   const dismiss = () => {
     toast.style.animation = 'streakforge-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards';
     setTimeout(() => toast.remove(), 300);

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
-import { API_BASE_URL } from '../lib/utils';
+import { GitHubConnectButton } from './GitHubConnectButton';
 
 interface HeaderProps {
   currentTab: string;
@@ -30,7 +30,7 @@ interface HeaderProps {
 
 export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProps) {
   const { effectiveTheme, toggleTheme } = useTheme();
-  const { user, overview, refreshData, isLoading, connectedRepos, notifications } = useData();
+  const { user, overview, refreshData, isLoading, backendError, connectedRepos, notifications } = useData();
 
   const tabTitles: Record<string, string> = {
     overview: 'Developer Overview',
@@ -180,16 +180,27 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
               </div>
             </div>
           ) : (
-            <a
-              href={`${API_BASE_URL}/auth/github`}
+            <GitHubConnectButton
+              label="Connect GitHub"
               className="github-glossy-button-primary px-3 py-1 text-xs flex items-center gap-1.5"
-            >
-              <Github className="w-3.5 h-3.5" />
-              <span>Connect GitHub</span>
-            </a>
+            />
           )}
         </div>
       </div>
+
+      {backendError && (
+        <div className="px-4 sm:px-6 py-2 bg-amber-500/10 border-t border-amber-500/30 text-xs text-amber-300 flex items-center justify-between gap-3">
+          <span>{backendError}</span>
+          <button
+            type="button"
+            onClick={() => refreshData()}
+            disabled={isLoading}
+            className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-semibold text-[11px] transition shrink-0 cursor-pointer"
+          >
+            {isLoading ? 'Retrying...' : 'Retry Sync'}
+          </button>
+        </div>
+      )}
     </header>
   );
 }

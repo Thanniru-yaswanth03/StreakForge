@@ -50,12 +50,15 @@ function getBackendUrl(): string {
 }
 
 let lastDispatchedToken: string | null = null;
+let hadActiveSession = false;
 
 function syncTokenToExtension(): void {
   const token = getWebToken();
   if (token && token !== lastDispatchedToken) {
     lastDispatchedToken = token;
+    hadActiveSession = true;
     const serverUrl = getBackendUrl();
+    const webAppUrl = window.location.origin;
     console.log(`[StreakForge Web Bridge] Detected active user session. Dispatching auto-pair message (server: ${serverUrl}).`);
     
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
@@ -63,7 +66,8 @@ function syncTokenToExtension(): void {
         type: 'AUTO_PAIR_TOKEN',
         payload: {
           token,
-          serverUrl
+          serverUrl,
+          webAppUrl
         }
       }).then((resp) => {
         if (resp?.success) {
@@ -72,6 +76,12 @@ function syncTokenToExtension(): void {
       }).catch((err) => {
         console.warn('[StreakForge Web Bridge] Worker message failed:', err);
       });
+    }
+  } else if (!token && hadActiveSession) {
+    lastDispatchedToken = null;
+    hadActiveSession = false;
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'CLEAR_AUTH_TOKEN' }).catch(() => {});
     }
   }
 }
@@ -96,13 +106,21 @@ window.addEventListener('storage', (e) => {
   }
 });
 
-// 4. Window message listener for explicit pair requests from web app
+// 4. Window message listener for explicit pair/logout requests from web app
 window.addEventListener('message', (event) => {
+  if (event.source !== window) return;
   if (event.data?.type === 'STREAKFORGE_REQUEST_EXTENSION_STATUS') {
     notifyExtensionActive();
   }
   if (event.data?.type === 'STREAKFORGE_TRIGGER_PAIR') {
     syncTokenToExtension();
+  }
+  if (event.data?.type === 'STREAKFORGE_LOGOUT') {
+    lastDispatchedToken = null;
+    hadActiveSession = false;
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'CLEAR_AUTH_TOKEN' }).catch(() => {});
+    }
   }
 });
 

@@ -4,6 +4,8 @@ import { User } from '../models/User.js';
 import { LeetCodeSubmission } from '../models/LeetCodeSubmission.js';
 import { ActivityRecord } from '../models/ActivityRecord.js';
 import { StudyProgress } from '../models/StudyProgress.js';
+import { MockInterviewSession } from '../models/MockInterviewSession.js';
+import { getStreakOverview } from './streakService.js';
 import type { GamificationProfile, AchievementItem } from '@streakforge/shared-types';
 
 export class GamificationService {
@@ -151,14 +153,26 @@ export class GamificationService {
       });
     }
 
-    // Tally authentic telemetry metrics for achievements
-    const [solveCount, genuineCommits, srsReviews] = await Promise.all([
-      LeetCodeSubmission.countDocuments({ userId: userObjectId, syncStatus: 'SYNCED' }),
-      ActivityRecord.countDocuments({ userId: userObjectId, type: 'GIT_COMMIT', isGenuine: true }),
-      StudyProgress.countDocuments({ userId: userObjectId, lastReviewedAt: { $exists: true } })
+    // Tally strictly authentic telemetry metrics for achievements (no fabricated baselines or XP floors)
+    const [recentSubs, solveCount, genuineCommits, srsReviews, mockInterviewCount, overview] = await Promise.all([
+      LeetCodeSubmission.find({
+        userId: userObjectId,
+        syncStatus: { $in: ['SYNCED', 'SKIPPED', 'PENDING'] }
+      })
+        .sort({ submittedAt: -1 })
+        .limit(10)
+        .lean(),
+      LeetCodeSubmission.countDocuments({
+        userId: userObjectId,
+        syncStatus: { $in: ['SYNCED', 'SKIPPED', 'PENDING'] }
+      }),
+      ActivityRecord.countDocuments({ userId: userObjectId, eventType: 'GITHUB_COMMIT' }),
+      StudyProgress.countDocuments({ userId: userObjectId, lastReviewedAt: { $exists: true } }),
+      MockInterviewSession.countDocuments({ userId: userObjectId, status: 'COMPLETED' }),
+      getStreakOverview(userId)
     ]);
 
-    const authenticStreak = 2; // Derived from current streak
+    const authenticStreak = Math.max(overview.currentStreak || 0, overview.longestStreak || 0);
 
     const achievements: AchievementItem[] = this.ACHIEVEMENTS_REGISTRY.map((def) => {
       let progress = 0;
@@ -167,9 +181,9 @@ export class GamificationService {
       else if (def.key === 'streak_7' || def.key === 'streak_30') progress = authenticStreak;
       else if (def.key === 'srs_scholar') progress = srsReviews;
       else if (def.key === 'git_guardian') progress = genuineCommits;
-      else if (def.key === 'array_specialist') progress = Math.min(solveCount, 14);
-      else if (def.key === 'tree_climber') progress = Math.min(solveCount, 5);
-      else if (def.key === 'mock_ace') progress = 1;
+      else if (def.key === 'array_specialist') progress = solveCount;
+      else if (def.key === 'tree_climber') progress = solveCount;
+      else if (def.key === 'mock_ace') progress = mockInterviewCount;
 
       const isUnlocked = progress >= def.target || (doc?.unlockedAchievementKeys?.includes(def.key) ?? false);
 
@@ -182,23 +196,17 @@ export class GamificationService {
         icon: def.icon,
         xpReward: def.xpReward,
         unlocked: isUnlocked,
-        unlockedAt: isUnlocked ? new Date().toISOString() : undefined,
+        unlockedAt: isUnlocked ? (doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString()) : undefined,
         progress: Math.min(progress, def.target),
         target: def.target
       };
     });
 
-    // Compute verified XP:
-    // +50 XP per LeetCode solve
-    // +25 XP per Spaced Repetition review
-    // +10 XP per Git commit
-    // + Achievement rewards
-    let calculatedXp = solveCount * 50 + srsReviews * 25 + genuineCommits * 10;
+    // Compute verified XP: 0 for brand-new users with zero activity
+    let calculatedXp = solveCount * 50 + srsReviews * 25 + genuineCommits * 10 + mockInterviewCount * 75;
     achievements.forEach((a) => {
       if (a.unlocked) calculatedXp += a.xpReward;
     });
-
-    if (calculatedXp < 350) calculatedXp = 350; // Initial baseline onboarding XP
 
     const { level, nextLevelXp, progressPercent, rankTitle } = this.calculateLevel(calculatedXp);
 
@@ -209,6 +217,12 @@ export class GamificationService {
       await doc.save();
     }
 
+    const recentXpGains = recentSubs.slice(0, 5).map((s) => ({
+      timestamp: new Date(s.submittedAt).toISOString(),
+      action: `Solved LeetCode #${s.questionId} ${s.questionTitle}`,
+      xp: 50
+    }));
+
     return {
       level,
       currentXp: calculatedXp,
@@ -217,11 +231,7 @@ export class GamificationService {
       rankTitle,
       totalAchievementsUnlocked: achievements.filter((a) => a.unlocked).length,
       achievements,
-      recentXpGains: [
-        { timestamp: new Date().toISOString(), action: 'Solved LeetCode #2620 Counter', xp: 50 },
-        { timestamp: new Date(Date.now() - 86400000).toISOString(), action: 'Verified Git Commit Push to target repository', xp: 10 },
-        { timestamp: new Date(Date.now() - 172800000).toISOString(), action: 'Unlocked First Blood Achievement', xp: 100 }
-      ]
+      recentXpGains
     };
   }
 }

@@ -41,10 +41,26 @@ export function App() {
   const [isOnLeetCode, setIsOnLeetCode] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Load state from Chrome local storage & StreakForge Backend
+  // Lightweight local-storage read for fast popup UI polling (does not hammer backend)
+  const loadLocalState = useCallback(async () => {
+    try {
+      const [cfg, prob, history] = await Promise.all([
+        StorageManager.getConfig(),
+        StorageManager.getActiveProblem(),
+        StorageManager.getSyncedHistory()
+      ]);
+      setConfig(cfg);
+      setActiveProblem(prob);
+      setSyncedHistory(history);
+    } catch (err) {
+      console.warn('Failed to load local extension storage:', err);
+    }
+  }, []);
+
+  // Load state from Chrome local storage & StreakForge Backend (run on mount + explicit Sync Now)
   const loadState = useCallback(async () => {
     try {
-      let cfg = await StorageManager.getConfig();
+      const cfg = await StorageManager.getConfig();
       const prob = await StorageManager.getActiveProblem();
       let history = await StorageManager.getSyncedHistory();
 
@@ -75,12 +91,13 @@ export function App() {
       }
 
       // Fetch authentic live statistics and history directly from backend
-      const sUrl = cfg.serverUrl || 'http://localhost:4000';
+      const sUrl = cfg.serverUrl || 'https://streakforge-api-5uhs.onrender.com';
       if (cfg.authToken) {
         // 1. Fetch user & LeetCode profile stats
         try {
           const pRes = await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats`, {
-            headers: { Authorization: `Bearer ${cfg.authToken}` }
+            headers: { Authorization: `Bearer ${cfg.authToken}` },
+            signal: AbortSignal.timeout(10000)
           });
           if (pRes.ok) {
             const pJson = await pRes.json();
@@ -89,13 +106,14 @@ export function App() {
             }
           }
         } catch {
-          // Fall back to default
+          // Keep stored stats
         }
 
         // 2. Fetch submissions history
         try {
           const hRes = await fetch(`${sUrl}/api/v1/sync/leetcode/history?limit=100`, {
-            headers: { Authorization: `Bearer ${cfg.authToken}` }
+            headers: { Authorization: `Bearer ${cfg.authToken}` },
+            signal: AbortSignal.timeout(10000)
           });
           if (hRes.ok) {
             const hJson = await hRes.json();
@@ -150,14 +168,15 @@ export function App() {
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage({ type: 'SYNC_FROM_BACKEND' }, (resp) => {
         if (resp?.success) {
-          loadState();
+          loadLocalState();
         }
       });
     }
 
-    const interval = setInterval(loadState, 2500);
+    // Only poll local extension storage in the UI (never flood backend every 2.5s)
+    const interval = setInterval(loadLocalState, 2500);
     return () => clearInterval(interval);
-  }, [loadState]);
+  }, [loadState, loadLocalState]);
 
   const showStatus = (msg: string) => {
     setStatusMessage(msg);
@@ -175,57 +194,65 @@ export function App() {
   const handleForceSync = async () => {
     setIsSyncing(true);
 
-    // 1. Force refresh live LeetCode stats from backend
-    const sUrl = config?.serverUrl || 'http://localhost:4000';
-    if (config?.authToken) {
-      try {
-        const refreshRes = await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats/refresh`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${config.authToken}`
-          },
-          body: JSON.stringify(config.leetcodeUsername ? { username: config.leetcodeUsername } : {})
-        });
-        if (refreshRes.ok) {
-          const rJson = await refreshRes.json();
-          if (rJson.data) {
-            setLeetcodeStats(rJson.data);
-          }
-        }
-      } catch (err) {
-        console.warn('Failed immediate profile refresh:', err);
-      }
+    const sUrl = config?.serverUrl || 'https://streakforge-api-5uhs.onrender.com';
+    if (!config?.authToken) {
+      setIsSyncing(false);
+      showStatus('Sign in on StreakForge first to sync.');
+      return;
     }
 
-    // 2. Try manual capture on active tab if user is currently on LeetCode
+    // 1. Force refresh live LeetCode stats from backend
+    try {
+      const refreshRes = await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.authToken}`
+        },
+        body: JSON.stringify(config.leetcodeUsername ? { username: config.leetcodeUsername } : {}),
+        signal: AbortSignal.timeout(10000)
+      });
+      if (refreshRes.ok) {
+        const rJson = await refreshRes.json();
+        if (rJson.data) {
+          setLeetcodeStats(rJson.data);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed immediate profile refresh:', err);
+    }
+
+    // 2. Manual capture ONLY if an authentic Accepted submission verdict exists on the active tab
+    let manualNote = '';
     if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const activeTab = tabs[0];
         if (activeTab?.id && activeTab.url?.includes('leetcode.com')) {
           chrome.tabs.sendMessage(activeTab.id, { type: 'MANUAL_CAPTURE_REQUEST' }, (resp) => {
-            if (resp?.success && resp.payload?.problem && resp.payload?.code) {
-              const p = resp.payload;
+            const p = resp?.payload;
+            if (resp?.success && p?.problem && p?.code && p?.result?.verdict === 'Accepted') {
               chrome.runtime.sendMessage({
                 type: 'LEETCODE_SUBMISSION_DETECTED',
                 payload: {
-                  submissionId: p.result?.submissionId || `manual-${Date.now()}`,
+                  submissionId: p.result.submissionId || `manual-${Date.now()}`,
                   questionId: p.problem.id,
                   questionTitle: p.problem.title,
                   questionSlug: p.problem.slug,
                   difficulty: p.problem.difficulty,
                   language: p.language,
                   code: p.code,
-                  runtimeMs: p.result?.runtimeMs || 50,
-                  runtimePercentile: p.result?.runtimePercentile || 75,
-                  memoryBytes: p.result?.memoryBytes || 16777216,
-                  memoryPercentile: p.result?.memoryPercentile || 70,
+                  runtimeMs: p.result.runtimeMs || 0,
+                  runtimePercentile: p.result.runtimePercentile || 0,
+                  memoryBytes: p.result.memoryBytes || 0,
+                  memoryPercentile: p.result.memoryPercentile || 0,
                   verdict: 'Accepted',
                   topicTags: p.problem.topicTags,
                   submittedAt: new Date().toISOString(),
                   state: 'DETECTED'
                 }
               });
+            } else if (p?.result?.verdict && p.result.verdict !== 'Accepted') {
+              manualNote = `Skipped export (${p.result.verdict})`;
             }
           });
         }
@@ -238,25 +265,19 @@ export function App() {
         setTimeout(async () => {
           await loadState();
           setIsSyncing(false);
-          const solvedMsg = `✓ Synced! ${leetcodeStats?.totalSolved ?? totalSolved} Solved (${leetcodeStats?.easySolved ?? easyCount}E, ${leetcodeStats?.mediumSolved ?? mediumCount}M)`;
-          showStatus(solvedMsg);
-
-          // Trigger native Chrome system notification
-          if (typeof chrome !== 'undefined' && chrome.notifications?.create) {
-            chrome.notifications.create({
-              type: 'basic',
-              iconUrl: 'icons/icon-48.png',
-              title: 'StreakForge • LeetCode Synced!',
-              message: `${solvedMsg} • Target: ${config?.targetRepoFullName || 'target repository'}`
-            });
+          if (!resp?.success) {
+            showStatus(resp?.error || 'Backend sync unavailable');
+            return;
           }
+          const solvedMsg = manualNote
+            ? `✓ Refreshed (${manualNote})`
+            : `✓ Synced! ${leetcodeStats?.totalSolved ?? totalSolved} Solved (${leetcodeStats?.easySolved ?? easyCount}E, ${leetcodeStats?.mediumSolved ?? mediumCount}M)`;
+          showStatus(solvedMsg);
         }, 500);
       });
     } else {
-      setTimeout(() => {
-        setIsSyncing(false);
-        showStatus('✓ Queue & stats synchronized');
-      }, 500);
+      setIsSyncing(false);
+      showStatus('Extension runtime unavailable');
     }
   };
 
@@ -278,7 +299,7 @@ export function App() {
     if (config?.targetRepoFullName) {
       openUrl(`https://github.com/${config.targetRepoFullName}`);
     } else {
-      openUrl(`${webAppUrl}/settings`);
+      openUrl(`${webAppUrl}/?tab=repos`);
     }
   };
 
@@ -548,15 +569,26 @@ export function App() {
 
           <div className="flex items-center justify-between text-xs">
             <span className="text-[#8b949e]">GitHub User</span>
-            <span className="font-mono text-[#f0f6fc] text-[11px]">
-              @{username}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[#f0f6fc] text-[11px]">
+                @{username}
+              </span>
+              {config?.authToken && (
+                <button
+                  onClick={handleLogout}
+                  className="text-[10px] text-[#f85149] hover:underline cursor-pointer"
+                  title="Sign out from extension"
+                >
+                  Sign out
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="pt-2 border-t border-[#30363d] text-[11px] text-[#8b949e] flex items-center justify-between">
             <span>Last Synced Solution:</span>
             <span className="text-[#3fb950] font-semibold truncate max-w-[170px]">
-              {lastSynced ? `${lastSynced.questionTitle} (${lastSynced.language})` : 'Two Sum (python3)'}
+              {lastSynced ? `${lastSynced.questionTitle} (${lastSynced.language})` : 'None synced yet'}
             </span>
           </div>
         </div>
@@ -572,15 +604,25 @@ export function App() {
           <span>Open Main Website</span>
         </button>
 
-        <a
-          href={`https://github.com/${targetRepo}`}
-          target="_blank"
-          rel="noreferrer"
-          className="text-[#58a6ff] hover:underline flex items-center gap-1 font-semibold"
-        >
-          <Github className="w-3.5 h-3.5" />
-          <span>View Repo &rarr;</span>
-        </a>
+        {config?.targetRepoFullName ? (
+          <a
+            href={`https://github.com/${config.targetRepoFullName}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#58a6ff] hover:underline flex items-center gap-1 font-semibold"
+          >
+            <Github className="w-3.5 h-3.5" />
+            <span>View Repo &rarr;</span>
+          </a>
+        ) : (
+          <button
+            onClick={openRepository}
+            className="text-[#58a6ff] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+          >
+            <Github className="w-3.5 h-3.5" />
+            <span>Select Repo &rarr;</span>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -5,18 +5,23 @@ import { ActivityRecord } from '../models/ActivityRecord.js';
 import { MockInterviewSession } from '../models/MockInterviewSession.js';
 import { RepositoryConnection } from '../models/RepositoryConnection.js';
 import { MASTER_PROBLEM_LIST } from '../data/curriculaData.js';
+import { getStreakOverview } from './streakService.js';
 import type { CareerReadinessScore } from '@streakforge/shared-types';
 
 export class CareerReadinessService {
   public static async calculateReadiness(userId: string | Types.ObjectId): Promise<CareerReadinessScore> {
     const userObjectId = new Types.ObjectId(userId.toString());
 
-    const [progressDocs, submissions, mockSessions, gitCommits, connectedRepos] = await Promise.all([
+    const [progressDocs, submissions, mockSessions, gitCommits, connectedRepos, overview] = await Promise.all([
       StudyProgress.find({ userId: userObjectId }).lean(),
-      LeetCodeSubmission.find({ userId: userObjectId, syncStatus: 'SYNCED' }).lean(),
+      LeetCodeSubmission.find({
+        userId: userObjectId,
+        syncStatus: { $in: ['SYNCED', 'SKIPPED', 'PENDING'] }
+      }).lean(),
       MockInterviewSession.find({ userId: userObjectId, status: 'COMPLETED' }).lean(),
-      ActivityRecord.countDocuments({ userId: userObjectId, type: 'GIT_COMMIT' }),
-      RepositoryConnection.countDocuments({ userId: userObjectId })
+      ActivityRecord.countDocuments({ userId: userObjectId, eventType: 'GITHUB_COMMIT' }),
+      RepositoryConnection.countDocuments({ userId: userObjectId }),
+      getStreakOverview(userId)
     ]);
 
     const solvedSlugs = new Set<string>();
@@ -32,31 +37,32 @@ export class CareerReadinessService {
     submissions.forEach((s) => solvedSlugs.add(s.questionSlug.toLowerCase()));
 
     // 1. DSA Curriculum Coverage (Max 35 pts)
-    const blind75Count = MASTER_PROBLEM_LIST.length || 75;
-    const curriculumRatio = Math.min(1, solvedSlugs.size / 20); // 20 problems for early readiness baseline
+    const curriculumTotal = MASTER_PROBLEM_LIST.length || 75;
+    const curriculumRatio = Math.min(1, solvedSlugs.size / curriculumTotal);
     const dsaScore = Math.round(curriculumRatio * 35);
 
-    // 2. SRS Retention (Max 20 pts)
+    // 2. SRS Retention (Max 20 pts) - 0 when no problems reviewed yet
     const totalSrsTracked = masteredCount + needsRevisionCount;
-    let srsRatio = 0.8;
-    if (totalSrsTracked > 0) {
-      srsRatio = masteredCount / totalSrsTracked;
-    }
+    const srsRatio = totalSrsTracked > 0 ? masteredCount / totalSrsTracked : 0;
     const srsScore = Math.round(srsRatio * 20);
 
-    // 3. Coding Consistency (Max 20 pts)
-    const streakDays = 2; // Baseline verified streak
-    const consistencyScore = Math.min(20, Math.round((streakDays / 7) * 20) + (solvedSlugs.size > 0 ? 10 : 0));
+    // 3. Coding Consistency (Max 20 pts) - computed strictly from verified StreakEngine overview
+    const streakDays = overview.currentStreak || 0;
+    const weeklyConsistency = overview.weeklyConsistencyPercent || 0;
+    const consistencyScore = Math.min(
+      20,
+      Math.round((Math.min(7, streakDays) / 7) * 12 + (weeklyConsistency / 100) * 8)
+    );
 
-    // 4. Mock Interview Performance (Max 15 pts)
-    let mockScore = 10;
+    // 4. Mock Interview Performance (Max 15 pts) - 0 if no interviews completed
+    let mockScore = 0;
     if (mockSessions.length > 0) {
       const avgScore = mockSessions.reduce((acc, s) => acc + s.scorePercent, 0) / mockSessions.length;
       mockScore = Math.round((avgScore / 100) * 15);
     }
 
-    // 5. GitHub Portfolio Completeness (Max 10 pts)
-    const portfolioScore = connectedRepos > 0 && gitCommits > 10 ? 10 : 6;
+    // 5. GitHub Portfolio Completeness (Max 10 pts) - scaled cleanly without hardcoded baselines
+    const portfolioScore = connectedRepos > 0 ? Math.min(10, 4 + Math.min(6, Math.floor(gitCommits / 2))) : 0;
 
     const overallScore = Math.min(100, dsaScore + srsScore + consistencyScore + mockScore + portfolioScore);
 

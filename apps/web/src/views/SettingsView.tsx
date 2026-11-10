@@ -23,10 +23,11 @@ import { useData } from '../context/DataContext';
 import { getStoredToken, setStoredToken, clearStoredToken, API_BASE_URL } from '../lib/utils';
 import { api } from '../lib/api';
 import { AgentManager } from '../components/AgentManager';
+import { GitHubConnectButton } from '../components/GitHubConnectButton';
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
-  const { user, connectedRepos, submissions, journalEntries, auditLogs, refreshData, agents } = useData();
+  const { user, connectedRepos, submissions, journalEntries, auditLogs, refreshData, logout } = useData();
 
   const [activeSection, setActiveSection] = useState<
     | 'github'
@@ -164,12 +165,20 @@ export function SettingsView() {
     downloadAnchor.remove();
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
     if (deleteConfirmationText !== 'DELETE') return;
+    try {
+      await api.auth.deleteAccount();
+    } catch (err: any) {
+      alert(`Account deletion failed: ${err.message || 'Please try again.'}`);
+      return;
+    }
     clearStoredToken();
-    localStorage.clear();
-    alert('Account data purged. Returning to login screen.');
-    window.location.reload();
+    localStorage.removeItem('streakforge_journal');
+    if (typeof window !== 'undefined') {
+      window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
+    }
+    window.location.href = '/';
   };
 
   const coreSections = [
@@ -297,10 +306,21 @@ export function SettingsView() {
                       </span>
                       <button
                         onClick={async () => {
+                          await logout();
+                        }}
+                        className="text-xs text-theme-secondary hover:text-theme-primary font-medium px-2 py-1 rounded hover:bg-theme-surface border border-theme-border transition"
+                      >
+                        Log Out
+                      </button>
+                      <button
+                        onClick={async () => {
                           if (confirm('Disconnect GitHub account? Stored OAuth tokens will be purged.')) {
                             try {
                               await api.auth.disconnect();
                               clearStoredToken();
+                              if (typeof window !== 'undefined') {
+                                window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
+                              }
                               window.location.reload();
                             } catch (err: any) {
                               alert(`Disconnect failed: ${err.message}`);
@@ -463,13 +483,9 @@ export function SettingsView() {
                     <p className="text-[11px] text-theme-muted">
                       Requires registering an OAuth App under GitHub Settings &rarr; Developer settings &rarr; OAuth Apps with callback <code className="text-theme-accent">{API_BASE_URL}/auth/github/callback</code>.
                     </p>
-                    <a
-                      href={`${API_BASE_URL}/auth/github`}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-theme-surface hover:bg-theme-border border border-theme-border text-theme-primary font-semibold text-xs rounded-lg transition shadow-xs mt-1"
-                    >
-                      <Github className="w-3.5 h-3.5" />
-                      <span>Authorize via OAuth App</span>
-                    </a>
+                    <div className="mt-1">
+                      <GitHubConnectButton label="Authorize via OAuth App" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -684,46 +700,24 @@ export function SettingsView() {
 
           {/* 5. Automation Preferences */}
           {activeSection === 'automation' && (
-            <form onSubmit={handleSavePreferences} className="space-y-4">
+            <div className="space-y-4">
               <h3 className="text-sm font-bold text-theme-primary flex items-center gap-2">
                 <Bot className="w-4 h-4 text-theme-accent" />
                 Automation Rules & Triggers
               </h3>
-
-              <div>
-                <label className="block text-xs font-semibold text-theme-secondary mb-1">
-                  Idle Auto-Commit Delay (Minutes)
-                </label>
-                <input
-                  type="number"
-                  min={5}
-                  max={60}
-                  value={idleMinutes}
-                  onChange={(e) => setIdleMinutes(parseInt(e.target.value, 10) || 15)}
-                  className="w-full px-3 py-1.5 bg-theme-elevated border border-theme-border rounded-lg text-xs text-theme-primary"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="autoPush"
-                  checked={autoPush}
-                  onChange={(e) => setAutoPush(e.target.checked)}
-                  className="rounded text-theme-accent"
-                />
-                <label htmlFor="autoPush" className="text-xs text-theme-secondary">
-                  Automatically push committed changes to remote origin branch
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="px-4 py-2 bg-theme-accent text-slate-950 font-semibold text-xs rounded-lg transition hover:opacity-95"
+              <p className="text-xs text-theme-secondary leading-relaxed bg-theme-elevated border border-theme-border rounded-lg p-3">
+                Per-repository automation rules (auto-README updates, scheduled maintenance, and sync frequency) are persisted directly in{' '}
+                <strong className="text-theme-primary">Automation Center</strong> (sidebar &rarr; Automation). Account-wide{' '}
+                <code className="text-theme-accent">timezone</code> and <code className="text-theme-accent">streakGoalPerDay</code> are configured below in <strong className="text-theme-primary">Preferences</strong> / Notification Settings.
+              </p>
+              <a
+                href="/?tab=automation"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-theme-accent text-slate-950 font-semibold text-xs rounded-lg transition hover:opacity-95"
               >
-                {isSaved ? 'Saved!' : 'Save Automation Rules'}
-              </button>
-            </form>
+                <Bot className="w-3.5 h-3.5" />
+                <span>Open Automation Center</span>
+              </a>
+            </div>
           )}
 
           {/* 6. Notifications */}

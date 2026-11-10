@@ -157,7 +157,7 @@ export function GitHubContributionGraph({
     <div className="w-full select-none">
       {/* 1. Header: Total Count & Settings Filter */}
       <div className="flex items-center justify-between mb-2 px-1">
-        <h3 className="text-sm sm:text-base font-semibold text-slate-100 tracking-tight">
+        <h3 className="text-sm sm:text-base font-semibold text-theme-primary tracking-tight">
           {totalContributions} {totalContributions === 1 ? 'contribution' : 'contributions'} in the last year
         </h3>
 
