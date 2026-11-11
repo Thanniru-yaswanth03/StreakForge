@@ -1,6 +1,7 @@
 import { SubmissionStateMachine } from '../shared/stateMachine';
 import { DuplicateRegistry, generateSubmissionKey } from '../shared/duplicateRegistry';
 import { StorageManager, DEFAULT_SERVER_URL } from '../shared/storage';
+import { isInvalidSubmissionSnippet } from '../shared/backendSync';
 import type {
   DetectedSubmission,
   FailedSubmission,
@@ -298,7 +299,7 @@ export class SyncManager {
     current = tSrcPending.submission;
     await SubmissionStateMachine.recordLog(tSrcPending.log);
 
-    if (!current.code || current.code.trim().length === 0) {
+    if (isInvalidSubmissionSnippet(current.code)) {
       const tFail = SubmissionStateMachine.transition(
         current,
         'FAILED',
@@ -306,6 +307,7 @@ export class SyncManager {
       );
       current = tFail.submission;
       await SubmissionStateMachine.recordLog(tFail.log);
+      await this.removeFromQueue(current.submissionId);
       await dispatchBackgroundNotification({
         category: 'SYNC_FAILURE',
         title: `Sync Failed: ${current.questionTitle}`,
@@ -514,11 +516,30 @@ export class SyncManager {
       if (sub.state === 'SYNCED' && sub.commitSha) continue;
 
       const retryCount = sub.retryCount || 0;
+      const hasInvalidCode = isInvalidSubmissionSnippet(sub.code);
       const isPermanentError =
+        hasInvalidCode ||
         sub.errorMessage?.includes('empty') ||
         sub.errorMessage?.includes('Source code was inaccessible');
 
-      if (!forceAll && (retryCount >= 5 || isPermanentError)) {
+      // Prune permanently non-retryable / invalid-code items into failedArchive instead of blocking queue forever
+      if (isPermanentError) {
+        await StorageManager.archiveFailedSubmission({
+          id: `perm-fail-${Date.now()}-${sub.submissionId}`,
+          questionId: sub.questionId,
+          questionTitle: sub.questionTitle,
+          questionSlug: sub.questionSlug,
+          verdict: sub.verdict,
+          language: sub.language,
+          runtimeMs: sub.runtimeMs,
+          memoryBytes: sub.memoryBytes,
+          submittedAt: sub.submittedAt,
+          notes: sub.errorMessage || 'Missing or invalid source code snippet.'
+        });
+        continue;
+      }
+
+      if (!forceAll && retryCount >= 5) {
         remaining.push(sub);
         continue;
       }
@@ -594,6 +615,12 @@ export class SyncManager {
               url: current.commitUrl,
               dedupeKey: `synced:${current.submissionId}`
             });
+          } else if (exportRes.success && qStatus === 'SKIPPED') {
+            // Skipped per NEW_ONLY export policy — remove cleanly from retry queue
+            const skipMsg = exportRes.data?.message || 'Skipped per export policy';
+            const tSkipped = SubmissionStateMachine.transition(current, 'FAILED', skipMsg);
+            await SubmissionStateMachine.recordLog(tSkipped.log);
+            await StorageManager.appendSyncedHistory(tSkipped.submission);
           } else {
             const errMsg = exportRes.data?.message || exportRes.error || 'Retry export failed';
             const tRequeue = SubmissionStateMachine.transition(

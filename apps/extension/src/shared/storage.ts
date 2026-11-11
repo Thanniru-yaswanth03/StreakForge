@@ -46,7 +46,14 @@ export class StorageManager {
       await chrome.storage.local.set({ config: { ...DEFAULT_CONFIG, ...stored } });
     }
 
-    return { ...DEFAULT_CONFIG, ...stored };
+    const merged: ExtensionConfig = { ...DEFAULT_CONFIG, ...stored };
+
+    // Self-heal legacy V3 configs where a valid authToken existed without explicit authState
+    if (merged.authToken && (!stored.authState || stored.authState === 'UNAUTHENTICATED')) {
+      merged.authState = 'AUTHENTICATED';
+    }
+
+    return merged;
   }
 
   public static async updateConfig(partial: Partial<ExtensionConfig>): Promise<ExtensionConfig> {

@@ -1,23 +1,9 @@
 import { SyncManager, dispatchBackgroundNotification } from './sync-manager';
 import { StorageManager, DEFAULT_SERVER_URL } from '../shared/storage';
-import type { ExtensionMessage, SubmissionState } from '../shared/types';
+import { fetchAndSyncCanonicalState } from '../shared/backendSync';
+import type { ExtensionMessage } from '../shared/types';
 
 console.log('[StreakForge Worker] Service worker registered (Manifest V3).');
-
-function mapDbSyncStatusToExtensionState(syncStatus?: string): SubmissionState {
-  switch (syncStatus) {
-    case 'SYNCED':
-      return 'SYNCED';
-    case 'FAILED':
-      return 'FAILED';
-    case 'PENDING':
-      return 'EXPORT_PENDING';
-    case 'SKIPPED':
-      return 'REJECTED';
-    default:
-      return 'EXPORT_PENDING';
-  }
-}
 
 /**
  * Updates extension action badge count based on pending/failed queue
@@ -52,156 +38,11 @@ async function syncWithBackend(
   serverUrl: string = DEFAULT_SERVER_URL,
   webAppUrl?: string
 ) {
-  const cleanServer =
-    serverUrl && !serverUrl.includes('.vercel.app')
-      ? serverUrl.replace(/\/+$/, '')
-      : DEFAULT_SERVER_URL;
-  let activeToken = authToken;
-
-  try {
-    const stateRes = await fetch(`${cleanServer}/api/v1/sync/state`, {
-      headers: { Authorization: `Bearer ${activeToken}` },
-      signal: AbortSignal.timeout(20000)
-    });
-
-    if (stateRes.status === 401) {
-      await StorageManager.updateConfig({
-        authState: 'EXPIRED',
-        authErrorReason: 'Session expired or signed out. Open dashboard to re-authenticate.',
-        tokenHealthStatus: 'EXPIRED'
-      });
-      return { success: false, authExpired: true, error: 'Session expired (401).' };
-    }
-
-    if (!stateRes.ok) {
-      await StorageManager.updateConfig({
-        authState: 'NETWORK_ERROR',
-        authErrorReason: `Backend returned HTTP ${stateRes.status}. Retaining session and will retry.`
-      });
-      return { success: false, error: `Backend status ${stateRes.status}` };
-    }
-
-    const stateJson = await stateRes.json();
-    const s = stateJson.data;
-    if (!s || !s.user) {
-      return { success: false, error: 'Invalid sync state response' };
-    }
-
-    // Silent JWT refresh if session expires within 48 hours
-    if (s.user.sessionExpiresAt) {
-      const msLeft = new Date(s.user.sessionExpiresAt).getTime() - Date.now();
-      if (msLeft > 0 && msLeft < 48 * 60 * 60 * 1000) {
-        try {
-          const refRes = await fetch(`${cleanServer}/api/v1/auth/refresh`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${activeToken}` },
-            signal: AbortSignal.timeout(10000)
-          });
-          if (refRes.ok) {
-            const refJson = await refRes.json();
-            if (refJson.data?.token) {
-              activeToken = refJson.data.token;
-            }
-          }
-        } catch {
-          // Keep current token on transient refresh error
-        }
-      }
-    }
-
-    // Fetch latest 100 submission records with true per-row syncStatus
-    let mappedHistory: any[] = [];
-    try {
-      const histRes = await fetch(`${cleanServer}/api/v1/sync/leetcode/history?limit=100`, {
-        headers: { Authorization: `Bearer ${activeToken}` },
-        signal: AbortSignal.timeout(15000)
-      });
-      if (histRes.ok) {
-        const hJson = await histRes.json();
-        const submissions = Array.isArray(hJson.data) ? hJson.data : hJson.data?.items || [];
-        mappedHistory = submissions.map((sub: any) => ({
-          submissionId: sub.submissionId || String(sub._id),
-          questionId: String(sub.questionId),
-          questionTitle: sub.questionTitle,
-          questionSlug: sub.questionSlug,
-          difficulty: sub.difficulty,
-          language: sub.language,
-          code: sub.code || '',
-          runtimeMs: sub.runtimeMs || 0,
-          runtimePercentile: sub.runtimePercentile || 0,
-          memoryBytes: sub.memoryBytes || 0,
-          memoryPercentile: sub.memoryPercentile || 0,
-          verdict: 'Accepted',
-          topicTags: sub.topicTags || [],
-          submittedAt: sub.submittedAt || new Date().toISOString(),
-          state: mapDbSyncStatusToExtensionState(sub.syncStatus),
-          commitSha: sub.githubCommitSha,
-          commitUrl: sub.githubCommitUrl,
-          filePath: sub.filePath,
-          errorMessage: sub.syncErrorMessage
-        }));
-      }
-    } catch {
-      // Retain existing cached history if secondary fetch failed
-      mappedHistory = await StorageManager.getSyncedHistory();
-    }
-
-    const sp = s.syncPreferences || {};
-    const np = s.user.notificationPreferences || {};
-
-    const updatedCfg = await StorageManager.updateConfig({
-      authToken: activeToken,
-      serverUrl: cleanServer,
-      ...(webAppUrl ? { webAppUrl: webAppUrl.replace(/\/+$/, '') } : {}),
-      authState: 'AUTHENTICATED',
-      authErrorReason: undefined,
-      sessionExpiresAt: s.user.sessionExpiresAt,
-      tokenHealthStatus: s.githubTokenHealth?.status || 'UNKNOWN',
-      userProfile: {
-        username: s.user.username,
-        email: s.user.email,
-        avatarUrl: s.user.avatarUrl
-      },
-      leetcodeUsername: s.user.leetcodeUsername || undefined,
-      targetRepoFullName: s.targetRepo?.repoFullName || '',
-      targetBranch: s.targetRepo?.defaultBranch || 'main',
-      autoSyncEnabled: sp.autoSyncEnabled ?? true,
-      exportPolicy: sp.exportPolicy ?? 'ALLOW_MULTIPLE',
-      exportNewOnly: sp.exportPolicy === 'NEW_ONLY',
-      allowMultipleSubmissions: (sp.exportPolicy ?? 'ALLOW_MULTIPLE') === 'ALLOW_MULTIPLE',
-      addSolutionComments: sp.includeHeader ?? true,
-      includeMetrics: sp.includeMetrics ?? true,
-      folderStructureTemplate:
-        sp.folderPattern || s.targetRepo?.solutionPathPattern || 'solutions/{difficulty}/{id}-{slug}',
-      fileNamingPattern: sp.fileNamingPattern || '{slug}{ext}',
-      zeroPadId: sp.zeroPadId ?? 0,
-      notifyOnSolved: np.problemSolved ?? true,
-      notifyOnSuccess: np.syncSuccess ?? true,
-      notifyOnSyncFailure: np.syncFailure ?? true,
-      metrics: {
-        uniqueProblemsSolved: s.metrics?.uniqueProblemsSolved ?? 0,
-        acceptedSubmissions: s.metrics?.acceptedSubmissions ?? 0,
-        exportedCount: s.metrics?.exportedCount ?? 0,
-        pendingCount: s.metrics?.pendingCount ?? 0,
-        failedCount: s.metrics?.failedCount ?? 0,
-        currentStreak: s.streak?.currentStreak ?? 0,
-        longestStreak: s.streak?.longestStreak ?? 0
-      },
-      lastBackendSyncAt: new Date().toISOString()
-    });
-
-    await StorageManager.setSyncedHistory(mappedHistory);
-    return { success: true, config: updatedCfg, historyCount: mappedHistory.length };
-  } catch (err: any) {
-    await StorageManager.updateConfig({
-      authState: 'NETWORK_ERROR',
-      authErrorReason:
-        err?.name === 'TimeoutError'
-          ? 'Backend waking up from idle sleep. Session retained locally.'
-          : err?.message || 'Temporary network error contacting backend.'
-    });
-    return { success: false, error: err?.message || 'Network failure' };
-  }
+  return fetchAndSyncCanonicalState(authToken, serverUrl, {
+    webAppUrl,
+    fetchHistory: true,
+    allowRefresh: true
+  });
 }
 
 /**
@@ -455,7 +296,9 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
           tokenHealthStatus: undefined,
           userProfile: undefined,
           targetRepoFullName: '',
-          metrics: undefined
+          metrics: undefined,
+          lastSyncedSubmission: null,
+          lastBackendSyncAt: undefined
         });
         await StorageManager.setSyncedHistory([]);
         await updateActionBadge();
@@ -470,9 +313,14 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
           return;
         }
         const result = await syncWithBackend(cfg.authToken, cfg.serverUrl);
-        await SyncManager.processPendingQueue();
         await updateActionBadge();
         sendResponse(result);
+        // Retry queued submissions asynchronously without delaying popup state hydration
+        if (result.success) {
+          SyncManager.processPendingQueue()
+            .then(() => updateActionBadge())
+            .catch(() => {});
+        }
         return;
       }
 
@@ -577,7 +425,27 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         }
 
         const updated = await StorageManager.updateConfig(message.payload);
+        await updateActionBadge();
         sendResponse({ success: true, config: updated });
+        return;
+      }
+
+      if (message.type === 'CLEAR_PENDING_QUEUE') {
+        if (sender?.tab) {
+          sendResponse({ success: false, error: 'Unauthorized context' });
+          return;
+        }
+        const targetId = message.payload?.submissionId;
+        if (targetId) {
+          const queue = await StorageManager.getPendingQueue();
+          await StorageManager.setPendingQueue(
+            queue.filter((q) => String(q.submissionId) !== String(targetId))
+          );
+        } else {
+          await StorageManager.setPendingQueue([]);
+        }
+        await updateActionBadge();
+        sendResponse({ success: true });
         return;
       }
 
@@ -651,6 +519,25 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
 if (typeof chrome !== 'undefined' && chrome.runtime?.onInstalled) {
   chrome.runtime.onInstalled.addListener(() => {
     console.log('[StreakForge] Extension V4.0 installed or updated.');
-    updateActionBadge();
+    (async () => {
+      const cfg = await StorageManager.getConfig();
+      if (cfg.authToken) {
+        await syncWithBackend(cfg.authToken, cfg.serverUrl);
+      }
+      await updateActionBadge();
+    })();
+  });
+}
+
+if (typeof chrome !== 'undefined' && chrome.runtime?.onStartup) {
+  chrome.runtime.onStartup.addListener(() => {
+    (async () => {
+      const cfg = await StorageManager.getConfig();
+      if (cfg.authToken) {
+        await syncWithBackend(cfg.authToken, cfg.serverUrl);
+        await SyncManager.processPendingQueue();
+      }
+      await updateActionBadge();
+    })();
   });
 }

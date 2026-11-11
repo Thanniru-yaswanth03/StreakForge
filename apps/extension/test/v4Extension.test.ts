@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SyncManager, dispatchBackgroundNotification } from '../src/background/sync-manager';
 import { StorageManager, DEFAULT_SERVER_URL } from '../src/shared/storage';
+import { fetchAndSyncCanonicalState } from '../src/shared/backendSync';
 import { LeetCodeDomExtractor } from '../src/content/dom-extractor';
 import type { DetectedSubmission } from '../src/shared/types';
 
@@ -200,6 +201,131 @@ describe('StreakForge V4.0 Extension Reliability & Notifications', () => {
         'class Solution { public String longestCommonPrefix(String[] strs) { return ""; } }'
       )
     ).toBe(false);
+  });
+
+  it('self-heals legacy V3 config authState and hydrates streak, exportedCount, and pruned queue from /sync/state', async () => {
+    createChromeStorageMock({
+      config: {
+        authToken: 'legacy_v3_jwt',
+        userProfile: { username: 'octodev', email: 'o@example.com', avatarUrl: '' },
+        targetRepoFullName: 'octodev/LeetCodeHustle'
+      },
+      pendingQueue: [
+        makeAcceptedSub({ submissionId: 'sub_already_done', state: 'FAILED' }),
+        makeAcceptedSub({
+          submissionId: 'sub_bad_snippet',
+          code: 'Input: strs = ["flower","flow","flight"]',
+          state: 'FAILED'
+        })
+      ]
+    });
+
+    const initialCfg = await StorageManager.getConfig();
+    expect(initialCfg.authState).toBe('AUTHENTICATED');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+      const url = String(input);
+      if (url.includes('/api/v1/sync/state')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              user: {
+                username: 'octodev',
+                email: 'o@example.com',
+                avatarUrl: '',
+                leetcodeUsername: 'lc_octo',
+                sessionExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+                notificationPreferences: { problemSolved: true, syncSuccess: true, syncFailure: true }
+              },
+              githubTokenHealth: { status: 'VALID' },
+              targetRepo: { repoFullName: 'octodev/LeetCodeHustle', defaultBranch: 'main' },
+              syncPreferences: { autoSyncEnabled: true, exportPolicy: 'NEW_ONLY', includeHeader: true },
+              metrics: { uniqueProblemsSolved: 35, acceptedSubmissions: 35, exportedCount: 4, pendingCount: 0, failedCount: 0 },
+              streak: { currentStreak: 3, longestStreak: 18 },
+              lastSyncedSubmission: {
+                submissionId: 'sub_already_done',
+                questionId: '14',
+                questionTitle: 'Longest Common Prefix',
+                language: 'java',
+                githubCommitSha: 'abc1234',
+                githubCommitUrl: 'https://github.com/octodev/LeetCodeHustle/commit/abc1234'
+              }
+            }
+          })
+        } as any;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            items: [
+              {
+                submissionId: 'sub_already_done',
+                questionId: '14',
+                questionTitle: 'Longest Common Prefix',
+                questionSlug: 'longest-common-prefix',
+                difficulty: 'Easy',
+                language: 'java',
+                code: 'class Solution {}',
+                syncStatus: 'SYNCED',
+                githubCommitSha: 'abc1234',
+                githubCommitUrl: 'https://github.com/octodev/LeetCodeHustle/commit/abc1234'
+              }
+            ]
+          }
+        })
+      } as any;
+    });
+
+    const syncRes = await fetchAndSyncCanonicalState('legacy_v3_jwt', DEFAULT_SERVER_URL);
+    expect(syncRes.success).toBe(true);
+
+    const updatedCfg = await StorageManager.getConfig();
+    expect(updatedCfg.authState).toBe('AUTHENTICATED');
+    expect(updatedCfg.metrics?.currentStreak).toBe(3);
+    expect(updatedCfg.metrics?.exportedCount).toBe(4);
+    expect(updatedCfg.lastSyncedSubmission?.commitSha).toBe('abc1234');
+
+    const remainingQueue = await StorageManager.getPendingQueue();
+    expect(remainingQueue.length).toBe(0);
+  });
+
+  it('prunes SKIPPED (NEW_ONLY) items cleanly in processPendingQueue without keeping them stuck', async () => {
+    createChromeStorageMock({
+      config: {
+        authToken: 'jwt_123',
+        serverUrl: 'https://streakforge-api-5uhs.onrender.com',
+        targetRepoFullName: 'testuser/algo-repo'
+      },
+      pendingQueue: [
+        makeAcceptedSub({
+          submissionId: 'sub_skipped_retry',
+          state: 'FAILED',
+          retryCount: 1
+        })
+      ]
+    });
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        success: true,
+        data: {
+          syncStatus: 'SKIPPED',
+          message: 'Skipped per NEW_ONLY export policy'
+        }
+      })
+    } as any);
+
+    await SyncManager.processPendingQueue(true);
+    const queueAfter = await StorageManager.getPendingQueue();
+    expect(queueAfter.length).toBe(0);
   });
 });
 

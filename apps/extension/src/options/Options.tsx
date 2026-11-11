@@ -194,7 +194,16 @@ export function Options() {
 
   const handleClearQueue = async () => {
     if (confirm('Clear local extension retry queue? Server records on the dashboard are unaffected.')) {
-      await StorageManager.setPendingQueue([]);
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        await new Promise<void>((resolve) => {
+          chrome.runtime.sendMessage({ type: 'CLEAR_PENDING_QUEUE' }, () => {
+            void chrome.runtime?.lastError;
+            resolve();
+          });
+        });
+      } else {
+        await StorageManager.setPendingQueue([]);
+      }
       loadAll();
     }
   };

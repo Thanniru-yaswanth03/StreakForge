@@ -206,5 +206,9 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
         window.location.origin
       );
     }
+    if (message.type === 'REQUEST_BRIDGE_PAIR') {
+      lastDispatchedToken = null;
+      syncTokenToExtension();
+    }
   });
 }

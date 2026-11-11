@@ -141,8 +141,20 @@ export interface ExtensionConfig {
     currentStreak: number;
     longestStreak: number;
   };
+  lastSyncedSubmission?: {
+    submissionId?: string;
+    questionId?: string;
+    questionTitle: string;
+    language: string;
+    commitSha?: string;
+    commitUrl?: string;
+    filePath?: string;
+    syncedAt?: string;
+  } | null;
   lastBackendSyncAt?: string;
 }
+
+export type ExtensionMessageType = ExtensionMessage['type'];
 
 export interface DuplicateRecord {
   syncedAt: string;
@@ -211,4 +223,10 @@ export type ExtensionMessage =
   | {
       type: 'UPDATE_CONFIG';
       payload: Partial<ExtensionConfig>;
+    }
+  | {
+      type: 'CLEAR_PENDING_QUEUE';
+      payload?: {
+        submissionId?: string;
+      };
     };

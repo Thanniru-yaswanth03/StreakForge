@@ -9,7 +9,10 @@ import {
   Settings,
   AlertTriangle,
   Flame,
-  Clock
+  Clock,
+  Trash2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import type {
   ExtensionConfig,
@@ -17,6 +20,7 @@ import type {
   ActiveProblemContext
 } from '../shared/types';
 import { StorageManager, DEFAULT_SERVER_URL, DEFAULT_WEB_APP_URL } from '../shared/storage';
+import { fetchAndSyncCanonicalState } from '../shared/backendSync';
 
 interface LeetCodeStats {
   username: string;
@@ -41,6 +45,7 @@ export function App() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isOnLeetCode, setIsOnLeetCode] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [showQueueDetails, setShowQueueDetails] = useState<boolean>(false);
 
   const loadLocalState = useCallback(async () => {
     try {
@@ -61,8 +66,8 @@ export function App() {
 
   const loadState = useCallback(async () => {
     try {
-      const cfg = await StorageManager.getConfig();
-      const [prob, history, queue] = await Promise.all([
+      const [cfg, prob, history, queue] = await Promise.all([
+        StorageManager.getConfig(),
         StorageManager.getActiveProblem(),
         StorageManager.getSyncedHistory(),
         StorageManager.getPendingQueue()
@@ -73,49 +78,87 @@ export function App() {
       setSyncedHistory(history);
       setPendingQueue(queue);
 
-      const sUrl = (cfg.serverUrl || DEFAULT_SERVER_URL).replace(/\/+$/, '');
-      if (cfg.authToken) {
-        try {
-          const pRes = await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats`, {
-            headers: { Authorization: `Bearer ${cfg.authToken}` },
-            signal: AbortSignal.timeout(10000)
+      if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          void chrome.runtime?.lastError;
+          const url = tabs?.[0]?.url || '';
+          setIsOnLeetCode(url.includes('leetcode.com'));
+        });
+
+        // If extension lacks a token, gently ask any already-open StreakForge dashboard tab to pair
+        if (!cfg.authToken) {
+          chrome.tabs.query({}, (allTabs) => {
+            void chrome.runtime?.lastError;
+            for (const t of allTabs || []) {
+              if (
+                t.id &&
+                t.url &&
+                (t.url.startsWith('https://streak-forge-six.vercel.app') ||
+                  t.url.startsWith('http://localhost:3000'))
+              ) {
+                chrome.tabs.sendMessage(t.id, { type: 'REQUEST_BRIDGE_PAIR' }).catch(() => {});
+              }
+            }
           });
-          if (pRes.ok) {
-            const pJson = await pRes.json();
-            if (pJson.data) setLeetcodeStats(pJson.data);
-          }
-        } catch {
-          // Keep cached state on transient failure
         }
       }
 
-      if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          const url = tabs[0]?.url || '';
-          setIsOnLeetCode(url.includes('leetcode.com'));
-        });
+      const sUrl = (cfg.serverUrl || DEFAULT_SERVER_URL).replace(/\/+$/, '');
+      if (cfg.authToken) {
+        await Promise.allSettled([
+          fetchAndSyncCanonicalState(cfg.authToken, sUrl, {
+            fetchHistory: false,
+            allowRefresh: false
+          }).then(() => loadLocalState()),
+          fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats`, {
+            headers: { Authorization: `Bearer ${cfg.authToken}` },
+            signal: AbortSignal.timeout(10000)
+          })
+            .then(async (pRes) => {
+              if (pRes.ok) {
+                const pJson = await pRes.json();
+                if (pJson.data) setLeetcodeStats(pJson.data);
+              }
+            })
+            .catch(() => {})
+        ]);
       }
     } catch (err) {
       console.warn('Failed to load extension popup state:', err);
     }
-  }, []);
+  }, [loadLocalState]);
 
   useEffect(() => {
     loadState();
 
-    // Ask background worker to fetch canonical /sync/state once on popup open
+    // Ask background worker to refresh full history + reconcile queue without blocking initial UI
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({ type: 'SYNC_FROM_BACKEND' }, (resp) => {
-        if (resp?.success) {
-          loadLocalState();
-        } else {
-          loadLocalState();
-        }
+      chrome.runtime.sendMessage({ type: 'SYNC_FROM_BACKEND' }, () => {
+        void chrome.runtime?.lastError;
+        loadLocalState();
       });
     }
 
+    const handleStorageChange = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) => {
+      if (areaName === 'local' && (changes.config || changes.pendingQueue || changes.syncedHistory)) {
+        loadLocalState();
+      }
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.addListener(handleStorageChange);
+    }
+
     const interval = setInterval(loadLocalState, 2500);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+        chrome.storage.onChanged.removeListener(handleStorageChange);
+      }
+    };
   }, [loadState, loadLocalState]);
 
   const showStatus = (msg: string) => {
@@ -172,42 +215,63 @@ export function App() {
       return;
     }
 
-    // 1. Capture active LeetCode tab if currently viewing an Accepted verdict
-    if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const activeTab = tabs[0];
-        if (activeTab?.id && activeTab.url?.includes('leetcode.com')) {
-          chrome.tabs.sendMessage(activeTab.id, { type: 'MANUAL_CAPTURE_REQUEST' }, (resp) => {
-            const p = resp?.payload;
-            if (resp?.success && p?.problem && p?.code && p?.result?.verdict === 'Accepted') {
-              chrome.runtime.sendMessage({
-                type: 'LEETCODE_SUBMISSION_DETECTED',
-                payload: {
-                  submissionId: p.result.submissionId || `manual-${Date.now()}`,
-                  questionId: p.problem.id,
-                  questionTitle: p.problem.title,
-                  questionSlug: p.problem.slug,
-                  difficulty: p.problem.difficulty,
-                  language: p.language,
-                  code: p.code,
-                  runtimeMs: p.result.runtimeMs || 0,
-                  runtimePercentile: p.result.runtimePercentile || 0,
-                  memoryBytes: p.result.memoryBytes || 0,
-                  memoryPercentile: p.result.memoryPercentile || 0,
-                  verdict: 'Accepted',
-                  topicTags: p.problem.topicTags,
-                  submittedAt: new Date().toISOString(),
-                  state: 'DETECTED'
-                }
-              });
-            }
-          });
-        }
-      });
-    }
-
-    // 2. Process queued items + fetch canonical state + refresh LeetCode stats
     try {
+      // 1. Capture active LeetCode tab if viewing an Accepted verdict
+      if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+        const activeTab = await new Promise<chrome.tabs.Tab | undefined>((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            void chrome.runtime?.lastError;
+            resolve(tabs?.[0]);
+          });
+        });
+
+        if (activeTab?.id && activeTab.url?.includes('leetcode.com')) {
+          const captureResp = await new Promise<any>((resolve) => {
+            chrome.tabs.sendMessage(
+              activeTab.id!,
+              { type: 'MANUAL_CAPTURE_REQUEST' },
+              (resp) => {
+                void chrome.runtime?.lastError;
+                resolve(resp);
+              }
+            );
+          });
+
+          const p = captureResp?.payload;
+          if (captureResp?.success && p?.problem && p?.code && p?.result?.verdict === 'Accepted') {
+            await new Promise<void>((resolve) => {
+              chrome.runtime.sendMessage(
+                {
+                  type: 'LEETCODE_SUBMISSION_DETECTED',
+                  payload: {
+                    submissionId: p.result.submissionId || `manual-${Date.now()}`,
+                    questionId: p.problem.id,
+                    questionTitle: p.problem.title,
+                    questionSlug: p.problem.slug,
+                    difficulty: p.problem.difficulty,
+                    language: p.language,
+                    code: p.code,
+                    runtimeMs: p.result.runtimeMs || 0,
+                    runtimePercentile: p.result.runtimePercentile || 0,
+                    memoryBytes: p.result.memoryBytes || 0,
+                    memoryPercentile: p.result.memoryPercentile || 0,
+                    verdict: 'Accepted',
+                    topicTags: p.problem.topicTags,
+                    submittedAt: new Date().toISOString(),
+                    state: 'DETECTED'
+                  }
+                },
+                () => {
+                  void chrome.runtime?.lastError;
+                  resolve();
+                }
+              );
+            });
+          }
+        }
+      }
+
+      // 2. Refresh LeetCode stats on backend
       await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats/refresh`, {
         method: 'POST',
         headers: {
@@ -216,22 +280,43 @@ export function App() {
         },
         body: JSON.stringify(config.leetcodeUsername ? { username: config.leetcodeUsername } : {}),
         signal: AbortSignal.timeout(12000)
-      });
-    } catch {
-      // Non-fatal
-    }
+      }).catch(() => {});
 
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({ type: 'FORCE_SYNC_PENDING' }, () => {
-        setTimeout(async () => {
-          await loadState();
-          setIsSyncing(false);
-          showStatus('Synchronization complete');
-        }, 500);
-      });
-    } else {
+      // 3. Process pending retries in SW & reload full canonical state
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        await new Promise<void>((resolve) => {
+          chrome.runtime.sendMessage({ type: 'FORCE_SYNC_PENDING' }, () => {
+            void chrome.runtime?.lastError;
+            resolve();
+          });
+        });
+      }
+
+      await loadState();
+      showStatus('Synchronization complete');
+    } catch {
+      showStatus('Sync failed — check connection and retry.');
+    } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleClearQueue = async (submissionId?: string) => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage({ type: 'CLEAR_PENDING_QUEUE', payload: { submissionId } }, () => {
+          void chrome.runtime?.lastError;
+          resolve();
+        });
+      });
+    } else if (submissionId) {
+      const q = await StorageManager.getPendingQueue();
+      await StorageManager.setPendingQueue(q.filter((item) => item.submissionId !== submissionId));
+    } else {
+      await StorageManager.setPendingQueue([]);
+    }
+    await loadLocalState();
+    showStatus(submissionId ? 'Removed queued item' : 'Cleared local retry queue');
   };
 
   const openUrl = (url: string) => {
@@ -260,11 +345,19 @@ export function App() {
         authState: 'UNAUTHENTICATED',
         userProfile: undefined,
         targetRepoFullName: '',
-        metrics: undefined
+        metrics: undefined,
+        lastSyncedSubmission: null,
+        lastBackendSyncAt: undefined
       });
       await StorageManager.setSyncedHistory([]);
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ type: 'CLEAR_AUTH_TOKEN' }, () => {
+          void chrome.runtime?.lastError;
+        });
+      }
       setConfig(updated);
       setSyncedHistory([]);
+      setLeetcodeStats(null);
       showStatus('Signed out');
     }
   };
@@ -281,16 +374,39 @@ export function App() {
     (s) => s.state === 'SYNCED' && Boolean(s.commitSha)
   );
   const exportedCount = config?.metrics?.exportedCount ?? verifiedExportedList.length;
-  const queuedPendingCount =
-    (config?.metrics?.pendingCount ?? 0) +
-    (config?.metrics?.failedCount ?? 0) +
-    pendingQueue.filter((q) => q.state !== 'SYNCED').length;
 
-  const lastSynced = verifiedExportedList.length > 0 ? verifiedExportedList[0] : null;
+  const localPendingItems = pendingQueue.filter((q) => q.state !== 'SYNCED');
+  const localIds = new Set(localPendingItems.map((q) => String(q.submissionId)));
+  const historyUnresolved = syncedHistory.filter(
+    (h) =>
+      (h.state === 'FAILED' || h.state === 'EXPORT_PENDING' || h.state === 'RETRY_PENDING') &&
+      !localIds.has(String(h.submissionId))
+  );
+  const backendPendingTotal =
+    (config?.metrics?.pendingCount ?? 0) + (config?.metrics?.failedCount ?? 0);
+  const queuedPendingCount =
+    syncedHistory.length > 0
+      ? localPendingItems.length + historyUnresolved.length
+      : Math.max(localPendingItems.length, backendPendingTotal);
+
+  const lastSynced =
+    verifiedExportedList.length > 0
+      ? verifiedExportedList[0]
+      : config?.lastSyncedSubmission
+        ? {
+            questionTitle: config.lastSyncedSubmission.questionTitle,
+            language: config.lastSyncedSubmission.language,
+            commitUrl: config.lastSyncedSubmission.commitUrl
+          }
+        : null;
   const username = config?.userProfile?.username;
   const targetRepo = config?.targetRepoFullName;
   const targetBranch = config?.targetBranch || 'main';
-  const authState = config?.authToken ? config?.authState || 'AUTHENTICATED' : 'UNAUTHENTICATED';
+  const authState = !config?.authToken
+    ? 'UNAUTHENTICATED'
+    : config.authState === 'EXPIRED' || config.authState === 'NETWORK_ERROR'
+      ? config.authState
+      : 'AUTHENTICATED';
 
   return (
     <div className="w-[368px] bg-[#0d1117] text-[#f0f6fc] font-sans select-none flex flex-col shadow-2xl text-xs overflow-hidden border border-[#30363d]">
@@ -373,7 +489,10 @@ export function App() {
             </div>
 
             <div className="flex items-center gap-1.5 text-[10px] font-mono">
-              <span className="px-1.5 py-0.5 rounded bg-[#21262d] text-[#f0883e] border border-[#30363d] flex items-center gap-1">
+              <span
+                className="px-1.5 py-0.5 rounded bg-[#21262d] text-[#f0883e] border border-[#30363d] flex items-center gap-1"
+                title={`Current streak: ${config?.metrics?.currentStreak ?? 0}d • Best: ${config?.metrics?.longestStreak ?? 0}d`}
+              >
                 <Flame className="w-2.5 h-2.5" />
                 {config?.metrics?.currentStreak ?? 0}d
               </span>
@@ -410,13 +529,71 @@ export function App() {
               Unique Solved: <strong className="text-[#f0f6fc]">{uniqueSolved}</strong>
             </span>
             {queuedPendingCount > 0 ? (
-              <span className="text-[#d29922] font-semibold">
-                {queuedPendingCount} pending/failed
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowQueueDetails((v) => !v)}
+                className="text-[#d29922] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                title="Inspect pending/failed queue items"
+              >
+                <span>{queuedPendingCount} pending/failed</span>
+                {showQueueDetails ? (
+                  <ChevronUp className="w-3 h-3" />
+                ) : (
+                  <ChevronDown className="w-3 h-3" />
+                )}
+              </button>
             ) : (
               <span className="text-[#3fb950]">All caught up</span>
             )}
           </div>
+
+          {showQueueDetails && (localPendingItems.length > 0 || queuedPendingCount > 0) && (
+            <div className="mt-2 pt-2 border-t border-[#30363d] space-y-1.5">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-[#8b949e] font-semibold">
+                  Retry Queue ({localPendingItems.length} local)
+                </span>
+                {localPendingItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleClearQueue()}
+                    className="text-[#f85149] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                    <span>Clear Queue</span>
+                  </button>
+                )}
+              </div>
+              {localPendingItems.slice(0, 4).map((q) => (
+                <div
+                  key={q.submissionId}
+                  className="p-1.5 rounded bg-[#0d1117] border border-[#30363d]/70 flex items-center justify-between gap-2 text-[10px]"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[#f0f6fc] font-medium truncate">
+                      {q.questionTitle} ({q.language})
+                    </div>
+                    {q.errorMessage && (
+                      <div className="text-[#d29922] truncate text-[9px]">{q.errorMessage}</div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleClearQueue(q.submissionId)}
+                    className="text-[#8b949e] hover:text-[#f85149] flex-shrink-0 cursor-pointer"
+                    title="Remove from local queue"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {localPendingItems.length === 0 && historyUnresolved.length > 0 && (
+                <div className="text-[10px] text-[#8b949e]">
+                  {historyUnresolved.length} unresolved record(s) tracked in dashboard LeetCode Activity.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Active LeetCode Problem Context */}
@@ -515,11 +692,26 @@ export function App() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-[#8b949e]">Target Repo</span>
-            <span className="font-mono text-[#58a6ff] truncate max-w-[205px]">
-              {targetRepo ? `${targetRepo} (${targetBranch})` : 'None selected'}
-            </span>
+          <div className="flex items-center justify-between text-[11px] gap-2">
+            <span className="text-[#8b949e] flex-shrink-0">Repo</span>
+            {targetRepo ? (
+              <div className="flex items-center gap-1.5 min-w-0 justify-end">
+                <a
+                  href={`https://github.com/${targetRepo}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`${targetRepo} (${targetBranch})`}
+                  className="font-mono text-[#58a6ff] hover:underline truncate"
+                >
+                  {targetRepo}
+                </a>
+                <span className="px-1 py-0.5 rounded bg-[#21262d] border border-[#30363d] text-[9px] font-mono text-[#8b949e] flex-shrink-0">
+                  {targetBranch}
+                </span>
+              </div>
+            ) : (
+              <span className="font-mono text-[#8b949e]">None selected</span>
+            )}
           </div>
 
           <div className="pt-1.5 border-t border-[#30363d] flex items-center justify-between text-[11px] gap-2">
