@@ -26,6 +26,19 @@ interface CacheEntry {
 }
 const apiCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_REPOS_PER_ACTIVITY_SCAN = 6;
+
+/**
+ * Invalidate cached GitHub activity responses for a user after writes/syncs
+ */
+export function invalidateGitHubActivityCache(userId: string): void {
+  const prefix = `${userId}:`;
+  for (const key of apiCache.keys()) {
+    if (key.startsWith(prefix)) {
+      apiCache.delete(key);
+    }
+  }
+}
 
 // In-memory processed webhook deliveries for deduplication
 const processedDeliveries = new Set<string>();
@@ -67,6 +80,12 @@ export async function getGitHubActivity(
   page = 1,
   limit = 20
 ): Promise<GitHubActivityFeed> {
+  const cacheKey = `${userId}:${page}:${limit}`;
+  const cached = apiCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const octokit = await getAuthenticatedOctokit(userId);
 
   // 1. Identify user's active repositories directly from GitHub live events
@@ -91,13 +110,30 @@ export async function getGitHubActivity(
     userId: new Types.ObjectId(userId)
   })
     .sort({ isTargetForLeetCode: -1, lastSyncedAt: -1, updatedAt: -1 })
-    .limit(30);
+    .limit(MAX_REPOS_PER_ACTIVITY_SCAN);
 
   const reposToScan: Array<{ owner: string; repo: string; fullName: string; defaultBranch: string }> = [];
   const scannedSet = new Set<string>();
 
-  // Prioritize repos with verified recent events
+  // Target LeetCode repository always gets highest priority
+  for (const r of connectedRepos) {
+    if (r.isTargetForLeetCode && !scannedSet.has(r.repoFullName.toLowerCase())) {
+      const [owner, repo] = r.repoFullName.split('/');
+      if (owner && repo) {
+        scannedSet.add(r.repoFullName.toLowerCase());
+        reposToScan.push({
+          owner,
+          repo,
+          fullName: r.repoFullName,
+          defaultBranch: r.defaultBranch || 'main'
+        });
+      }
+    }
+  }
+
+  // Add repos with verified recent events (capped cleanly)
   for (const full of recentActiveRepoNames) {
+    if (reposToScan.length >= MAX_REPOS_PER_ACTIVITY_SCAN) break;
     const [owner, repo] = full.split('/');
     if (owner && repo && !scannedSet.has(full.toLowerCase())) {
       scannedSet.add(full.toLowerCase());
@@ -111,9 +147,10 @@ export async function getGitHubActivity(
     }
   }
 
-  // Then add remaining connected repositories
+  // Then add remaining connected repositories up to cap
   if (connectedRepos.length > 0) {
     for (const r of connectedRepos) {
+      if (reposToScan.length >= MAX_REPOS_PER_ACTIVITY_SCAN) break;
       const full = r.repoFullName;
       if (!scannedSet.has(full.toLowerCase())) {
         scannedSet.add(full.toLowerCase());
@@ -305,7 +342,7 @@ export async function getGitHubActivity(
     // Keep fallback
   }
 
-  return {
+  const payload: GitHubActivityFeed = {
     commits: dedupedCommits.slice((page - 1) * limit, page * limit),
     pullRequests: dedupedPrs,
     issues: dedupedIssues,
@@ -313,6 +350,9 @@ export async function getGitHubActivity(
     releases,
     rateLimit
   };
+
+  apiCache.set(cacheKey, { data: payload, cachedAt: Date.now() });
+  return payload;
 }
 
 /**

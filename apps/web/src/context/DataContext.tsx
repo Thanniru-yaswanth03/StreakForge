@@ -9,7 +9,8 @@ import type {
   RepositoryConnection,
   LeetCodeSubmission,
   LocalAgentInstance,
-  AuditLog
+  AuditLog,
+  ExtensionSyncState
 } from '@streakforge/shared-types';
 import { api, ApiError } from '../lib/api';
 import { getStoredToken, clearStoredToken } from '../lib/utils';
@@ -105,6 +106,15 @@ export type ExtensionDetectionStatus =
   | 'SYNCHRONIZING'
   | 'SYNC_FAILED';
 
+export interface SubmissionMetricsSummary {
+  uniqueProblemsSolved: number;
+  acceptedSubmissions: number;
+  exportedCount: number;
+  pendingCount: number;
+  failedCount: number;
+  skippedCount: number;
+}
+
 interface DataContextValue {
   user: User | null;
   overview: AnalyticsOverview | null;
@@ -112,6 +122,8 @@ interface DataContextValue {
   connectedRepos: RepositoryConnection[];
   githubRepos: any[];
   submissions: LeetCodeSubmission[];
+  submissionMetrics: SubmissionMetricsSummary;
+  canonicalState: ExtensionSyncState | null;
   agents: LocalAgentInstance[];
   auditLogs: AuditLog[];
   automations: AutomationJob[];
@@ -122,6 +134,8 @@ interface DataContextValue {
   extensionStatus: ExtensionDetectionStatus;
   isLoading: boolean;
   isDemoMode: boolean;
+  isStaleData: boolean;
+  lastUpdatedAt: string | null;
   backendError: string | null;
   refreshData: () => Promise<void>;
   refreshLeetCodeStats: (usernameOverride?: string) => Promise<void>;
@@ -135,8 +149,8 @@ interface DataContextValue {
 }
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
+const SNAPSHOT_CACHE_KEY = 'streakforge_snapshot_v4';
 
-// Initial empty overview for unauthenticated / fresh accounts
 const EMPTY_OVERVIEW: AnalyticsOverview = {
   currentStreak: 0,
   longestStreak: 0,
@@ -164,200 +178,13 @@ const EMPTY_OVERVIEW: AnalyticsOverview = {
   }
 };
 
-const DEMO_AUTOMATIONS: AutomationJob[] = [
-  {
-    id: 'auto-1',
-    name: 'Local Agent Idle Auto-Commit',
-    type: 'LOCAL_AGENT_IDLE',
-    status: 'ACTIVE',
-    scheduleDescription: 'After 15 minutes of inactivity in monitored repositories',
-    nextExecution: 'Upon idle trigger',
-    lastExecution: 'Today at 14:22',
-    lastExecutionStatus: 'SUCCESS',
-    successCount: 142,
-    failureCount: 0,
-    config: { idleMinutes: 15, autoPush: false }
-  },
-  {
-    id: 'auto-2',
-    name: 'End-of-Day Streak Wrap-Up',
-    type: 'END_OF_DAY_WRAPUP',
-    status: 'ACTIVE',
-    scheduleDescription: 'Daily at 23:00 in user timezone',
-    nextExecution: 'Today at 23:00',
-    lastExecution: 'Yesterday at 23:00',
-    lastExecutionStatus: 'SUCCESS',
-    successCount: 45,
-    failureCount: 1,
-    config: { time: '23:00', requirePrompt: true }
-  },
-  {
-    id: 'auto-3',
-    name: 'LeetCode Solution Exporter',
-    type: 'LEETCODE_EXPORT',
-    status: 'ACTIVE',
-    scheduleDescription: 'Instant trigger upon Accepted submission detection',
-    nextExecution: 'Event-driven',
-    lastExecution: 'Today at 12:45',
-    lastExecutionStatus: 'SUCCESS',
-    successCount: 58,
-    failureCount: 0,
-    config: { repo: 'dev/leetcode-solutions', branch: 'main' }
-  },
-  {
-    id: 'auto-4',
-    name: 'Weekly Archive & Consistency Tag',
-    type: 'WEEKLY_ARCHIVE',
-    status: 'PAUSED',
-    scheduleDescription: 'Every Sunday at 23:59',
-    nextExecution: 'Paused',
-    lastExecution: 'Oct 28, 2026',
-    lastExecutionStatus: 'SUCCESS',
-    successCount: 8,
-    failureCount: 0,
-    config: { tagFormat: 'streak-week-{week}' }
-  }
-];
-
-const DEMO_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    type: 'EXPORT_SUCCESS',
-    title: 'LeetCode Solution Exported',
-    message: 'Exported solution for [146] LRU Cache (45ms, 58MB) to user/leetcode-solutions.',
-    timestamp: '2 hours ago',
-    isRead: false,
-    link: 'https://github.com'
-  },
-  {
-    id: 'notif-2',
-    type: 'STREAK_WARNING',
-    title: 'Daily Streak Reminder',
-    message: 'You have 6.5 hours remaining in your local timezone to maintain your 14-day streak!',
-    timestamp: '4 hours ago',
-    isRead: false
-  },
-  {
-    id: 'notif-3',
-    type: 'AGENT_ALERT',
-    title: 'Desktop Agent Heartbeat',
-    message: 'Agent "MacBook Pro M2" committed 3 genuine changes in project "web-service".',
-    timestamp: 'Yesterday at 18:30',
-    isRead: true
-  },
-  {
-    id: 'notif-4',
-    type: 'SECURITY',
-    title: 'Safety Guard Filter Active',
-    message: 'Prevented uncommitted .env file from being staged automatically.',
-    timestamp: '2 days ago',
-    isRead: true
-  }
-];
-
-const DEMO_GITHUB_ACTIVITY: GitHubActivityData = {
-  totalCommits: 164,
-  recentCommits: [
-    {
-      sha: '8f7d9a1c3e4b5a',
-      repo: 'streakforge',
-      branch: 'main',
-      author: 'alexdeveloper',
-      message: 'feat(sync): add dual detection observer for LeetCode GraphQL',
-      timestamp: 'Today at 14:15',
-      filesChanged: 3
-    },
-    {
-      sha: '3c2e1b4d5a6f7e',
-      repo: 'streakforge',
-      branch: 'main',
-      author: 'alexdeveloper',
-      message: 'fix(git-engine): strictly enforce secret filter on .env and private keys',
-      timestamp: 'Today at 11:30',
-      filesChanged: 2
-    },
-    {
-      sha: '9b8a7c6e5d4f3a',
-      repo: 'leetcode-solutions',
-      branch: 'main',
-      author: 'alexdeveloper',
-      message: 'feat(leetcode): solve [146] LRU Cache (45ms, 58.2 MB)',
-      timestamp: 'Today at 10:45',
-      filesChanged: 2
-    },
-    {
-      sha: '1a2b3c4d5e6f7a',
-      repo: 'api-service',
-      branch: 'dev',
-      author: 'alexdeveloper',
-      message: 'refactor(auth): migrate token validation to AES-256-GCM',
-      timestamp: 'Yesterday at 17:20',
-      filesChanged: 4
-    }
-  ],
-  repositories: [
-    {
-      name: 'streakforge',
-      fullName: 'alexdeveloper/streakforge',
-      stars: 12,
-      forks: 3,
-      activeBranch: 'main',
-      lastCommitTime: 'Today at 14:15',
-      isPrivate: false
-    },
-    {
-      name: 'leetcode-solutions',
-      fullName: 'alexdeveloper/leetcode-solutions',
-      stars: 34,
-      forks: 5,
-      activeBranch: 'main',
-      lastCommitTime: 'Today at 10:45',
-      isPrivate: false
-    },
-    {
-      name: 'api-service',
-      fullName: 'alexdeveloper/api-service',
-      stars: 4,
-      forks: 1,
-      activeBranch: 'dev',
-      lastCommitTime: 'Yesterday at 17:20',
-      isPrivate: true
-    }
-  ],
-  branches: [
-    { name: 'main', repo: 'streakforge', isProtected: true, lastCommitSha: '8f7d9a1' },
-    { name: 'dev', repo: 'streakforge', isProtected: false, lastCommitSha: '2d3c4e5' },
-    { name: 'main', repo: 'leetcode-solutions', isProtected: true, lastCommitSha: '9b8a7c6' },
-    { name: 'dev', repo: 'api-service', isProtected: false, lastCommitSha: '1a2b3c4' }
-  ],
-  pullRequests: [
-    {
-      number: 14,
-      title: 'feat: Timezone-aware daily snapshot streak aggregation',
-      repo: 'streakforge',
-      state: 'MERGED',
-      author: 'alexdeveloper',
-      createdAt: '2 days ago'
-    },
-    {
-      number: 15,
-      title: 'fix: Add robust loopback nonce verification for local desktop agent',
-      repo: 'streakforge',
-      state: 'OPEN',
-      author: 'alexdeveloper',
-      createdAt: '1 day ago'
-    }
-  ],
-  issues: [
-    {
-      number: 8,
-      title: 'Support custom difficulty directory format templates',
-      repo: 'streakforge',
-      state: 'CLOSED',
-      author: 'alexdeveloper',
-      createdAt: '3 days ago'
-    }
-  ]
+const EMPTY_SUBMISSION_METRICS: SubmissionMetricsSummary = {
+  uniqueProblemsSolved: 0,
+  acceptedSubmissions: 0,
+  exportedCount: 0,
+  pendingCount: 0,
+  failedCount: 0,
+  skippedCount: 0
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -367,6 +194,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [connectedRepos, setConnectedRepos] = useState<RepositoryConnection[]>([]);
   const [githubRepos, setGithubRepos] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<LeetCodeSubmission[]>([]);
+  const [submissionMetrics, setSubmissionMetrics] = useState<SubmissionMetricsSummary>(EMPTY_SUBMISSION_METRICS);
+  const [canonicalState, setCanonicalState] = useState<ExtensionSyncState | null>(null);
   const [agents, setAgents] = useState<LocalAgentInstance[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [automations, setAutomations] = useState<AutomationJob[]>([]);
@@ -384,24 +213,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [extensionStatus, setExtensionStatus] = useState<ExtensionDetectionStatus>('NOT_INSTALLED');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [isStaleData, setIsStaleData] = useState<boolean>(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
 
   const userRef = useRef<User | null>(null);
   const submissionsRef = useRef<LeetCodeSubmission[]>([]);
+  const refreshControllerRef = useRef<AbortController | null>(null);
+  const tokenRefreshedRef = useRef<boolean>(false);
   userRef.current = user;
   submissionsRef.current = submissions;
 
   const refreshLeetCodeStats = useCallback(async (usernameOverride?: string): Promise<void> => {
-    try {
-      const stats = await api.sync.refreshProfileStats(usernameOverride);
-      setLeetcodeStats(stats);
-    } catch (err) {
-      console.warn('Failed refreshing LeetCode stats:', err);
-      throw err;
-    }
+    const stats = await api.sync.refreshProfileStats(usernameOverride);
+    setLeetcodeStats(stats);
   }, []);
 
-  // Build deterministic 365-day empty heatmap (zero fabrication when no activity is recorded)
   const buildEmptyHeatmap = useCallback(() => {
     const days: HeatmapDay[] = [];
     const now = new Date();
@@ -419,6 +246,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return days;
   }, []);
 
+  const clearCachedSnapshot = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(SNAPSHOT_CACHE_KEY);
+    }
+  }, []);
+
   const refreshData = useCallback(async () => {
     const token = getStoredToken();
     if (!token) {
@@ -427,54 +260,95 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setConnectedRepos([]);
       setGithubRepos([]);
       setSubmissions([]);
+      setSubmissionMetrics(EMPTY_SUBMISSION_METRICS);
+      setCanonicalState(null);
       setAgents([]);
       setAuditLogs([]);
       setAutomations([]);
       setNotifications([]);
       setLeetcodeStats(null);
       setIsDemoMode(false);
+      setIsStaleData(false);
+      setLastUpdatedAt(null);
       setBackendError(null);
       setHeatmap(buildEmptyHeatmap());
+      clearCachedSnapshot();
       setIsLoading(false);
       return;
     }
 
+    // Cancel any previous in-flight dashboard sync to prevent stale race overwrites
+    if (refreshControllerRef.current) {
+      refreshControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    refreshControllerRef.current = controller;
+
     try {
       setIsLoading(true);
       setBackendError(null);
-      const [meRes, overviewRes, heatmapRes, reposRes, subsRes, agentsRes, logsRes, ghActRes, rulesRes, notifsRes, lcStatsRes] =
+
+      // Phase A: Fast canonical bootstrap first (/sync/state + overview + repos + submissions + heatmap + notifications)
+      const [stateRes, overviewRes, heatmapRes, reposRes, subsRes, notifsRes, rulesRes] =
         await Promise.allSettled([
-          api.auth.getMe(),
+          api.sync.getState(controller.signal),
           api.analytics.getOverview(),
           api.analytics.getHeatmap(),
           api.repos.list(),
-          api.sync.getHistory(1, 50),
-          api.agent.list(),
-          api.audit.getLogs(1, 100),
-          api.github.getActivity(1, 20),
-          api.automations.getRules(),
+          api.sync.queryHistory({ page: 1, limit: 50 }),
           api.notifications.list(1, 50),
-          api.sync.getProfileStats()
+          api.automations.getRules()
         ]);
 
-      if (meRes.status === 'fulfilled') {
-        setUser(meRes.value.user);
-        setLeetcodeStats(meRes.value.user.leetcodeStats || null);
-        setIsDemoMode(false);
-        setBackendError(null);
-      } else {
-        const err = meRes.reason;
-        const status = err instanceof ApiError ? err.status : 0;
-        const isAuthInvalid = status === 401;
+      if (controller.signal.aborted) return;
 
-        if (isAuthInvalid) {
+      let loadedUser: User | null = null;
+      if (stateRes.status === 'fulfilled' && stateRes.value?.user) {
+        const s = stateRes.value;
+        setCanonicalState(s);
+        loadedUser = s.user;
+        setUser(s.user);
+        setLeetcodeStats(s.user?.leetcodeStats || null);
+        if (s.metrics) {
+          setSubmissionMetrics({
+            uniqueProblemsSolved: s.metrics.uniqueProblemsSolved,
+            acceptedSubmissions: s.metrics.acceptedSubmissions,
+            exportedCount: s.metrics.exportedCount,
+            pendingCount: s.metrics.pendingCount,
+            failedCount: s.metrics.failedCount,
+            skippedCount: s.metrics.skippedCount
+          });
+        }
+        setIsStaleData(false);
+        setBackendError(null);
+
+        // Silent sliding JWT refresh if within 48 hours of expiration
+        if (!tokenRefreshedRef.current && s.user?.sessionExpiresAt) {
+          const msLeft = new Date(s.user.sessionExpiresAt).getTime() - Date.now();
+          if (msLeft > 0 && msLeft < 48 * 60 * 60 * 1000) {
+            tokenRefreshedRef.current = true;
+            api.auth
+              .refresh()
+              .then(() => {
+                if (typeof window !== 'undefined') {
+                  window.postMessage({ type: 'STREAKFORGE_TRIGGER_PAIR' }, window.location.origin);
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      } else if (stateRes.status === 'rejected') {
+        const err = stateRes.reason;
+        const status = err instanceof ApiError ? err.status : 0;
+        if (status === 401) {
           setUser(null);
           setOverview(EMPTY_OVERVIEW);
           setLeetcodeStats(null);
           setConnectedRepos([]);
           setSubmissions([]);
-          setIsDemoMode(false);
+          setCanonicalState(null);
           clearStoredToken();
+          clearCachedSnapshot();
           if (typeof window !== 'undefined') {
             window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
           }
@@ -482,34 +356,59 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Preserve session across transient 429 rate-limit / Render 503 cold-start / network outages
         const msg =
           status === 429
-            ? 'API rate limit reached temporarily. Please wait a moment and click Retry Sync.'
-            : 'Backend server is waking up or temporarily unreachable. Your session is preserved — click Retry Sync.';
+            ? 'API rate limit reached temporarily. Showing cached state — retry shortly.'
+            : 'Backend server is waking up or temporarily unreachable. Showing cached state — your session is preserved.';
         setBackendError(msg);
-        setIsDemoMode(false);
-      }
-
-      if (lcStatsRes.status === 'fulfilled' && lcStatsRes.value) {
-        setLeetcodeStats(lcStatsRes.value);
+        setIsStaleData(Boolean(userRef.current));
       }
 
       if (overviewRes.status === 'fulfilled') setOverview(overviewRes.value);
       if (heatmapRes.status === 'fulfilled' && heatmapRes.value.length > 0) {
         setHeatmap(heatmapRes.value);
-      } else if (meRes.status === 'fulfilled') {
+      } else if (loadedUser && heatmap.length === 0) {
         setHeatmap(buildEmptyHeatmap());
       }
+
       if (reposRes.status === 'fulfilled') {
         setConnectedRepos(reposRes.value.connected);
         setGithubRepos(reposRes.value.githubAvailable);
       }
-      if (subsRes.status === 'fulfilled') setSubmissions(subsRes.value);
-      if (agentsRes.status === 'fulfilled') setAgents(agentsRes.value);
-      if (logsRes.status === 'fulfilled') setAuditLogs(logsRes.value);
 
-      if (rulesRes.status === 'fulfilled' && rulesRes.value.length > 0) {
+      if (subsRes.status === 'fulfilled') {
+        setSubmissions(subsRes.value.data || []);
+        if (subsRes.value.meta?.metrics) {
+          setSubmissionMetrics(subsRes.value.meta.metrics);
+        }
+      }
+
+      if (notifsRes.status === 'fulfilled') {
+        setNotifications(
+          notifsRes.value.items.map((n) => ({
+            id: n.id,
+            type: (n.category === 'STREAK_WARNING'
+              ? 'STREAK_WARNING'
+              : n.category === 'EXPORT_SUCCESS'
+                ? 'EXPORT_SUCCESS'
+                : n.category === 'EXPORT_FAILURE'
+                  ? 'EXPORT_FAILURE'
+                  : n.category === 'AGENT_DISCONNECTED'
+                    ? 'AGENT_ALERT'
+                    : 'SECURITY') as any,
+            title: n.title,
+            message: n.message,
+            timestamp: new Date(n.createdAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            }),
+            isRead: n.isRead,
+            link: n.link
+          }))
+        );
+      }
+
+      if (rulesRes.status === 'fulfilled') {
         setAutomations(
           rulesRes.value.map((r) => ({
             id: r.id,
@@ -529,31 +428,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
-      if (notifsRes.status === 'fulfilled' && notifsRes.value.items.length > 0) {
-        setNotifications(
-          notifsRes.value.items.map((n) => ({
-            id: n.id,
-            type: (n.category === 'STREAK_WARNING'
-              ? 'STREAK_WARNING'
-              : n.category === 'EXPORT_SUCCESS'
-              ? 'EXPORT_SUCCESS'
-              : n.category === 'EXPORT_FAILURE'
-              ? 'EXPORT_FAILURE'
-              : n.category === 'AGENT_DISCONNECTED'
-              ? 'AGENT_ALERT'
-              : 'SECURITY') as any,
-            title: n.title,
-            message: n.message,
-            timestamp: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isRead: n.isRead,
-            link: n.link
-          }))
-        );
+      const nowIso = new Date().toISOString();
+      if (loadedUser && typeof window !== 'undefined') {
+        setLastUpdatedAt(nowIso);
+        try {
+          localStorage.setItem(
+            SNAPSHOT_CACHE_KEY,
+            JSON.stringify({
+              savedAt: nowIso,
+              user: loadedUser,
+              overview: overviewRes.status === 'fulfilled' ? overviewRes.value : EMPTY_OVERVIEW,
+              connectedRepos: reposRes.status === 'fulfilled' ? reposRes.value.connected : [],
+              submissions: subsRes.status === 'fulfilled' ? subsRes.value.data : [],
+              metrics:
+                subsRes.status === 'fulfilled' && subsRes.value.meta?.metrics
+                  ? subsRes.value.meta.metrics
+                  : stateRes.status === 'fulfilled'
+                    ? stateRes.value.metrics
+                    : EMPTY_SUBMISSION_METRICS
+            })
+          );
+        } catch {
+          // Ignore storage quota errors
+        }
       }
 
-      if (meRes.status === 'fulfilled') {
-        if (ghActRes.status === 'fulfilled' && ghActRes.value.commits.length > 0) {
+      setIsLoading(false);
+
+      // Phase B: Non-blocking background hydration for secondary analytics (GitHub live feed, audit logs, agents)
+      Promise.allSettled([
+        api.github.getActivity(1, 20),
+        api.audit.getLogs(1, 100),
+        api.agent.list()
+      ]).then(([ghActRes, logsRes, agentsRes]) => {
+        if (controller.signal.aborted) return;
+        if (logsRes.status === 'fulfilled') setAuditLogs(logsRes.value);
+        if (agentsRes.status === 'fulfilled') setAgents(agentsRes.value);
+
+        if (ghActRes.status === 'fulfilled') {
           const gh = ghActRes.value;
+          const userRepos = reposRes.status === 'fulfilled' ? reposRes.value.connected : [];
           setGithubActivity({
             totalCommits: gh.commits.length,
             recentCommits: gh.commits.map((c) => ({
@@ -565,15 +479,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               timestamp: new Date(c.timestamp).toLocaleString(),
               filesChanged: c.filesChanged
             })),
-            repositories: reposRes.status === 'fulfilled' ? reposRes.value.connected.map((r) => ({
+            repositories: userRepos.map((r) => ({
               name: r.repoFullName.split('/')[1] || r.repoFullName,
               fullName: r.repoFullName,
               stars: 0,
               forks: 0,
               activeBranch: r.defaultBranch,
               lastCommitTime: r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleString() : 'Recently',
-              isPrivate: false
-            })) : [],
+              isPrivate: Boolean(r.isPrivate)
+            })),
             pullRequests: gh.pullRequests.map((p) => ({
               number: p.number,
               title: p.title,
@@ -598,66 +512,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             })),
             rateLimit: gh.rateLimit
           });
-        } else {
-          // Zero-Fabrication: Never show mock demo commits to authenticated users
-          const userRepos = reposRes.status === 'fulfilled' ? reposRes.value.connected : [];
-          setGithubActivity({
-            totalCommits: overviewRes.status === 'fulfilled' ? (overviewRes.value?.totalGitCommitsTracked || 0) : 0,
-            recentCommits: [],
-            repositories: userRepos.map((r) => ({
-              name: r.repoFullName.split('/')[1] || r.repoFullName,
-              fullName: r.repoFullName,
-              stars: 0,
-              forks: 0,
-              activeBranch: r.defaultBranch,
-              lastCommitTime: r.lastSyncedAt ? new Date(r.lastSyncedAt).toLocaleString() : 'Recently',
-              isPrivate: false
-            })),
-            branches: userRepos.map((r) => ({
-              name: r.defaultBranch,
-              repo: r.repoFullName.split('/')[1] || r.repoFullName,
-              isProtected: true,
-              lastCommitSha: 'HEAD'
-            })),
-            pullRequests: [],
-            issues: []
-          });
         }
-      }
+      });
     } catch (err: any) {
+      if (controller.signal.aborted) return;
       setIsDemoMode(false);
+      setIsStaleData(Boolean(userRef.current));
       setBackendError(err?.message || 'Unable to load dashboard data from server.');
-    } finally {
       setIsLoading(false);
     }
-  }, [buildEmptyHeatmap]);
+  }, [buildEmptyHeatmap, clearCachedSnapshot]);
 
   const logout = useCallback(async () => {
     try {
       await api.auth.logout();
     } catch {
-      // Proceed with local cleanup even if backend request fails
+      // Proceed cleanly
     }
     clearStoredToken();
+    clearCachedSnapshot();
     setUser(null);
     setOverview(EMPTY_OVERVIEW);
     setConnectedRepos([]);
     setGithubRepos([]);
     setSubmissions([]);
+    setSubmissionMetrics(EMPTY_SUBMISSION_METRICS);
+    setCanonicalState(null);
     setAgents([]);
     setAuditLogs([]);
     setAutomations([]);
     setNotifications([]);
     setLeetcodeStats(null);
+    setIsStaleData(false);
+    setLastUpdatedAt(null);
     setBackendError(null);
     setHeatmap(buildEmptyHeatmap());
     if (typeof window !== 'undefined') {
       window.postMessage({ type: 'STREAKFORGE_LOGOUT' }, window.location.origin);
     }
-  }, [buildEmptyHeatmap]);
+  }, [buildEmptyHeatmap, clearCachedSnapshot]);
 
+  // Hydrate instant cached snapshot if authenticated, then trigger live network sync
   useEffect(() => {
-    // Load saved personal journal notes from localStorage (strictly empty by default — zero fabricated entries)
     const savedJournal = localStorage.getItem('streakforge_journal');
     if (savedJournal) {
       try {
@@ -667,11 +563,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const token = getStoredToken();
+    if (token) {
+      try {
+        const rawSnap = localStorage.getItem(SNAPSHOT_CACHE_KEY);
+        if (rawSnap) {
+          const parsed = JSON.parse(rawSnap);
+          if (parsed?.user) {
+            setUser(parsed.user);
+            setLeetcodeStats(parsed.user.leetcodeStats || null);
+            if (parsed.overview) setOverview(parsed.overview);
+            if (Array.isArray(parsed.connectedRepos)) setConnectedRepos(parsed.connectedRepos);
+            if (Array.isArray(parsed.submissions)) setSubmissions(parsed.submissions);
+            if (parsed.metrics) setSubmissionMetrics(parsed.metrics);
+            setLastUpdatedAt(parsed.savedAt || null);
+            setIsStaleData(true);
+            setIsLoading(false); // Fast optimistic first paint!
+          }
+        }
+      } catch {
+        // Ignore bad cache JSON
+      }
+    }
+
     refreshData();
   }, [refreshData]);
 
   useEffect(() => {
-    // Extension detection & real-time live sync listeners using refs to avoid re-triggering refreshData loops
     const evaluateExtensionStatus = () => {
       const hasAttr =
         typeof document !== 'undefined' &&
@@ -719,6 +637,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         refreshData();
       } else if (event.data?.type === 'STREAKFORGE_LIVE_SYNC_FAILED') {
         setExtensionStatus('SYNC_FAILED');
+        refreshData();
       }
     };
     window.addEventListener('message', handleSyncEvent);
@@ -729,11 +648,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [refreshData]);
 
   const updateJournalNote = (date: string, note: string) => {
-    // Attempt backend sync
-    api.analytics.saveJournalNote(date, note).catch(() => {
-      // Ignored in offline/demo mode
-    });
-
+    api.analytics.saveJournalNote(date, note).catch(() => {});
     setJournalEntries((prev) => {
       const existingIndex = prev.findIndex((j) => j.date === date);
       let updated: JournalEntry[];
@@ -770,39 +685,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         a.id === id ? { ...a, status: a.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' } : a
       )
     );
-    if (!isDemoMode) {
-      api.automations.toggleRule(id).catch(() => {});
-    }
+    api.automations.toggleRule(id).catch(() => {});
   };
 
   const deleteAutomation = (id: string) => {
     setAutomations((prev) => prev.filter((a) => a.id !== id));
-    if (!isDemoMode) {
-      api.automations.deleteRule(id).catch(() => {});
-    }
+    api.automations.deleteRule(id).catch(() => {});
   };
 
   const markNotificationAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
-    if (!isDemoMode) {
-      api.notifications.markAsRead(id).catch(() => {});
-    }
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    api.notifications.markAsRead(id).catch(() => {});
   };
 
   const markAllNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    if (!isDemoMode) {
-      api.notifications.markAllAsRead().catch(() => {});
-    }
+    api.notifications.markAllAsRead().catch(() => {});
   };
 
   const clearNotifications = () => {
     setNotifications([]);
-    if (!isDemoMode) {
-      api.notifications.clearAll().catch(() => {});
-    }
+    api.notifications.clearAll().catch(() => {});
   };
 
   return (
@@ -814,6 +717,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         connectedRepos,
         githubRepos,
         submissions,
+        submissionMetrics,
+        canonicalState,
         agents,
         auditLogs,
         automations,
@@ -824,6 +729,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         extensionStatus,
         isLoading,
         isDemoMode,
+        isStaleData,
+        lastUpdatedAt,
         backendError,
         refreshData,
         refreshLeetCodeStats,
@@ -848,4 +755,3 @@ export function useData() {
   }
   return context;
 }
-

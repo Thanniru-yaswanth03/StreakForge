@@ -155,6 +155,116 @@ function checkSubmissionResult(): void {
   dispatchSubmission(submissionPayload);
 }
 
+async function enrichSubmissionWithGraphQL(
+  submissionId: string,
+  slug: string
+): Promise<{
+  code?: string;
+  questionId?: string;
+  questionTitle?: string;
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  topicTags?: string[];
+  language?: string;
+}> {
+  const result: {
+    code?: string;
+    questionId?: string;
+    questionTitle?: string;
+    difficulty?: 'Easy' | 'Medium' | 'Hard';
+    topicTags?: string[];
+    language?: string;
+  } = {};
+
+  if (submissionId && /^\d+$/.test(submissionId)) {
+    try {
+      const res = await fetch('https://leetcode.com/graphql', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `
+            query submissionDetails($submissionId: Int!) {
+              submissionDetails(submissionId: $submissionId) {
+                code
+                lang { name }
+                question {
+                  questionFrontendId
+                  title
+                  titleSlug
+                  difficulty
+                  topicTags { name }
+                }
+              }
+            }
+          `,
+          variables: { submissionId: Number(submissionId) }
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const details = json?.data?.submissionDetails;
+        if (details) {
+          if (details.code) result.code = details.code;
+          if (details.lang?.name) result.language = details.lang.name;
+          if (details.question) {
+            result.questionId = String(details.question.questionFrontendId || '');
+            result.questionTitle = details.question.title;
+            if (['Easy', 'Medium', 'Hard'].includes(details.question.difficulty)) {
+              result.difficulty = details.question.difficulty;
+            }
+            if (Array.isArray(details.question.topicTags)) {
+              result.topicTags = details.question.topicTags.map((t: any) => t.name);
+            }
+          }
+        }
+      }
+    } catch {
+      // Best-effort GraphQL enrichment
+    }
+  }
+
+  if ((!result.questionId || !result.difficulty) && slug) {
+    try {
+      const qRes = await fetch('https://leetcode.com/graphql', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: `
+            query questionData($titleSlug: String!) {
+              question(titleSlug: $titleSlug) {
+                questionFrontendId
+                title
+                difficulty
+                topicTags { name }
+              }
+            }
+          `,
+          variables: { titleSlug: slug }
+        })
+      });
+      if (qRes.ok) {
+        const qJson = await qRes.json();
+        const q = qJson?.data?.question;
+        if (q) {
+          result.questionId = result.questionId || String(q.questionFrontendId || '');
+          result.questionTitle = result.questionTitle || q.title;
+          if (!result.difficulty && ['Easy', 'Medium', 'Hard'].includes(q.difficulty)) {
+            result.difficulty = q.difficulty;
+          }
+          if (!result.topicTags && Array.isArray(q.topicTags)) {
+            result.topicTags = q.topicTags.map((t: any) => t.name);
+          }
+        }
+      }
+    } catch {
+      // Keep DOM fallback
+    }
+  }
+
+  return result;
+}
+
 // 1. Listen for Main World Interceptor Messages (Direct API Interception)
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
@@ -165,30 +275,47 @@ window.addEventListener('message', (event) => {
       return;
     }
 
-    const problem = LeetCodeDomExtractor.extractProblemDetails();
-    const code = raw.code || cachedSubmitCode || LeetCodeDomExtractor.extractEditorCode();
-    const language = raw.language || LeetCodeDomExtractor.extractLanguage(code) || 'javascript';
+    (async () => {
+      const problem = LeetCodeDomExtractor.extractProblemDetails();
+      const targetSlug = raw.questionSlug || problem.slug;
+      let code = raw.code || cachedSubmitCode || LeetCodeDomExtractor.extractEditorCode();
+      let questionId = String(raw.questionId || problem.id || '');
+      let questionTitle = problem.title;
+      let difficulty = problem.difficulty;
+      let topicTags = problem.topicTags;
+      let language = raw.language || LeetCodeDomExtractor.extractLanguage(code) || 'javascript';
 
-    const submissionPayload: DetectedSubmission = {
-      submissionId: String(raw.submissionId),
-      questionId: String(raw.questionId || problem.id),
-      questionTitle: problem.title,
-      questionSlug: raw.questionSlug || problem.slug,
-      difficulty: problem.difficulty,
-      language,
-      code,
-      runtimeMs: raw.runtimeMs || 0,
-      runtimePercentile: raw.runtimePercentile || 0,
-      memoryBytes: raw.memoryBytes || 0,
-      memoryPercentile: raw.memoryPercentile || 0,
-      verdict: 'Accepted',
-      topicTags: problem.topicTags,
-      submittedAt: raw.submittedAt || new Date().toISOString(),
-      state: 'DETECTED'
-    };
+      if (!code || !questionId || questionId === '0' || !questionTitle) {
+        const enriched = await enrichSubmissionWithGraphQL(String(raw.submissionId || ''), targetSlug);
+        if (!code && enriched.code) code = enriched.code;
+        if (enriched.questionId) questionId = enriched.questionId;
+        if (enriched.questionTitle) questionTitle = enriched.questionTitle;
+        if (enriched.difficulty) difficulty = enriched.difficulty;
+        if (enriched.topicTags?.length) topicTags = enriched.topicTags;
+        if (!raw.language && enriched.language) language = enriched.language;
+      }
 
-    isUserSubmitting = false;
-    dispatchSubmission(submissionPayload);
+      const submissionPayload: DetectedSubmission = {
+        submissionId: String(raw.submissionId),
+        questionId: questionId || '0',
+        questionTitle,
+        questionSlug: targetSlug,
+        difficulty,
+        language,
+        code,
+        runtimeMs: raw.runtimeMs || 0,
+        runtimePercentile: raw.runtimePercentile || 0,
+        memoryBytes: raw.memoryBytes || 0,
+        memoryPercentile: raw.memoryPercentile || 0,
+        verdict: 'Accepted',
+        topicTags,
+        submittedAt: raw.submittedAt || new Date().toISOString(),
+        state: 'DETECTED'
+      };
+
+      isUserSubmitting = false;
+      dispatchSubmission(submissionPayload);
+    })();
   }
 });
 

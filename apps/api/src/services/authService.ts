@@ -7,12 +7,69 @@ import { User, IUserDocument } from '../models/User.js';
 import { Account } from '../models/Account.js';
 import { RepositoryConnection } from '../models/RepositoryConnection.js';
 import { RevokedToken } from '../models/RevokedToken.js';
-import { encryptToken } from '../utils/crypto.js';
+import { encryptToken, decryptToken } from '../utils/crypto.js';
 import { logAuditEvent } from './auditService.js';
 import { logger } from '../utils/logger.js';
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_UI_ENABLED_MODULES,
+  DEFAULT_SIDEBAR_ORDER
+} from '@streakforge/config';
+import type {
+  GitHubTokenHealth,
+  UserSyncPreferences,
+  UserUiPreferences
+} from '@streakforge/shared-types';
 
 // Revoked tokens blacklist (in-memory cache for fast revocation check)
 const revokedTokenIds = new Set<string>();
+
+// Short-lived cache for GitHub token health checks to avoid redundant API hits on every /me call
+const tokenHealthCache = new Map<string, { health: GitHubTokenHealth; expiresAt: number }>();
+const TOKEN_HEALTH_TTL_MS = 5 * 60 * 1000;
+
+export function invalidateTokenHealthCache(userId: string): void {
+  tokenHealthCache.delete(userId);
+}
+
+export function getDefaultSyncPreferences(): UserSyncPreferences {
+  return {
+    autoSyncEnabled: true,
+    exportPolicy: 'ALLOW_MULTIPLE',
+    autoCommit: true,
+    folderPattern: DEFAULT_CONFIG.DEFAULT_SOLUTION_PATH,
+    fileNamingPattern: DEFAULT_CONFIG.DEFAULT_FILE_NAMING_PATTERN,
+    zeroPadId: 0,
+    includeHeader: true,
+    includeMetrics: true,
+    includeReadme: true,
+    preserveOriginalCode: false
+  };
+}
+
+export function getDefaultUiPreferences(): UserUiPreferences {
+  return {
+    enabledModules: [...DEFAULT_UI_ENABLED_MODULES],
+    sidebarOrder: [...DEFAULT_SIDEBAR_ORDER],
+    compactSidebar: false,
+    theme: 'dark'
+  };
+}
+
+export function getDefaultNotificationPreferences() {
+  return {
+    inApp: true,
+    email: false,
+    browser: true,
+    problemSolved: true,
+    syncSuccess: true,
+    syncFailure: true,
+    dailySummary: true,
+    weeklyReport: true,
+    streakWarning: true,
+    streakWarningHoursBefore: 3
+  };
+}
 
 /**
  * Generate a signed, tamper-proof CSRF state nonce for OAuth authorization
@@ -309,40 +366,9 @@ export async function exchangeGitHubCode(
 
   // Auto-discover repositories for smooth onboarding (at most one auto-designated LeetCode target)
   try {
-    let hasTargetRepo = Boolean(
-      await RepositoryConnection.exists({ userId: user._id, isTargetForLeetCode: true })
-    );
+    invalidateTokenHealthCache(user._id.toString());
     const octokit = new Octokit({ auth: accessToken });
-    const reposRes = await octokit.rest.repos.listForAuthenticatedUser({
-      sort: 'updated',
-      per_page: 30
-    });
-
-    for (const r of reposRes.data) {
-      const existing = await RepositoryConnection.findOne({
-        userId: user._id,
-        githubRepoId: r.id
-      });
-      if (!existing) {
-        const matchesTargetName =
-          r.name.toLowerCase().includes('leetcode') || r.name.toLowerCase().includes('solution');
-        const assignTarget = !hasTargetRepo && matchesTargetName;
-        if (assignTarget) hasTargetRepo = true;
-
-        await RepositoryConnection.create({
-          userId: user._id,
-          githubRepoId: r.id,
-          repoFullName: r.full_name,
-          description: r.description || undefined,
-          primaryLanguage: r.language || undefined,
-          defaultBranch: r.default_branch || 'main',
-          isPrivate: Boolean(r.private),
-          isTargetForLeetCode: assignTarget,
-          autoCommitEnabled: false,
-          category: 'Personal'
-        });
-      }
-    }
+    await discoverUserRepositories(user._id, octokit);
   } catch (err) {
     logger.warn('Failed to auto-discover repos on OAuth connect', { err });
   }
@@ -361,11 +387,207 @@ export async function exchangeGitHubCode(
 }
 
 /**
+ * Shared helper to discover and sync user's GitHub repositories without duplicating code
+ */
+async function discoverUserRepositories(
+  userId: mongoose.Types.ObjectId,
+  octokit: Octokit
+): Promise<void> {
+  let hasTargetRepo = Boolean(
+    await RepositoryConnection.exists({ userId, isTargetForLeetCode: true })
+  );
+  const reposRes = await octokit.rest.repos.listForAuthenticatedUser({
+    sort: 'updated',
+    per_page: 30
+  });
+
+  for (const r of reposRes.data) {
+    const existing = await RepositoryConnection.findOne({
+      userId,
+      githubRepoId: r.id
+    });
+    if (!existing) {
+      const lower = r.name.toLowerCase();
+      const matchesTargetName =
+        lower.includes('leetcode') ||
+        lower.includes('solution') ||
+        lower.includes('dsa');
+      const assignTarget = !hasTargetRepo && matchesTargetName;
+      if (assignTarget) hasTargetRepo = true;
+
+      await RepositoryConnection.create({
+        userId,
+        githubRepoId: r.id,
+        repoFullName: r.full_name,
+        description: r.description || undefined,
+        primaryLanguage: r.language || undefined,
+        defaultBranch: r.default_branch || 'main',
+        isPrivate: Boolean(r.private),
+        isTargetForLeetCode: assignTarget,
+        autoCommitEnabled: assignTarget,
+        category: assignTarget ? 'LeetCode Solutions' : 'Personal'
+      });
+    }
+  }
+}
+
+/**
+ * Verify live GitHub OAuth/PAT token validity & scopes (cached 5m unless forced)
+ */
+export async function verifyGitHubTokenHealth(
+  userId: string,
+  forceRefresh: boolean = false
+): Promise<GitHubTokenHealth> {
+  if (!forceRefresh) {
+    const cached = tokenHealthCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.health;
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const account = await Account.findOne({ userId, provider: 'github' });
+  if (!account || !account.accessTokenEncrypted) {
+    const health: GitHubTokenHealth = {
+      valid: false,
+      status: 'MISSING',
+      checkedAt: nowIso,
+      message: 'No GitHub token stored. Please reconnect GitHub.'
+    };
+    tokenHealthCache.set(userId, { health, expiresAt: Date.now() + 30_000 });
+    return health;
+  }
+
+  let accessToken: string;
+  try {
+    accessToken = decryptToken(account.accessTokenEncrypted);
+  } catch {
+    const health: GitHubTokenHealth = {
+      valid: false,
+      status: 'INVALID' as any,
+      checkedAt: nowIso,
+      message: 'Stored GitHub credentials could not be decrypted. Please reconnect GitHub.'
+    };
+    health.status = 'REVOKED';
+    return health;
+  }
+
+  try {
+    const octokit = new Octokit({ auth: accessToken });
+    const res = await octokit.rest.users.getAuthenticated();
+    const headerScopes = (res.headers['x-oauth-scopes'] as string | undefined)
+      ?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const health: GitHubTokenHealth = {
+      valid: true,
+      status: 'VALID',
+      username: res.data.login,
+      scopes: headerScopes && headerScopes.length > 0 ? headerScopes : account.scopes,
+      checkedAt: nowIso
+    };
+    tokenHealthCache.set(userId, { health, expiresAt: Date.now() + TOKEN_HEALTH_TTL_MS });
+    return health;
+  } catch (err: any) {
+    const status = err?.status || err?.response?.status;
+    const isRevoked = status === 401 || status === 403;
+    const health: GitHubTokenHealth = {
+      valid: false,
+      status: isRevoked ? 'REVOKED' : 'UNKNOWN',
+      scopes: account.scopes,
+      checkedAt: nowIso,
+      message: isRevoked
+        ? 'GitHub authorization expired or was revoked. Reconnect GitHub to resume syncing.'
+        : `GitHub verification check failed (${err?.message || 'network error'}).`
+    };
+    tokenHealthCache.set(userId, {
+      health,
+      expiresAt: Date.now() + (isRevoked ? 60_000 : 15_000)
+    });
+    return health;
+  }
+}
+
+export function formatUserResponse(
+  user: IUserDocument,
+  githubTokenHealth?: GitHubTokenHealth,
+  token?: string
+) {
+  let sessionExpiresAt: string | undefined;
+  if (token) {
+    try {
+      const decoded = jwt.decode(token) as { exp?: number } | null;
+      if (decoded?.exp) {
+        sessionExpiresAt = new Date(decoded.exp * 1000).toISOString();
+      }
+    } catch {
+      // Ignore decode error
+    }
+  }
+
+  return {
+    id: user._id.toString(),
+    githubId: user.githubId,
+    username: user.username,
+    name: user.name,
+    email: user.email,
+    verifiedEmails: user.verifiedEmails || [user.email],
+    avatarUrl: user.avatarUrl,
+    timezone: user.timezone,
+    streakGoalPerDay: user.streakGoalPerDay,
+    notificationPreferences: {
+      ...getDefaultNotificationPreferences(),
+      ...(user.notificationPreferences || {})
+    },
+    syncPreferences: {
+      ...getDefaultSyncPreferences(),
+      ...(user.syncPreferences || {})
+    },
+    uiPreferences: {
+      ...getDefaultUiPreferences(),
+      ...(user.uiPreferences || {})
+    },
+    leetcodeUsername: user.leetcodeUsername || null,
+    leetcodeStats: user.leetcodeStats || null,
+    githubTokenHealth,
+    sessionExpiresAt,
+    isActive: user.isActive,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+}
+
+/**
+ * Extend/refresh a valid session JWT seamlessly without prompting GitHub OAuth again
+ */
+export async function refreshSessionToken(
+  currentToken: string
+): Promise<{ token: string; user: IUserDocument; expiresAt: string }> {
+  const payload = jwt.verify(currentToken, ENV.JWT_SECRET) as { userId: string };
+  if (await isTokenRevokedAsync(currentToken)) {
+    throw new Error('Session token has been revoked');
+  }
+  const user = await User.findById(payload.userId);
+  if (!user || !user.isActive) {
+    throw new Error('User account not found or inactive');
+  }
+  const newToken = generateAuthToken(user);
+  const decoded = jwt.decode(newToken) as { exp?: number } | null;
+  const expiresAt = decoded?.exp
+    ? new Date(decoded.exp * 1000).toISOString()
+    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  return { token: newToken, user, expiresAt };
+}
+
+/**
  * Completely disconnect GitHub account credentials and purge stored tokens
  */
 export async function disconnectGitHubAccount(userId: string): Promise<void> {
   await Account.deleteMany({ userId, provider: 'github' });
   await RepositoryConnection.deleteMany({ userId });
+  invalidateTokenHealthCache(userId);
 
   await logAuditEvent({
     userId,
@@ -509,39 +731,8 @@ export async function connectGitHubWithPAT(
 
   // Auto-discover repositories (at most one auto-designated target repo)
   try {
-    let hasTargetRepo = Boolean(
-      await RepositoryConnection.exists({ userId: user._id, isTargetForLeetCode: true })
-    );
-    const reposRes = await octokit.rest.repos.listForAuthenticatedUser({
-      sort: 'updated',
-      per_page: 30
-    });
-
-    for (const r of reposRes.data) {
-      const existing = await RepositoryConnection.findOne({
-        userId: user._id,
-        githubRepoId: r.id
-      });
-      if (!existing) {
-        const matchesTargetName =
-          r.name.toLowerCase().includes('leetcode') || r.name.toLowerCase().includes('solution');
-        const assignTarget = !hasTargetRepo && matchesTargetName;
-        if (assignTarget) hasTargetRepo = true;
-
-        await RepositoryConnection.create({
-          userId: user._id,
-          githubRepoId: r.id,
-          repoFullName: r.full_name,
-          description: r.description || undefined,
-          primaryLanguage: r.language || undefined,
-          defaultBranch: r.default_branch || 'main',
-          isPrivate: Boolean(r.private),
-          isTargetForLeetCode: assignTarget,
-          autoCommitEnabled: false,
-          category: 'Personal'
-        });
-      }
-    }
+    invalidateTokenHealthCache(user._id.toString());
+    await discoverUserRepositories(user._id, octokit);
   } catch (err) {
     logger.warn('Failed to auto-discover repos on PAT connect', { err });
   }

@@ -36,6 +36,37 @@ export interface LeetCodeUserStats {
   lastSyncedAt: string;
 }
 
+export type ExportPolicy = 'NEW_ONLY' | 'LATEST_ONLY' | 'ALLOW_MULTIPLE';
+
+export interface UserSyncPreferences {
+  autoSyncEnabled: boolean;
+  exportPolicy: ExportPolicy;
+  autoCommit: boolean;
+  folderPattern: string;
+  fileNamingPattern: string;
+  zeroPadId: number;
+  includeHeader: boolean;
+  includeMetrics: boolean;
+  includeReadme: boolean;
+  preserveOriginalCode: boolean;
+}
+
+export interface UserUiPreferences {
+  enabledModules: string[];
+  sidebarOrder: string[];
+  compactSidebar: boolean;
+  theme?: 'dark' | 'light';
+}
+
+export interface GitHubTokenHealth {
+  valid: boolean;
+  status: 'VALID' | 'EXPIRED' | 'REVOKED' | 'MISSING' | 'UNKNOWN';
+  username?: string;
+  scopes?: string[];
+  checkedAt: string;
+  message?: string;
+}
+
 export interface User {
   id: string;
   githubId: string;
@@ -49,10 +80,21 @@ export interface User {
   notificationPreferences: {
     inApp: boolean;
     email: boolean;
+    browser?: boolean;
+    problemSolved?: boolean;
+    syncSuccess?: boolean;
+    syncFailure?: boolean;
+    dailySummary?: boolean;
+    weeklyReport?: boolean;
+    streakWarning?: boolean;
     streakWarningHoursBefore: number;
   };
+  syncPreferences?: UserSyncPreferences;
+  uiPreferences?: UserUiPreferences;
   leetcodeUsername?: string;
   leetcodeStats?: LeetCodeUserStats;
+  githubTokenHealth?: GitHubTokenHealth;
+  sessionExpiresAt?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -117,12 +159,16 @@ export interface LeetCodeSubmission {
   memoryPercentile: number;
   status: 'Accepted';
   topicTags?: string[];
+  problemUrl?: string;
   submittedAt: string;
   syncStatus: SyncStatus;
   githubCommitSha?: string;
   githubCommitUrl?: string;
+  targetRepoFullName?: string;
+  targetBranch?: string;
   filePath?: string;
   syncErrorMessage?: string;
+  importSource?: 'LIVE_EXTENSION' | 'HISTORY_IMPORT' | 'PUBLIC_API';
   syncedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -251,6 +297,59 @@ export interface LeetCodeSubmissionInput {
   memoryBytes: number;
   memoryPercentile: number;
   submittedAt: string;
+  topicTags?: string[];
+  problemUrl?: string;
+}
+
+export interface ExtensionSyncState {
+  fetchedAt: string;
+  user: User | null;
+  githubTokenHealth: GitHubTokenHealth;
+  targetRepo: RepositoryConnection | null;
+  syncPreferences: UserSyncPreferences;
+  uiPreferences: UserUiPreferences;
+  metrics: {
+    uniqueProblemsSolved: number;
+    acceptedSubmissions: number;
+    totalSubmissions: number;
+    exportedCount: number;
+    pendingCount: number;
+    failedCount: number;
+    skippedCount: number;
+  };
+  streak: {
+    currentStreak: number;
+    longestStreak: number;
+  };
+  lastSyncedSubmission: LeetCodeSubmission | null;
+  queueSummary: {
+    pending: number;
+    retrying: number;
+    failed: number;
+  };
+}
+
+export interface SyncDiagnosticsComparison {
+  checkedAt: string;
+  dbMetrics: {
+    uniqueProblemsSolved: number;
+    acceptedSubmissions: number;
+    exportedCount: number;
+    pendingCount: number;
+    failedCount: number;
+    skippedCount: number;
+  };
+  leetcodeProfileTotal: number | null;
+  targetRepo: {
+    repoFullName: string;
+    branch: string;
+    accessible: boolean;
+    canPush: boolean;
+    error?: string;
+  } | null;
+  githubTokenValid: boolean;
+  lastSyncedAt: string | null;
+  mismatches: string[];
 }
 
 export interface ConnectRepositoryInput {

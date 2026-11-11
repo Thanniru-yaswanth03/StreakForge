@@ -16,8 +16,20 @@ import {
   Copy,
   Check,
   AlertTriangle,
-  Code2
+  Code2,
+  LayoutGrid,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  Activity,
+  Database
 } from 'lucide-react';
+import {
+  DEFAULT_DASHBOARD_MODULES,
+  DEFAULT_UI_ENABLED_MODULES,
+  DEFAULT_SIDEBAR_ORDER
+} from '@streakforge/config';
+import type { SyncDiagnosticsComparison } from '@streakforge/shared-types';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
 import { getStoredToken, setStoredToken, clearStoredToken, API_BASE_URL } from '../lib/utils';
@@ -27,21 +39,40 @@ import { GitHubConnectButton } from '../components/GitHubConnectButton';
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
-  const { user, connectedRepos, submissions, journalEntries, auditLogs, refreshData, logout } = useData();
+  const { user, connectedRepos, submissions, journalEntries, auditLogs, refreshData, logout, clearNotifications } = useData();
 
   const [activeSection, setActiveSection] = useState<
     | 'github'
     | 'leetcode'
     | 'extension'
     | 'repos'
+    | 'modules'
+    | 'diagnostics'
     | 'agent'
     | 'automation'
     | 'notifications'
     | 'privacy'
     | 'theme'
+    | 'data'
     | 'export'
     | 'danger'
   >('github');
+
+  const [enabledModules, setEnabledModules] = useState<string[]>(
+    user?.uiPreferences?.enabledModules?.length
+      ? user.uiPreferences.enabledModules
+      : [...DEFAULT_UI_ENABLED_MODULES]
+  );
+  const [sidebarOrder, setSidebarOrder] = useState<string[]>(
+    user?.uiPreferences?.sidebarOrder?.length
+      ? user.uiPreferences.sidebarOrder
+      : [...DEFAULT_SIDEBAR_ORDER]
+  );
+  const [modulesSavedMsg, setModulesSavedMsg] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SyncDiagnosticsComparison | null>(null);
+  const [diagLoading, setDiagLoading] = useState<boolean>(false);
+  const [tokenCheckMsg, setTokenCheckMsg] = useState<string | null>(null);
+  const [dataActionMsg, setDataActionMsg] = useState<string | null>(null);
 
   const [copiedToken, setCopiedToken] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -186,11 +217,14 @@ export function SettingsView() {
     { id: 'leetcode', label: 'LeetCode Account', icon: Code2 },
     { id: 'extension', label: 'LeetCode Extension', icon: KeyRound },
     { id: 'repos', label: 'Target Repositories', icon: FolderGit2 },
+    { id: 'modules', label: 'Dashboard Modules', icon: LayoutGrid },
+    { id: 'diagnostics', label: 'Sync Diagnostics', icon: Activity },
     { id: 'automation', label: 'Automation Rules', icon: Bot },
     { id: 'notifications', label: 'Notification Settings', icon: Bell },
     { id: 'theme', label: 'Theme & Display', icon: Palette },
     { id: 'privacy', label: 'Privacy & Security', icon: Shield },
-    { id: 'export', label: 'Data Export', icon: Download },
+    { id: 'data', label: 'Data Management', icon: Database },
+    { id: 'export', label: 'Data Export', icon: Download }
   ];
 
   const advancedSections: {
@@ -300,10 +334,35 @@ export function SettingsView() {
                         <div className="text-xs text-theme-muted">{user.email}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        Connected (OAuth 2.0)
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${
+                          user.githubTokenHealth?.valid !== false
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                        }`}
+                      >
+                        {user.githubTokenHealth?.status || 'Connected (OAuth 2.0)'}
                       </span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const h = await api.auth.verifyGitHub();
+                            setTokenCheckMsg(
+                              h.valid
+                                ? `GitHub token active for @${h.username} (scopes: ${h.scopes?.join(', ') || 'repo'})`
+                                : h.message || `GitHub status: ${h.status}`
+                            );
+                            await refreshData();
+                          } catch (err: any) {
+                            setTokenCheckMsg(err.message);
+                          }
+                        }}
+                        className="text-xs text-blue-400 hover:text-blue-300 font-medium px-2 py-1 rounded border border-theme-border transition cursor-pointer"
+                      >
+                        Verify Health
+                      </button>
                       <button
                         onClick={async () => {
                           await logout();
@@ -333,6 +392,12 @@ export function SettingsView() {
                       </button>
                     </div>
                   </div>
+
+                  {tokenCheckMsg && (
+                    <div className="p-2.5 bg-theme-elevated border border-theme-border rounded-lg text-xs text-theme-secondary">
+                      {tokenCheckMsg}
+                    </div>
+                  )}
 
                   {/* Reconnect / Update GitHub PAT */}
                   <div className="p-4 bg-theme-elevated border border-theme-border rounded-xl space-y-3" id="settings-pat">
@@ -694,6 +759,290 @@ export function SettingsView() {
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* V4: Customizable Dashboard Modules & Sidebar Order */}
+          {activeSection === 'modules' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-theme-primary flex items-center gap-2">
+                    <LayoutGrid className="w-4 h-4 text-theme-accent" />
+                    Customize Navigation &amp; Modules
+                  </h3>
+                  <p className="text-xs text-theme-muted mt-0.5">
+                    Enable, disable, or reorder sidebar modules cleanly. Core pages stay pinned.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEnabledModules([...DEFAULT_UI_ENABLED_MODULES]);
+                      setSidebarOrder([...DEFAULT_SIDEBAR_ORDER]);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-theme-elevated border border-theme-border text-xs font-medium text-theme-secondary flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Restore Defaults</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await api.auth.updatePreferences({
+                        uiPreferences: { enabledModules, sidebarOrder }
+                      });
+                      setModulesSavedMsg('Navigation layout saved!');
+                      setTimeout(() => setModulesSavedMsg(null), 2500);
+                      refreshData();
+                    }}
+                    className="px-4 py-1.5 rounded-lg bg-theme-accent text-slate-950 font-semibold text-xs cursor-pointer"
+                  >
+                    Save Layout
+                  </button>
+                </div>
+              </div>
+
+              {modulesSavedMsg && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400">
+                  {modulesSavedMsg}
+                </div>
+              )}
+
+              <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
+                {[...DEFAULT_DASHBOARD_MODULES]
+                  .sort((a, b) => {
+                    const oa = sidebarOrder.indexOf(a.id);
+                    const ob = sidebarOrder.indexOf(b.id);
+                    return (oa === -1 ? 999 : oa) - (ob === -1 ? 999 : ob);
+                  })
+                  .map((mod, idx, arr) => {
+                    const isEnabled = mod.core || enabledModules.includes(mod.id);
+                    return (
+                      <div
+                        key={mod.id}
+                        className="p-2.5 bg-theme-elevated border border-theme-border rounded-lg flex items-center justify-between gap-3 text-xs"
+                      >
+                        <label className="flex items-center gap-2.5 cursor-pointer flex-1">
+                          <input
+                            type="checkbox"
+                            disabled={mod.core}
+                            checked={isEnabled}
+                            onChange={() => {
+                              setEnabledModules((prev) =>
+                                prev.includes(mod.id)
+                                  ? prev.filter((x) => x !== mod.id)
+                                  : [...prev, mod.id]
+                              );
+                            }}
+                          />
+                          <span className="font-semibold text-theme-primary">{mod.label}</span>
+                          <span className="text-[10px] text-theme-muted font-mono">{mod.group}</span>
+                          {mod.core && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400">
+                              Core
+                            </span>
+                          )}
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => {
+                              const nextOrder = arr.map((x) => x.id);
+                              [nextOrder[idx - 1], nextOrder[idx]] = [nextOrder[idx], nextOrder[idx - 1]];
+                              setSidebarOrder(nextOrder);
+                            }}
+                            className="p-1 rounded bg-theme-surface border border-theme-border disabled:opacity-30 cursor-pointer"
+                            title="Move Up"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === arr.length - 1}
+                            onClick={() => {
+                              const nextOrder = arr.map((x) => x.id);
+                              [nextOrder[idx + 1], nextOrder[idx]] = [nextOrder[idx], nextOrder[idx + 1]];
+                              setSidebarOrder(nextOrder);
+                            }}
+                            className="p-1 rounded bg-theme-surface border border-theme-border disabled:opacity-30 cursor-pointer"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* V4: Accuracy & Consistency Diagnostics */}
+          {activeSection === 'diagnostics' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-theme-primary flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-theme-accent" />
+                    Cross-System Consistency Diagnostics
+                  </h3>
+                  <p className="text-xs text-theme-muted mt-0.5">
+                    Compares StreakForge DB metrics against your LeetCode profile and live GitHub repository permissions
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={diagLoading}
+                  onClick={async () => {
+                    setDiagLoading(true);
+                    try {
+                      setDiagnostics(await api.sync.getDiagnostics());
+                    } finally {
+                      setDiagLoading(false);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-theme-accent text-slate-950 font-semibold text-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {diagLoading ? 'Checking...' : 'Run Live Audit'}
+                </button>
+              </div>
+
+              {diagnostics ? (
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 bg-theme-elevated rounded-lg border border-theme-border">
+                      <div className="text-theme-muted text-[10px]">DB Unique Solved</div>
+                      <div className="text-base font-bold text-theme-primary">
+                        {diagnostics.dbMetrics.uniqueProblemsSolved}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-theme-elevated rounded-lg border border-theme-border">
+                      <div className="text-theme-muted text-[10px]">LeetCode Profile</div>
+                      <div className="text-base font-bold text-theme-primary">
+                        {diagnostics.leetcodeProfileTotal ?? 'Unlinked'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-theme-elevated rounded-lg border border-theme-border">
+                      <div className="text-theme-muted text-[10px]">Exported Commits</div>
+                      <div className="text-base font-bold text-emerald-400">
+                        {diagnostics.dbMetrics.exportedCount}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-theme-elevated rounded-lg border border-theme-border">
+                      <div className="text-theme-muted text-[10px]">Target Repo Push</div>
+                      <div className="text-base font-bold">
+                        {diagnostics.targetRepo?.canPush ? (
+                          <span className="text-emerald-400">Verified</span>
+                        ) : (
+                          <span className="text-rose-400">Blocked</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {diagnostics.mismatches.length === 0 ? (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 font-medium">
+                      All checks passed — Web, Database, and GitHub permissions are consistent.
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-1">
+                      <div className="font-bold text-amber-300">Discrepancies / Action Items Found:</div>
+                      {diagnostics.mismatches.map((m, i) => (
+                        <div key={i} className="text-amber-200 text-[11px]">
+                          • {m}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-xs text-theme-muted bg-theme-elevated rounded-xl border border-dashed border-theme-border">
+                  Click &ldquo;Run Live Audit&rdquo; to verify database counts, GitHub OAuth validity, and repository push permissions.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* V4: Safe Data Management */}
+          {activeSection === 'data' && (
+            <div className="space-y-4 text-xs">
+              <h3 className="text-sm font-bold text-theme-primary flex items-center gap-2">
+                <Database className="w-4 h-4 text-theme-accent" />
+                Data Management &amp; Cleanup
+              </h3>
+              <p className="text-theme-muted leading-relaxed">
+                Clean up StreakForge application records locally or in the database. Existing GitHub repository files and commits are <strong>never automatically deleted</strong>.
+              </p>
+
+              {dataActionMsg && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                  {dataActionMsg}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    clearNotifications();
+                    setDataActionMsg('Cleared all in-app notifications.');
+                  }}
+                  className="p-3 text-left bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded-xl cursor-pointer"
+                >
+                  <div className="font-bold text-theme-primary">Clear Notification History</div>
+                  <div className="text-[11px] text-theme-muted mt-0.5">
+                    Remove in-app alert banners &amp; notification logs.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const r = await api.automations.clearJobs('finished');
+                    setDataActionMsg(`Cleared ${r.deletedCount} finished automation job logs.`);
+                  }}
+                  className="p-3 text-left bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded-xl cursor-pointer"
+                >
+                  <div className="font-bold text-theme-primary">Clear Automation Logs</div>
+                  <div className="text-[11px] text-theme-muted mt-0.5">
+                    Remove completed/failed historical job runs.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const r = await api.automations.clearJobs('queue');
+                    setDataActionMsg(`Removed ${r.deletedCount} queued/retry job items.`);
+                  }}
+                  className="p-3 text-left bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded-xl cursor-pointer"
+                >
+                  <div className="font-bold text-theme-primary">Clear Pending Sync Queue</div>
+                  <div className="text-[11px] text-theme-muted mt-0.5">
+                    Cancel queued retry jobs without deleting submissions.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm('Reset all StreakForge sync, notification, and layout preferences to defaults?')) {
+                      await api.auth.resetPreferences();
+                      setDataActionMsg('All preferences reset to defaults.');
+                      refreshData();
+                    }
+                  }}
+                  className="p-3 text-left bg-theme-elevated hover:bg-theme-surface border border-theme-border rounded-xl cursor-pointer"
+                >
+                  <div className="font-bold text-theme-primary">Reset All Settings</div>
+                  <div className="text-[11px] text-theme-muted mt-0.5">
+                    Restore default folder structure, notifications &amp; sidebar modules.
+                  </div>
+                </button>
               </div>
             </div>
           )}

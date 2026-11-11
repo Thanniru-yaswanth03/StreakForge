@@ -47,6 +47,7 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
     heatmap,
     connectedRepos,
     submissions,
+    submissionMetrics,
     leetcodeStats,
     extensionStatus,
     refreshData,
@@ -182,6 +183,77 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
 
       {/* 2. Authentic Scraped LeetCode User Stats Card */}
       <LeetCodeStatsCard />
+
+      {/* V4 Unified Sync Health & Progress Strip */}
+      {user && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigate?.('leetcode')}
+            className="github-glossy-card p-3.5 text-left hover:border-[#58a6ff]/50 transition cursor-pointer"
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#8b949e]">
+              Unique Problems Solved
+            </div>
+            <div className="text-xl font-bold text-[#f0f6fc] mt-1 tabular-nums">
+              {totalSolved}
+            </div>
+            <div className="text-[11px] text-[#8b949e] mt-0.5 font-mono">
+              {submissionMetrics.acceptedSubmissions} archived in DB
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigate?.('repos')}
+            className="github-glossy-card p-3.5 text-left hover:border-[#3fb950]/50 transition cursor-pointer"
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#3fb950]">
+              Exported to GitHub
+            </div>
+            <div className="text-xl font-bold text-[#3fb950] mt-1 tabular-nums">
+              {submissionMetrics.exportedCount}
+            </div>
+            <div className="text-[11px] text-[#8b949e] mt-0.5 font-mono truncate">
+              {primaryRepo ? primaryRepo.repoFullName : 'No target repo selected'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigate?.('leetcode')}
+            className="github-glossy-card p-3.5 text-left hover:border-[#d29922]/50 transition cursor-pointer"
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#d29922]">
+              Pending / Failed Queue
+            </div>
+            <div className="text-xl font-bold text-[#f0f6fc] mt-1 tabular-nums">
+              {submissionMetrics.pendingCount + submissionMetrics.failedCount}
+            </div>
+            <div className="text-[11px] text-[#8b949e] mt-0.5 font-mono">
+              {submissionMetrics.failedCount > 0
+                ? `${submissionMetrics.failedCount} failed • Click to retry`
+                : `${submissionMetrics.pendingCount} pending export`}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigate?.('calendar')}
+            className="github-glossy-card p-3.5 text-left hover:border-[#f0883e]/50 transition cursor-pointer"
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[#f0883e]">
+              Active Streak
+            </div>
+            <div className="text-xl font-bold text-[#f0f6fc] mt-1 tabular-nums">
+              {currentStreak}d
+            </div>
+            <div className="text-[11px] text-[#8b949e] mt-0.5 font-mono">
+              Best: {longestStreak}d • {todayCommits} commits today
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* 3. Interactive Quick-Start Guide for New Users */}
       <div className="github-glossy-card overflow-hidden">
@@ -556,10 +628,24 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#238636]/30 flex items-center gap-1">
-                      <Check className="w-3 h-3" />
-                      Exported
-                    </span>
+                    {sub.syncStatus === 'SYNCED' ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#238636]/30 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Exported
+                      </span>
+                    ) : sub.syncStatus === 'FAILED' ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#f85149]/15 text-[#f85149] border border-[#f85149]/30">
+                        Failed
+                      </span>
+                    ) : sub.syncStatus === 'SKIPPED' ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#d29922]/15 text-[#d29922] border border-[#d29922]/30">
+                        Skipped
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#388bfd]/15 text-[#58a6ff] border border-[#388bfd]/30">
+                        Pending
+                      </span>
+                    )}
                     {sub.githubCommitSha && (
                       <a
                         href={sub.githubCommitUrl || (primaryRepo ? `https://github.com/${primaryRepo.repoFullName}/commit/${sub.githubCommitSha}` : '#')}

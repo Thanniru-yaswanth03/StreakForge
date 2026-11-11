@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
+import { DEFAULT_UI_ENABLED_MODULES, DEFAULT_SIDEBAR_ORDER } from '@streakforge/config';
 
 interface SidebarProps {
   currentTab: string;
@@ -57,12 +58,23 @@ interface NavGroup {
 export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { effectiveTheme, toggleTheme } = useTheme();
-  const { user, overview, leetcodeStats, connectedRepos } = useData();
+  const { user, overview, leetcodeStats, connectedRepos, automations } = useData();
 
   const totalLeetCode = leetcodeStats?.totalSolved ?? (user?.leetcodeStats?.totalSolved ?? 0);
   const currentStreak = user ? (overview?.currentStreak ?? 0) : 0;
 
-  const navGroups: NavGroup[] = [
+  const enabledModules = user?.uiPreferences?.enabledModules?.length
+    ? user.uiPreferences.enabledModules
+    : DEFAULT_UI_ENABLED_MODULES;
+  const sidebarOrder = user?.uiPreferences?.sidebarOrder?.length
+    ? user.uiPreferences.sidebarOrder
+    : DEFAULT_SIDEBAR_ORDER;
+
+  const enabledSet = new Set<string>([...enabledModules, 'overview', 'settings']);
+  const orderMap = new Map<string, number>();
+  sidebarOrder.forEach((id, idx) => orderMap.set(id, idx));
+
+  const rawGroups: NavGroup[] = [
     {
       title: 'Overview',
       items: [
@@ -181,13 +193,27 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
           id: 'automation',
           label: 'Automations',
           icon: Bot,
-          badge: '4',
+          badge: automations.length > 0 ? String(automations.length) : undefined,
           badgeColor: 'bg-[#58a6ff]/15 text-[#58a6ff] border-[#58a6ff]/30'
         },
         { id: 'settings', label: 'Settings', icon: Settings }
       ]
     }
   ];
+
+  // Filter and order items cleanly according to user's customized UI preferences
+  const navGroups: NavGroup[] = rawGroups
+    .map((group) => {
+      const visibleItems = group.items
+        .filter((item) => enabledSet.has(item.id) || currentTab === item.id)
+        .sort((a, b) => {
+          const oa = orderMap.get(a.id) ?? 999;
+          const ob = orderMap.get(b.id) ?? 999;
+          return oa - ob;
+        });
+      return { ...group, items: visibleItems };
+    })
+    .filter((group) => group.items.length > 0);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -228,7 +254,7 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
                   Streak<span className="text-[#3fb950]">Forge</span>
                 </span>
                 <span className="text-[10px] text-theme-muted font-mono leading-none">
-                  v3.0 Ecosystem
+                  v4.0 Ecosystem
                 </span>
               </div>
             )}

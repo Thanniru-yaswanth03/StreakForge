@@ -56,7 +56,9 @@ export function resolveSolutionPath(
   const langName = meta.name === 'Python 3' ? 'Python' : sanitizeSegment(meta.name.replace(/\s+/g, '-'));
   const topicName = normalizeTopic(vars.topic);
   const diffName = vars.difficulty;
-  const idStr = String(vars.questionId).padStart(3, '0');
+  const rawId = String(vars.questionId);
+  const idStr = rawId.padStart(3, '0');
+  const id4Str = /^\d+$/.test(rawId) ? rawId.padStart(4, '0') : rawId;
   const slugStr = sanitizeSegment(vars.questionSlug);
 
   const rawPattern = template.trim() || DEFAULT_TEMPLATE;
@@ -70,6 +72,7 @@ export function resolveSolutionPath(
     .replace(/\{topic\}/g, topicName.toLowerCase())
     .replace(/\{Difficulty\}/g, diffName)
     .replace(/\{difficulty\}/g, diffName.toLowerCase())
+    .replace(/\{id4\}/g, id4Str)
     .replace(/\{id\}/g, idStr)
     .replace(/\{slug\}/g, slugStr)
     .replace(/\{ext\}/g, ext);

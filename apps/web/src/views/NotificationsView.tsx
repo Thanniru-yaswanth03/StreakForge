@@ -20,14 +20,43 @@ import { api } from '../lib/api';
 
 export function NotificationsView() {
   const {
+    user,
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
-    clearNotifications
+    clearNotifications,
+    refreshData
   } = useData();
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'WARNINGS'>('ALL');
   const [reminders, setReminders] = useState<StreakReminder[]>([]);
   const [isLoadingReminders, setIsLoadingReminders] = useState<boolean>(false);
+  const [browserPerm, setBrowserPerm] = useState<string>(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+
+  const np = user?.notificationPreferences || ({} as any);
+  const [savingPref, setSavingPref] = useState<boolean>(false);
+
+  const toggleNotifCategory = async (key: string) => {
+    setSavingPref(true);
+    try {
+      await api.auth.updatePreferences({
+        notificationPreferences: {
+          [key]: np[key] === false ? true : false
+        }
+      });
+      await refreshData();
+    } finally {
+      setSavingPref(false);
+    }
+  };
+
+  const requestBrowserNotifications = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const perm = await Notification.requestPermission();
+      setBrowserPerm(perm);
+    }
+  };
 
   useEffect(() => {
     setIsLoadingReminders(true);
@@ -91,6 +120,51 @@ export function NotificationsView() {
             <Trash2 className="w-3.5 h-3.5" />
             <span>Clear</span>
           </button>
+        </div>
+      </div>
+
+      {/* Category & Browser Permission Settings */}
+      <div className="bg-theme-surface border border-theme-border rounded-xl p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-bold text-theme-primary uppercase tracking-wider">
+            Notification Categories &amp; Browser Alerts
+          </div>
+          {browserPerm !== 'granted' && browserPerm !== 'unsupported' ? (
+            <button
+              type="button"
+              onClick={requestBrowserNotifications}
+              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+            >
+              Enable Browser Notifications ({browserPerm})
+            </button>
+          ) : (
+            <span className="text-[11px] font-mono text-emerald-400">
+              Browser permission: {browserPerm}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+          {[
+            { key: 'problemSolved', label: 'Problem Solved' },
+            { key: 'syncSuccess', label: 'GitHub Sync Success' },
+            { key: 'syncFailure', label: 'GitHub Sync Failure' },
+            { key: 'dailySummary', label: 'Daily Summary' },
+            { key: 'weeklyReport', label: 'Weekly Report' },
+            { key: 'streakWarning', label: 'Streak Warning' }
+          ].map((c) => (
+            <label
+              key={c.key}
+              className="flex items-center gap-2 p-2 bg-theme-elevated rounded-lg border border-theme-border cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                disabled={savingPref}
+                checked={np[c.key] !== false}
+                onChange={() => toggleNotifCategory(c.key)}
+              />
+              <span className="text-theme-secondary">{c.label}</span>
+            </label>
+          ))}
         </div>
       </div>
 

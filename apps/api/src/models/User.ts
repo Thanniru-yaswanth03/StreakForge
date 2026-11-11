@@ -1,4 +1,10 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import {
+  DEFAULT_CONFIG,
+  DEFAULT_UI_ENABLED_MODULES,
+  DEFAULT_SIDEBAR_ORDER
+} from '@streakforge/config';
+import type { UserSyncPreferences, UserUiPreferences } from '@streakforge/shared-types';
 
 export interface ILeetCodeUserStats {
   username: string;
@@ -37,8 +43,17 @@ export interface IUserDocument extends Document {
   notificationPreferences: {
     inApp: boolean;
     email: boolean;
+    browser?: boolean;
+    problemSolved?: boolean;
+    syncSuccess?: boolean;
+    syncFailure?: boolean;
+    dailySummary?: boolean;
+    weeklyReport?: boolean;
+    streakWarning?: boolean;
     streakWarningHoursBefore: number;
   };
+  syncPreferences: UserSyncPreferences;
+  uiPreferences: UserUiPreferences;
   leetcodeUsername?: string;
   leetcodeStats?: ILeetCodeUserStats;
   bio?: string;
@@ -71,7 +86,36 @@ const UserSchema = new Schema<IUserDocument>(
     notificationPreferences: {
       inApp: { type: Boolean, default: true },
       email: { type: Boolean, default: false },
+      browser: { type: Boolean, default: true },
+      problemSolved: { type: Boolean, default: true },
+      syncSuccess: { type: Boolean, default: true },
+      syncFailure: { type: Boolean, default: true },
+      dailySummary: { type: Boolean, default: true },
+      weeklyReport: { type: Boolean, default: true },
+      streakWarning: { type: Boolean, default: true },
       streakWarningHoursBefore: { type: Number, default: 3 }
+    },
+    syncPreferences: {
+      autoSyncEnabled: { type: Boolean, default: true },
+      exportPolicy: {
+        type: String,
+        enum: ['NEW_ONLY', 'LATEST_ONLY', 'ALLOW_MULTIPLE'],
+        default: 'ALLOW_MULTIPLE'
+      },
+      autoCommit: { type: Boolean, default: true },
+      folderPattern: { type: String, default: DEFAULT_CONFIG.DEFAULT_SOLUTION_PATH },
+      fileNamingPattern: { type: String, default: DEFAULT_CONFIG.DEFAULT_FILE_NAMING_PATTERN },
+      zeroPadId: { type: Number, default: 0 },
+      includeHeader: { type: Boolean, default: true },
+      includeMetrics: { type: Boolean, default: true },
+      includeReadme: { type: Boolean, default: true },
+      preserveOriginalCode: { type: Boolean, default: false }
+    },
+    uiPreferences: {
+      enabledModules: { type: [String], default: () => [...DEFAULT_UI_ENABLED_MODULES] },
+      sidebarOrder: { type: [String], default: () => [...DEFAULT_SIDEBAR_ORDER] },
+      compactSidebar: { type: Boolean, default: false },
+      theme: { type: String, enum: ['dark', 'light'], default: 'dark' }
     },
     leetcodeUsername: { type: String, default: null },
     leetcodeStats: { type: Schema.Types.Mixed, default: null },

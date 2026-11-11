@@ -9,6 +9,12 @@ import {
   extractOAuthReturnTo,
   exchangeGitHubCode,
   revokeSessionToken,
+  refreshSessionToken,
+  verifyGitHubTokenHealth,
+  formatUserResponse,
+  getDefaultNotificationPreferences,
+  getDefaultSyncPreferences,
+  getDefaultUiPreferences,
   disconnectGitHubAccount,
   deleteUserAccount,
   getOrCreateDevUser,
@@ -19,6 +25,25 @@ import { syncLeetCodeUserStats } from '../services/leetcodeService.js';
 import { logger } from '../utils/logger.js';
 
 export const authRouter: Router = Router();
+
+// Guard against concurrent/duplicate OAuth authorization code replay
+const consumedOAuthCodes = new Map<string, number>();
+
+function isAndMarkCodeConsumed(code: string): boolean {
+  const now = Date.now();
+  for (const [k, ts] of consumedOAuthCodes.entries()) {
+    if (now - ts > 5 * 60 * 1000) consumedOAuthCodes.delete(k);
+  }
+  if (consumedOAuthCodes.has(code)) {
+    return true;
+  }
+  consumedOAuthCodes.set(code, now);
+  if (consumedOAuthCodes.size > 500) {
+    const oldestKey = consumedOAuthCodes.keys().next().value;
+    if (oldestKey) consumedOAuthCodes.delete(oldestKey);
+  }
+  return false;
+}
 
 /**
  * Resolve canonical OAuth callback URL taking into account reverse proxy headers
@@ -187,6 +212,17 @@ authRouter.get('/github/callback', async (req: Request, res: Response, next) => 
     return;
   }
 
+  if (isAndMarkCodeConsumed(code)) {
+    const returnTo = extractOAuthReturnTo(state);
+    const targetBaseUrl = getSafeRedirectUrl(returnTo);
+    res.redirect(
+      `${targetBaseUrl}/auth/callback?error=CODE_ALREADY_USED&error_description=${encodeURIComponent(
+        'This authorization code was already used. Please start a fresh GitHub sign-in if needed.'
+      )}`
+    );
+    return;
+  }
+
   try {
     const { token, user } = await exchangeGitHubCode(code, state);
 
@@ -342,26 +378,49 @@ authRouter.delete('/account', requireAuth, async (req: AuthenticatedRequest, res
 
 authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
+  const githubTokenHealth = await verifyGitHubTokenHealth(req.userId!, false);
   res.json({
     success: true,
     data: {
-      user: {
-        id: user._id,
-        githubId: user.githubId,
-        username: user.username,
-        name: user.name,
-        email: user.email,
-        verifiedEmails: user.verifiedEmails || [user.email],
-        avatarUrl: user.avatarUrl,
-        timezone: user.timezone,
-        streakGoalPerDay: user.streakGoalPerDay,
-        notificationPreferences: user.notificationPreferences,
-        leetcodeUsername: user.leetcodeUsername || null,
-        leetcodeStats: user.leetcodeStats || null,
-        createdAt: user.createdAt
-      }
+      user: formatUserResponse(user, githubTokenHealth, req.token)
     }
   });
+});
+
+authRouter.post('/refresh', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const result = await refreshSessionToken(req.token!);
+    const githubTokenHealth = await verifyGitHubTokenHealth(req.userId!, false);
+    res.cookie('streakforge_token', result.token, {
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: ENV.NODE_ENV === 'production'
+    });
+    res.json({
+      success: true,
+      data: {
+        token: result.token,
+        expiresAt: result.expiresAt,
+        user: formatUserResponse(result.user, githubTokenHealth, result.token)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post('/github/verify', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const health = await verifyGitHubTokenHealth(req.userId!, true);
+    res.json({
+      success: true,
+      data: health
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 authRouter.post('/leetcode', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
@@ -443,8 +502,23 @@ authRouter.patch(
       if (req.body.streakGoalPerDay) user.streakGoalPerDay = req.body.streakGoalPerDay;
       if (req.body.notificationPreferences) {
         user.notificationPreferences = {
-          ...user.notificationPreferences,
+          ...getDefaultNotificationPreferences(),
+          ...(user.notificationPreferences || {}),
           ...req.body.notificationPreferences
+        };
+      }
+      if (req.body.syncPreferences) {
+        user.syncPreferences = {
+          ...getDefaultSyncPreferences(),
+          ...(user.syncPreferences || {}),
+          ...req.body.syncPreferences
+        };
+      }
+      if (req.body.uiPreferences) {
+        user.uiPreferences = {
+          ...getDefaultUiPreferences(),
+          ...(user.uiPreferences || {}),
+          ...req.body.uiPreferences
         };
       }
 
@@ -455,7 +529,9 @@ authRouter.patch(
         data: {
           timezone: user.timezone,
           streakGoalPerDay: user.streakGoalPerDay,
-          notificationPreferences: user.notificationPreferences
+          notificationPreferences: user.notificationPreferences,
+          syncPreferences: user.syncPreferences,
+          uiPreferences: user.uiPreferences
         }
       });
     } catch (error) {
@@ -463,3 +539,33 @@ authRouter.patch(
     }
   }
 );
+
+authRouter.post('/preferences/reset', requireAuth, async (req: AuthenticatedRequest, res: Response, next) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+      return;
+    }
+
+    user.timezone = 'UTC';
+    user.streakGoalPerDay = 1;
+    user.notificationPreferences = getDefaultNotificationPreferences();
+    user.syncPreferences = getDefaultSyncPreferences();
+    user.uiPreferences = getDefaultUiPreferences();
+    await user.save();
+
+    res.json({
+      success: true,
+      data: {
+        timezone: user.timezone,
+        streakGoalPerDay: user.streakGoalPerDay,
+        notificationPreferences: user.notificationPreferences,
+        syncPreferences: user.syncPreferences,
+        uiPreferences: user.uiPreferences
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});

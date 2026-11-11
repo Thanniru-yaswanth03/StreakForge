@@ -1,4 +1,4 @@
-import type { Difficulty, LeetCodeSubmissionInput } from '@streakforge/shared-types';
+import type { Difficulty } from '@streakforge/shared-types';
 
 export type SubmissionVerdict =
   | 'Accepted'
@@ -22,6 +22,28 @@ export type SubmissionState =
   | 'SYNCED'
   | 'FAILED'
   | 'RETRY_PENDING';
+
+export type ExtensionAuthState =
+  | 'AUTHENTICATED'
+  | 'EXPIRED'
+  | 'NETWORK_ERROR'
+  | 'UNAUTHENTICATED';
+
+export type ExtensionNotificationCategory =
+  | 'PROBLEM_SOLVED'
+  | 'SYNC_SUCCESS'
+  | 'SYNC_FAILURE'
+  | 'SYSTEM';
+
+export interface ExtensionNotificationItem {
+  id: string;
+  category: ExtensionNotificationCategory;
+  title: string;
+  message: string;
+  url?: string;
+  timestamp: string;
+  dedupeKey: string;
+}
 
 export interface StateTransitionLog {
   id: string;
@@ -54,6 +76,7 @@ export interface DetectedSubmission {
   filePath?: string;
   errorMessage?: string;
   retryCount?: number;
+  lastAttemptAt?: number;
 }
 
 export interface FailedSubmission {
@@ -83,22 +106,42 @@ export interface ActiveProblemContext {
 export interface ExtensionConfig {
   authToken: string;
   serverUrl: string;
+  webAppUrl?: string;
+  authState?: ExtensionAuthState;
+  authErrorReason?: string;
+  sessionExpiresAt?: string;
+  tokenHealthStatus?: 'VALID' | 'EXPIRED' | 'REVOKED' | 'MISSING' | 'UNKNOWN';
   autoSyncEnabled: boolean;
   targetRepoFullName: string;
   targetBranch: string;
   folderStructureTemplate: string;
+  fileNamingPattern?: string;
+  zeroPadId?: number;
   archiveFailedSubmissionsLocally: boolean;
+  notifyOnSolved?: boolean;
   notifyOnSuccess: boolean;
+  notifyOnSyncFailure?: boolean;
   exportNewOnly?: boolean;
+  exportPolicy?: 'NEW_ONLY' | 'LATEST_ONLY' | 'ALLOW_MULTIPLE';
   allowMultipleSubmissions?: boolean;
   addSolutionComments?: boolean;
+  includeMetrics?: boolean;
   userProfile?: {
     username: string;
     email: string;
     avatarUrl: string;
   };
   leetcodeUsername?: string;
-  webAppUrl?: string;
+  metrics?: {
+    uniqueProblemsSolved: number;
+    acceptedSubmissions: number;
+    exportedCount: number;
+    pendingCount: number;
+    failedCount: number;
+    currentStreak: number;
+    longestStreak: number;
+  };
+  lastBackendSyncAt?: string;
 }
 
 export interface DuplicateRecord {
@@ -115,6 +158,7 @@ export interface ExtensionStorage {
   failedArchive: FailedSubmission[];
   duplicateRegistry: Record<string, DuplicateRecord>;
   transitionLogs: StateTransitionLog[];
+  notificationHistory: ExtensionNotificationItem[];
   activeProblem?: ActiveProblemContext;
 }
 
@@ -129,13 +173,6 @@ export type ExtensionMessage =
     }
   | {
       type: 'MANUAL_CAPTURE_REQUEST';
-    }
-  | {
-      type: 'MANUAL_CAPTURE_RESPONSE';
-      payload: {
-        code: string;
-        language: string;
-      };
     }
   | {
       type: 'FORCE_SYNC_PENDING';
@@ -156,6 +193,20 @@ export type ExtensionMessage =
     }
   | {
       type: 'SYNC_FROM_BACKEND';
+    }
+  | {
+      type: 'IMPORT_LEETCODE_HISTORY';
+      payload?: {
+        limit?: number;
+        autoExportToGitHub?: boolean;
+      };
+    }
+  | {
+      type: 'PUSH_PREFERENCES_TO_BACKEND';
+      payload: Record<string, any>;
+    }
+  | {
+      type: 'TEST_NOTIFICATION';
     }
   | {
       type: 'UPDATE_CONFIG';

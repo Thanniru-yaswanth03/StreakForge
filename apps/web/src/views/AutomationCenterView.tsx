@@ -18,7 +18,8 @@ import {
   Check,
   Activity,
   History,
-  Info
+  Info,
+  Trash2
 } from 'lucide-react';
 import type { AutomationType, JobRecord } from '@streakforge/shared-types';
 import { useData } from '../context/DataContext';
@@ -404,16 +405,27 @@ export function AutomationCenterView() {
 
       {/* Real-time Execution Ledger */}
       <div className="bg-[#0e1217] border border-white/[0.08] rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="p-4 border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-emerald-400" />
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-              Live Automation Execution Ledger
+              Live Automation Execution Ledger ({recentJobs.length})
             </h3>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono">
-            {recentJobs.length} Recent Runs
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                await api.automations.clearJobs('finished');
+                showNotice('Cleared completed & failed execution logs.');
+                fetchAutomationData();
+              }}
+              className="px-2.5 py-1 rounded bg-[#1a212d] hover:bg-rose-500/15 border border-white/10 text-[11px] text-slate-300 hover:text-rose-400 flex items-center gap-1 cursor-pointer"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Clear Logs</span>
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-white/[0.04]">
@@ -467,10 +479,25 @@ export function AutomationCenterView() {
                   </div>
                 </div>
 
-                <div className="text-right text-[11px] text-slate-500 shrink-0">
-                  <div>{job.completedAt ? new Date(job.completedAt).toLocaleTimeString() : 'In Progress'}</div>
-                  <div className="text-emerald-400 font-mono text-[10px] mt-0.5">
-                    {job.durationMs ? `${job.durationMs}ms` : '0ms'}
+                <div className="text-right text-[11px] text-slate-500 shrink-0 flex items-center gap-2">
+                  {job.status === 'FAILED' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await api.automations.retryJob((job as any).jobId || job.id);
+                        showNotice('Queued failed job for retry.');
+                        fetchAutomationData();
+                      }}
+                      className="px-2 py-1 rounded bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 text-[10px] font-semibold cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  )}
+                  <div>
+                    <div>{job.completedAt ? new Date(job.completedAt).toLocaleTimeString() : 'In Progress'}</div>
+                    <div className="text-emerald-400 font-mono text-[10px] mt-0.5">
+                      {job.durationMs ? `${job.durationMs}ms` : '0ms'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -520,10 +547,12 @@ export function AutomationCenterView() {
                   onChange={(e) => setNewRuleType(e.target.value as AutomationType)}
                   className="w-full bg-[#161b22] border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-hidden focus:border-amber-500"
                 >
-                  <option value="LEETCODE_EXPORT">LeetCode Accepted-Solution Export</option>
+                  <option value="LEETCODE_EXPORT">LeetCode Solution Auto-Export &amp; Recovery</option>
+                  <option value="LEETCODE_HISTORY_SYNC">LeetCode Profile &amp; History Sync</option>
                   <option value="GITHUB_ACTIVITY_SYNC">GitHub Activity Synchronization</option>
-                  <option value="DAILY_REMINDERS">Daily Streak Protection Watchdog</option>
-                  <option value="REPO_HEALTH_CHECK">Repository Health & Security Audit</option>
+                  <option value="DAILY_REMINDERS">Daily Streak Summary &amp; Warning</option>
+                  <option value="WEEKLY_ANALYTICS">Weekly Developer Analytics Report</option>
+                  <option value="REPO_HEALTH_CHECK">Repository Health &amp; Security Audit</option>
                 </select>
               </div>
 

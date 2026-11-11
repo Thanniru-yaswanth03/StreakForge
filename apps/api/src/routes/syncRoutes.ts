@@ -2,12 +2,60 @@ import { Router, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, optionalAuth, AuthenticatedRequest } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
-import { LeetCodeSubmissionInputSchema } from '@streakforge/validation';
-import { processLeetCodeSubmission } from '../services/syncService.js';
-import { getOrRefreshLeetCodeStats, syncLeetCodeUserStats, fetchLeetCodeUserStats } from '../services/leetcodeService.js';
+import {
+  LeetCodeSubmissionInputSchema,
+  HistoricalImportInputSchema,
+  BatchDeleteSubmissionsSchema
+} from '@streakforge/validation';
+import {
+  processLeetCodeSubmission,
+  getSubmissionHistoryWithMetrics,
+  importHistoricalSubmissions,
+  importPublicRecentFromLeetCode,
+  getCanonicalSyncState,
+  getSyncDiagnostics,
+  deleteSubmissionsByIds
+} from '../services/syncService.js';
+import {
+  getOrRefreshLeetCodeStats,
+  syncLeetCodeUserStats,
+  fetchLeetCodeUserStats
+} from '../services/leetcodeService.js';
 import { LeetCodeSubmission } from '../models/LeetCodeSubmission.js';
 
 export const syncRouter: Router = Router();
+
+syncRouter.get(
+  '/state',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const state = await getCanonicalSyncState(req.userId!, req.token);
+      res.json({
+        success: true,
+        data: state
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+syncRouter.get(
+  '/diagnostics',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const report = await getSyncDiagnostics(req.userId!);
+      res.json({
+        success: true,
+        data: report
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 syncRouter.post(
   '/leetcode/submission',
@@ -32,6 +80,44 @@ syncRouter.post(
   }
 );
 
+syncRouter.post(
+  '/leetcode/import',
+  requireAuth,
+  validateBody(HistoricalImportInputSchema),
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const { submissions, autoExportToGitHub, importSource } = req.body;
+      const result = await importHistoricalSubmissions(req.userId!, submissions, {
+        autoExportToGitHub,
+        importSource
+      });
+      res.status(201).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+syncRouter.post(
+  '/leetcode/import-public',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const username = typeof req.body?.username === 'string' ? req.body.username.trim() : undefined;
+      const result = await importPublicRecentFromLeetCode(req.userId!, username);
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 syncRouter.get(
   '/leetcode/history',
   requireAuth,
@@ -39,36 +125,26 @@ syncRouter.get(
     try {
       const page = parseInt(req.query.page as string, 10) || 1;
       const limit = parseInt(req.query.limit as string, 10) || 20;
-      const status = req.query.status as string;
-
-      const query: any = { userId: new Types.ObjectId(req.userId) };
-      if (status) {
-        query.syncStatus = status;
-      }
-
-      const total = await LeetCodeSubmission.countDocuments(query);
-      const items = await LeetCodeSubmission.find(query)
-        .sort({ submittedAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit);
-
-      const mapped = items.map((doc) => {
-        const obj = doc.toObject();
-        return {
-          ...obj,
-          id: doc._id.toString(),
-          _id: doc._id.toString()
-        };
+      const result = await getSubmissionHistoryWithMetrics(req.userId!, {
+        page,
+        limit,
+        status: req.query.status as string | undefined,
+        difficulty: req.query.difficulty as string | undefined,
+        language: req.query.language as string | undefined,
+        topic: req.query.topic as string | undefined,
+        fromDate: req.query.fromDate as string | undefined,
+        toDate: req.query.toDate as string | undefined,
+        search: req.query.search as string | undefined,
+        sort: req.query.sort as string | undefined
       });
 
       res.json({
         success: true,
-        data: mapped,
+        data: result.items,
         meta: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit)
+          ...result.meta,
+          metrics: result.metrics,
+          facets: result.facets
         }
       });
     } catch (error) {
@@ -104,24 +180,89 @@ syncRouter.post(
         return;
       }
 
-      const result = await processLeetCodeSubmission(req.userId!, {
-        submissionId: sub.submissionId,
-        questionId: sub.questionId,
-        questionTitle: sub.questionTitle,
-        questionSlug: sub.questionSlug,
-        difficulty: sub.difficulty,
-        language: sub.language,
-        code: sub.code,
-        runtimeMs: sub.runtimeMs,
-        runtimePercentile: sub.runtimePercentile,
-        memoryBytes: sub.memoryBytes,
-        memoryPercentile: sub.memoryPercentile,
-        submittedAt: sub.submittedAt.toISOString()
-      });
+      if (!sub.code || sub.code.trim().length === 0) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'MISSING_SOURCE_CODE',
+            message: 'Cannot export submission without source code. Re-submit on LeetCode or run Extension Session Import.'
+          }
+        });
+        return;
+      }
+
+      const result = await processLeetCodeSubmission(
+        req.userId!,
+        {
+          submissionId: sub.submissionId,
+          questionId: sub.questionId,
+          questionTitle: sub.questionTitle,
+          questionSlug: sub.questionSlug,
+          difficulty: sub.difficulty,
+          language: sub.language,
+          code: sub.code,
+          runtimeMs: sub.runtimeMs,
+          runtimePercentile: sub.runtimePercentile,
+          memoryBytes: sub.memoryBytes,
+          memoryPercentile: sub.memoryPercentile,
+          submittedAt: sub.submittedAt.toISOString(),
+          topicTags: sub.topicTags,
+          problemUrl: sub.problemUrl
+        },
+        { forceExport: true }
+      );
 
       res.json({
         success: true,
         data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+syncRouter.post(
+  '/leetcode/bulk-delete',
+  requireAuth,
+  validateBody(BatchDeleteSubmissionsSchema),
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const deletedCount = await deleteSubmissionsByIds(req.userId!, req.body.ids);
+      res.json({
+        success: true,
+        data: { deletedCount }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+syncRouter.delete(
+  '/leetcode/:id',
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response, next) => {
+    try {
+      const idStr = String(req.params.id);
+      if (!Types.ObjectId.isValid(idStr)) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Submission not found' }
+        });
+        return;
+      }
+      const deletedCount = await deleteSubmissionsByIds(req.userId!, [idStr]);
+      if (deletedCount === 0) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Submission not found' }
+        });
+        return;
+      }
+      res.json({
+        success: true,
+        data: { deletedCount }
       });
     } catch (error) {
       next(error);

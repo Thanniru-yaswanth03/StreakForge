@@ -1,4 +1,4 @@
-import { API_BASE_URL, getStoredToken } from './utils';
+import { API_BASE_URL, getStoredToken, setStoredToken } from './utils';
 import type {
   User,
   LeetCodeUserStats,
@@ -8,7 +8,9 @@ import type {
   LeetCodeSubmission,
   LocalAgentInstance,
   AuditLog,
-  ApiResponse,
+  ExtensionSyncState,
+  GitHubTokenHealth,
+  SyncDiagnosticsComparison,
   ConnectRepositoryInput,
   UpdateRepositoryInput,
   AgentRegisterInput,
@@ -97,7 +99,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function apiFetchWithMeta<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<{ data: T; meta?: any }> {
   const token = getStoredToken();
   const headers = new Headers(options.headers);
 
@@ -111,7 +116,7 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const controller = !options.signal ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 20000) : null;
 
   let res: Response;
   try {
@@ -153,12 +158,25 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
     );
   }
 
-  return data.data as T;
+  return { data: data.data as T, meta: data.meta };
+}
+
+export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const res = await apiFetchWithMeta<T>(endpoint, options);
+  return res.data;
 }
 
 export const api = {
   auth: {
-    getMe: () => apiFetch<{ user: User }>('/auth/me'),
+    getMe: (signal?: AbortSignal) => apiFetch<{ user: User }>('/auth/me', { signal }),
+    refresh: async () => {
+      const res = await apiFetch<{ token: string; expiresAt: string; user: User }>('/auth/refresh', {
+        method: 'POST'
+      });
+      if (res.token) setStoredToken(res.token);
+      return res;
+    },
+    verifyGitHub: () => apiFetch<GitHubTokenHealth>('/auth/github/verify', { method: 'POST' }),
     connectWithPAT: (pat: string) =>
       apiFetch<{ token: string; user: User }>('/auth/github/pat', {
         method: 'POST',
@@ -169,6 +187,7 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(prefs)
       }),
+    resetPreferences: () => apiFetch('/auth/preferences/reset', { method: 'POST' }),
     logout: () => apiFetch('/auth/logout', { method: 'POST' }),
     disconnect: () => apiFetch('/auth/disconnect', { method: 'POST' }),
     deleteAccount: () => apiFetch<{ message: string }>('/auth/account', { method: 'DELETE' }),
@@ -242,24 +261,119 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input)
       }),
+    create: (input: {
+      name: string;
+      description?: string;
+      isPrivate?: boolean;
+      autoInit?: boolean;
+      isTargetForLeetCode?: boolean;
+      solutionPathPattern?: string;
+      autoCommitEnabled?: boolean;
+    }) =>
+      apiFetch<RepositoryConnection & { htmlUrl?: string }>('/repos/create', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }),
+    getBranches: (repoFullName: string) =>
+      apiFetch<{
+        repoFullName: string;
+        defaultBranch: string;
+        isEmptyRepo: boolean;
+        branches: Array<{ name: string; protected: boolean; sha: string }>;
+      }>(`/repos/branches?repoFullName=${encodeURIComponent(repoFullName)}`),
+    testAccess: (repoFullName: string, branch?: string) =>
+      apiFetch<{
+        repoFullName: string;
+        branch: string;
+        accessible: boolean;
+        canPush: boolean;
+        isPrivate: boolean;
+        defaultBranch: string;
+        isEmptyRepo: boolean;
+        branchExists: boolean;
+        permissions: { admin: boolean; push: boolean; pull: boolean };
+        message: string;
+      }>('/repos/test-access', {
+        method: 'POST',
+        body: JSON.stringify({ repoFullName, branch })
+      }),
     update: (id: string, update: UpdateRepositoryInput) =>
-      apiFetch<RepositoryConnection>(`/repos/${id}`, {
+      apiFetch<RepositoryConnection>(`/repos/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(update)
       }),
     disconnect: (id: string) =>
-      apiFetch<{ message: string }>(`/repos/${id}`, {
+      apiFetch<{ message: string }>(`/repos/${encodeURIComponent(id)}`, {
         method: 'DELETE'
       })
   },
   sync: {
+    getState: (signal?: AbortSignal) => apiFetch<ExtensionSyncState>('/sync/state', { signal }),
+    getDiagnostics: () => apiFetch<SyncDiagnosticsComparison>('/sync/diagnostics'),
     getHistory: (page: number = 1, limit: number = 20, status?: string) =>
       apiFetch<LeetCodeSubmission[]>(
         `/sync/leetcode/history?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`
       ),
+    queryHistory: (params: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      difficulty?: string;
+      language?: string;
+      topic?: string;
+      fromDate?: string;
+      toDate?: string;
+      search?: string;
+      sort?: string;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set('page', String(params.page));
+      if (params.limit) qs.set('limit', String(params.limit));
+      if (params.status && params.status !== 'ALL') qs.set('status', params.status);
+      if (params.difficulty && params.difficulty !== 'ALL') qs.set('difficulty', params.difficulty);
+      if (params.language && params.language !== 'ALL') qs.set('language', params.language);
+      if (params.topic && params.topic !== 'ALL') qs.set('topic', params.topic);
+      if (params.fromDate) qs.set('fromDate', params.fromDate);
+      if (params.toDate) qs.set('toDate', params.toDate);
+      if (params.search) qs.set('search', params.search);
+      if (params.sort) qs.set('sort', params.sort);
+      return apiFetchWithMeta<LeetCodeSubmission[]>(`/sync/leetcode/history?${qs.toString()}`);
+    },
+    importHistory: (submissions: any[], autoExportToGitHub = false) =>
+      apiFetch<{
+        importedCount: number;
+        skippedDuplicates: number;
+        missingCodeCount: number;
+        exportedCount: number;
+        errors: Array<{ submissionId: string; message: string }>;
+      }>('/sync/leetcode/import', {
+        method: 'POST',
+        body: JSON.stringify({ submissions, autoExportToGitHub, importSource: 'HISTORY_IMPORT' })
+      }),
+    importPublic: (username?: string) =>
+      apiFetch<{
+        username: string;
+        importedCount: number;
+        skippedDuplicates: number;
+        missingCodeCount: number;
+        exportedCount: number;
+        errors: any[];
+      }>('/sync/leetcode/import-public', {
+        method: 'POST',
+        body: JSON.stringify({ username })
+      }),
     retry: (id: string) =>
       apiFetch(`/sync/leetcode/${id}/retry`, {
         method: 'POST'
+      }),
+    deleteSubmission: (id: string) =>
+      apiFetch<{ deletedCount: number }>(`/sync/leetcode/${id}`, {
+        method: 'DELETE'
+      }),
+    bulkDeleteSubmissions: (ids: string[]) =>
+      apiFetch<{ deletedCount: number }>('/sync/leetcode/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids })
       }),
     getProfileStats: () =>
       apiFetch<LeetCodeUserStats>('/sync/leetcode/profile-stats'),
@@ -368,6 +482,8 @@ export const api = {
       apiFetch<{ message: string }>(`/automations/jobs/${id}/cancel`, { method: 'POST' }),
     retryJob: (id: string) =>
       apiFetch<{ jobId: string; status: string }>(`/automations/jobs/${id}/retry`, { method: 'POST' }),
+    clearJobs: (scope: 'finished' | 'queue' = 'finished') =>
+      apiFetch<{ deletedCount: number }>(`/automations/jobs?scope=${scope}`, { method: 'DELETE' }),
     getStats: () => apiFetch<QueueStats>('/automations/stats')
   },
   notifications: {

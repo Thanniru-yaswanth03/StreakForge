@@ -16,12 +16,17 @@ export interface ILeetCodeSubmissionDocument extends Document {
   memoryBytes: number;
   memoryPercentile: number;
   status: 'Accepted';
+  topicTags?: string[];
+  problemUrl?: string;
   submittedAt: Date;
   syncStatus: SyncStatus;
   githubCommitSha?: string;
   githubCommitUrl?: string;
+  targetRepoFullName?: string;
+  targetBranch?: string;
   filePath?: string;
   syncErrorMessage?: string;
+  importSource?: 'LIVE_EXTENSION' | 'HISTORY_IMPORT' | 'PUBLIC_API';
   syncedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -36,12 +41,14 @@ const LeetCodeSubmissionSchema = new Schema<ILeetCodeSubmissionDocument>(
     questionSlug: { type: String, required: true },
     difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard'], required: true },
     language: { type: String, required: true },
-    code: { type: String, required: true },
-    runtimeMs: { type: Number, required: true },
-    runtimePercentile: { type: Number, required: true },
-    memoryBytes: { type: Number, required: true },
-    memoryPercentile: { type: Number, required: true },
+    code: { type: String, default: '' },
+    runtimeMs: { type: Number, default: 0 },
+    runtimePercentile: { type: Number, default: 0 },
+    memoryBytes: { type: Number, default: 0 },
+    memoryPercentile: { type: Number, default: 0 },
     status: { type: String, default: 'Accepted' },
+    topicTags: { type: [String], default: [] },
+    problemUrl: { type: String },
     submittedAt: { type: Date, required: true },
     syncStatus: {
       type: String,
@@ -51,8 +58,15 @@ const LeetCodeSubmissionSchema = new Schema<ILeetCodeSubmissionDocument>(
     },
     githubCommitSha: { type: String },
     githubCommitUrl: { type: String },
+    targetRepoFullName: { type: String },
+    targetBranch: { type: String },
     filePath: { type: String },
     syncErrorMessage: { type: String },
+    importSource: {
+      type: String,
+      enum: ['LIVE_EXTENSION', 'HISTORY_IMPORT', 'PUBLIC_API'],
+      default: 'LIVE_EXTENSION'
+    },
     syncedAt: { type: Date }
   },
   {
@@ -76,6 +90,8 @@ const LeetCodeSubmissionSchema = new Schema<ILeetCodeSubmissionDocument>(
 
 LeetCodeSubmissionSchema.index({ userId: 1, submissionId: 1 }, { unique: true });
 LeetCodeSubmissionSchema.index({ userId: 1, submittedAt: -1 });
+LeetCodeSubmissionSchema.index({ userId: 1, questionSlug: 1 });
+LeetCodeSubmissionSchema.index({ userId: 1, syncStatus: 1, submittedAt: -1 });
 
 export const LeetCodeSubmission = mongoose.model<ILeetCodeSubmissionDocument>(
   'LeetCodeSubmission',

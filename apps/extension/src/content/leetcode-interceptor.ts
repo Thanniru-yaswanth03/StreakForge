@@ -114,24 +114,32 @@
   // Intercept window.fetch
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
-    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request)?.url || '';
+    const reqObj = typeof args[0] !== 'string' ? (args[0] as Request | undefined) : undefined;
+    const url = typeof args[0] === 'string' ? args[0] : reqObj?.url || '';
     const options = args[1] || {};
+    const method = String(options.method || reqObj?.method || 'GET').toUpperCase();
 
     // 1. Intercept LeetCode /submit/ POST
-    if (url.includes('/submit/') && options.method?.toUpperCase() === 'POST') {
+    if (url.includes('/submit/') && method === 'POST') {
       try {
         let body: any = null;
         if (typeof options.body === 'string') {
           body = JSON.parse(options.body);
+        } else if (reqObj) {
+          body = await reqObj.clone().json().catch(() => null);
         }
 
         const slugMatch = url.match(/\/problems\/([^/]+)\/submit/);
-        const questionSlug = slugMatch ? slugMatch[1].toLowerCase() : '';
+        const pathSlugMatch = window.location.pathname.match(/\/problems\/([^/]+)/);
+        const questionSlug = (slugMatch?.[1] || pathSlugMatch?.[1] || '').toLowerCase();
 
         if (body) {
           const rawCode = body.typed_code || '';
           const detectedLang = normalizeLanguage(
-            body.lang || (window as any).__streakforge_getMonacoLanguage?.() || inferLanguageFromCode(rawCode) || 'javascript'
+            body.lang ||
+              (window as any).__streakforge_getMonacoLanguage?.() ||
+              inferLanguageFromCode(rawCode) ||
+              'javascript'
           );
 
           inFlightSubmission = {
@@ -141,11 +149,6 @@
             code: rawCode,
             submittedAt: new Date().toISOString()
           };
-          console.log('[StreakForge Interceptor] Captured submission POST:', {
-            slug: questionSlug,
-            lang: inFlightSubmission.lang,
-            codeLength: inFlightSubmission.code?.length || 0
-          });
         }
       } catch (err) {
         console.warn('[StreakForge Interceptor] Error parsing /submit/ request:', err);
@@ -155,74 +158,88 @@
     const response = await originalFetch.apply(this, args);
 
     // 2. Intercept response of /submit/ to get submission_id
-    if (url.includes('/submit/') && options.method?.toUpperCase() === 'POST') {
+    if (url.includes('/submit/') && method === 'POST') {
       try {
         const cloned = response.clone();
-        cloned.json().then((data) => {
-          if (data?.submission_id && inFlightSubmission) {
-            inFlightSubmission.submissionId = String(data.submission_id);
-            console.log('[StreakForge Interceptor] Got submission ID:', inFlightSubmission.submissionId);
-          }
-        }).catch(() => {});
+        cloned
+          .json()
+          .then((data) => {
+            if (data?.submission_id && inFlightSubmission) {
+              inFlightSubmission.submissionId = String(data.submission_id);
+            }
+          })
+          .catch(() => {});
       } catch {}
     }
 
-    // 3. Intercept /check/ polling response for verdict
-    if (url.includes('/check/') && inFlightSubmission) {
+    // 3. Intercept /check/ polling response for verdict (works even if inFlightSubmission wasn't captured cleanly)
+    if (url.includes('/check/')) {
       try {
+        const checkIdMatch = url.match(/\/check\/(?:detail\/)?(\d+)/);
         const cloned = response.clone();
-        cloned.json().then((data) => {
-          if (data && (data.state === 'SUCCESS' || data.status_msg)) {
-            const verdict = data.status_msg || (data.run_success ? 'Accepted' : 'Unknown');
+        cloned
+          .json()
+          .then((data) => {
+            if (data && (data.state === 'SUCCESS' || data.status_msg)) {
+              const verdict = data.status_msg || (data.run_success ? 'Accepted' : 'Unknown');
 
-            if (verdict === 'Accepted') {
-              console.log('[StreakForge Interceptor] Submission verified ACCEPTED:', data);
+              if (verdict === 'Accepted') {
+                const rawRuntime = parseFloat(String(data.status_runtime || '').replace(/[^0-9.]/g, ''));
+                const runtimeMs = Number.isFinite(rawRuntime) ? rawRuntime : 0;
+                const rawRuntimePct = parseFloat(String(data.runtime_percentile ?? ''));
+                const runtimePercentile = Number.isFinite(rawRuntimePct) ? rawRuntimePct : 0;
+                const rawMemoryMb = parseFloat(String(data.status_memory || '').replace(/[^0-9.]/g, ''));
+                const memoryBytes = Number.isFinite(rawMemoryMb) ? Math.round(rawMemoryMb * 1024 * 1024) : 0;
+                const rawMemoryPct = parseFloat(String(data.memory_percentile ?? ''));
+                const memoryPercentile = Number.isFinite(rawMemoryPct) ? rawMemoryPct : 0;
 
-              // Parse metrics
-              const runtimeMs = parseFloat(String(data.status_runtime || '0').replace(/[^0-9.]/g, '')) || 50;
-              const runtimePercentile = parseFloat(String(data.runtime_percentile || '75')) || 75;
-              const memoryMb = parseFloat(String(data.status_memory || '0').replace(/[^0-9.]/g, '')) || 16;
-              const memoryBytes = Math.round(memoryMb * 1024 * 1024);
-              const memoryPercentile = parseFloat(String(data.memory_percentile || '70')) || 70;
+                let finalCode = inFlightSubmission?.code || data.code || '';
+                if (!finalCode || finalCode.trim().length === 0) {
+                  finalCode = (window as any).__streakforge_getMonacoCode?.() || '';
+                }
 
-              // Ensure we have code
-              let finalCode = inFlightSubmission?.code || '';
-              if (!finalCode || finalCode.trim().length === 0) {
-                finalCode = (window as any).__streakforge_getMonacoCode() || '';
+                let finalLang =
+                  inFlightSubmission?.lang ||
+                  (data.lang ? normalizeLanguage(data.lang) : null) ||
+                  (window as any).__streakforge_getMonacoLanguage?.() ||
+                  'javascript';
+                const codeInferred = inferLanguageFromCode(finalCode);
+                if (codeInferred && !inFlightSubmission?.lang && !data.lang) {
+                  finalLang = codeInferred;
+                }
+
+                const pathSlugMatch = window.location.pathname.match(/\/problems\/([^/]+)/);
+                const payload = {
+                  submissionId:
+                    inFlightSubmission?.submissionId ||
+                    String(data.submission_id || checkIdMatch?.[1] || Date.now()),
+                  questionId: inFlightSubmission?.questionId || String(data.question_id || ''),
+                  questionSlug:
+                    inFlightSubmission?.questionSlug ||
+                    (pathSlugMatch?.[1] || '').toLowerCase(),
+                  language: finalLang,
+                  code: finalCode,
+                  verdict: 'Accepted',
+                  runtimeMs,
+                  runtimePercentile,
+                  memoryBytes,
+                  memoryPercentile,
+                  submittedAt: inFlightSubmission?.submittedAt || new Date().toISOString()
+                };
+
+                window.postMessage(
+                  {
+                    type: 'STREAKFORGE_VERIFIED_SUBMISSION',
+                    payload
+                  },
+                  '*'
+                );
+
+                inFlightSubmission = null;
               }
-
-              // Verify language with code heuristics as final check
-              let finalLang = inFlightSubmission?.lang || (window as any).__streakforge_getMonacoLanguage?.() || 'javascript';
-              const codeInferred = inferLanguageFromCode(finalCode);
-              if (codeInferred) {
-                finalLang = codeInferred;
-              }
-
-              const payload = {
-                submissionId: inFlightSubmission?.submissionId || String(data.submission_id || Date.now()),
-                questionId: inFlightSubmission?.questionId || '1',
-                questionSlug: inFlightSubmission?.questionSlug || '',
-                language: finalLang,
-                code: finalCode,
-                verdict: 'Accepted',
-                runtimeMs,
-                runtimePercentile,
-                memoryBytes,
-                memoryPercentile,
-                submittedAt: inFlightSubmission?.submittedAt || new Date().toISOString()
-              };
-
-              // Broadcast to content script
-              window.postMessage({
-                type: 'STREAKFORGE_VERIFIED_SUBMISSION',
-                payload
-              }, '*');
-
-              // Reset in-flight tracking
-              inFlightSubmission = null;
             }
-          }
-        }).catch(() => {});
+          })
+          .catch(() => {});
       } catch {}
     }
 

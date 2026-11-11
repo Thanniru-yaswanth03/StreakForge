@@ -299,3 +299,118 @@ export async function getOrRefreshLeetCodeStats(
   }
 }
 
+export interface PublicAcSubmissionMeta {
+  submissionId: string;
+  questionId: string;
+  questionTitle: string;
+  questionSlug: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  language: string;
+  topicTags: string[];
+  submittedAt: string;
+}
+
+/**
+ * Query LeetCode's public GraphQL API for recent accepted submissions metadata.
+ * Note: Public LeetCode GraphQL does NOT expose submission source code.
+ */
+export async function fetchPublicRecentAcSubmissions(
+  username: string,
+  limit: number = 20
+): Promise<PublicAcSubmissionMeta[]> {
+  const safeLimit = Math.min(25, Math.max(1, limit));
+  const query = `
+    query recentAcSubmissions($username: String!, $limit: Int!) {
+      recentAcSubmissionList(username: $username, limit: $limit) {
+        id
+        title
+        titleSlug
+        timestamp
+        lang
+      }
+    }
+  `;
+
+  const response = await fetch('https://leetcode.com/graphql', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Referer: 'https://leetcode.com',
+      'User-Agent': 'Mozilla/5.0 (compatible; StreakForge/4.0)'
+    },
+    body: JSON.stringify({ query, variables: { username, limit: safeLimit } })
+  });
+
+  if (!response.ok) {
+    throw new Error(`LeetCode GraphQL returned HTTP ${response.status}`);
+  }
+
+  const json: any = await response.json();
+  const list = json?.data?.recentAcSubmissionList;
+  if (!Array.isArray(list)) {
+    return [];
+  }
+
+  // Enrich unique problem slugs with authentic difficulty, numeric questionFrontendId, and topicTags
+  const uniqueSlugs = Array.from(new Set<string>(list.map((s: any) => s.titleSlug).filter(Boolean)));
+  const questionMetaMap = new Map<
+    string,
+    { questionId: string; difficulty: 'Easy' | 'Medium' | 'Hard'; topicTags: string[] }
+  >();
+
+  await Promise.all(
+    uniqueSlugs.slice(0, 20).map(async (slug) => {
+      try {
+        const qQuery = `
+          query questionMeta($titleSlug: String!) {
+            question(titleSlug: $titleSlug) {
+              questionFrontendId
+              difficulty
+              topicTags {
+                name
+              }
+            }
+          }
+        `;
+        const qRes = await fetch('https://leetcode.com/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Referer: 'https://leetcode.com'
+          },
+          body: JSON.stringify({ query: qQuery, variables: { titleSlug: slug } })
+        });
+        if (qRes.ok) {
+          const qJson: any = await qRes.json();
+          const q = qJson?.data?.question;
+          if (q) {
+            questionMetaMap.set(slug, {
+              questionId: String(q.questionFrontendId || '0'),
+              difficulty:
+                q.difficulty === 'Medium' || q.difficulty === 'Hard' ? q.difficulty : 'Easy',
+              topicTags: Array.isArray(q.topicTags) ? q.topicTags.map((t: any) => t.name) : []
+            });
+          }
+        }
+      } catch {
+        // Skip enrichment failure gracefully
+      }
+    })
+  );
+
+  return list.map((s: any) => {
+    const meta = questionMetaMap.get(s.titleSlug);
+    const tsMs = Number(s.timestamp) * 1000;
+    return {
+      submissionId: String(s.id),
+      questionId: meta?.questionId || '0',
+      questionTitle: s.title || s.titleSlug,
+      questionSlug: s.titleSlug,
+      difficulty: meta?.difficulty || 'Easy',
+      language: s.lang || 'unknown',
+      topicTags: meta?.topicTags || [],
+      submittedAt: Number.isFinite(tsMs) && tsMs > 0 ? new Date(tsMs).toISOString() : new Date().toISOString()
+    };
+  });
+}
+

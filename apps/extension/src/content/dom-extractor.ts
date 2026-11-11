@@ -36,15 +36,15 @@ export class LeetCodeDomExtractor {
 
     // 1. Title and ID extraction
     let title = slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    let id = '1';
+    let id = '0';
 
-    // Check title element in DOM
+    // Check title element in DOM (strictly target active problem heading, never generic nav links)
     const titleSelectors = [
       '[data-cy="question-title"]',
       'div[class*="text-title-large"]',
       'h4[data-cy="question-title"]',
       'div.flex.items-start.justify-between h4',
-      'a[href*="/problems/"]'
+      ...(slug ? [`a[href="/problems/${slug}/"]`, `a[href*="/problems/${slug}"]`] : [])
     ];
 
     for (const sel of titleSelectors) {
@@ -329,11 +329,11 @@ export class LeetCodeDomExtractor {
     const runtimeMatch = bodyText.match(/Runtime\s*[:\n]?\s*([0-9.]+)\s*ms.*?Beats\s*([0-9.]+)%/i);
     const memoryMatch = bodyText.match(/Memory\s*[:\n]?\s*([0-9.]+)\s*MB.*?Beats\s*([0-9.]+)%/i);
 
-    const runtimeMs = runtimeMatch ? parseFloat(runtimeMatch[1]) : 50;
-    const runtimePercentile = runtimeMatch ? parseFloat(runtimeMatch[2]) : 75;
-    const memoryMb = memoryMatch ? parseFloat(memoryMatch[1]) : 16;
+    const runtimeMs = runtimeMatch ? parseFloat(runtimeMatch[1]) : 0;
+    const runtimePercentile = runtimeMatch ? parseFloat(runtimeMatch[2]) : 0;
+    const memoryMb = memoryMatch ? parseFloat(memoryMatch[1]) : 0;
     const memoryBytes = Math.round(memoryMb * 1024 * 1024);
-    const memoryPercentile = memoryMatch ? parseFloat(memoryMatch[2]) : 70;
+    const memoryPercentile = memoryMatch ? parseFloat(memoryMatch[2]) : 0;
 
     // Extract genuine submission ID from URL or submission link
     let submissionId = '';

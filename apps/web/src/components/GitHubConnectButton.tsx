@@ -4,6 +4,9 @@ import React, { useState } from 'react';
 import { Github, RotateCw, AlertCircle } from 'lucide-react';
 import { API_BASE_URL } from '../lib/utils';
 
+// Prevent multiple simultaneous OAuth initiation attempts across components
+let oauthLaunchLock = false;
+
 interface GitHubConnectButtonProps {
   label?: string;
   wakingLabel?: string;
@@ -32,20 +35,21 @@ export function GitHubConnectButton({
   const apiHost = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
 
   const initiateOAuth = async () => {
-    if (status === 'waking' || status === 'redirecting') return;
+    if (oauthLaunchLock || status === 'waking' || status === 'redirecting') return;
+    oauthLaunchLock = true;
 
     setStatus('waking');
     setErrorMsg(null);
     setAttempt(1);
 
-    const maxAttempts = 4;
+    const maxAttempts = 6;
     let awake = false;
 
     for (let i = 1; i <= maxAttempts; i++) {
       setAttempt(i);
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         const res = await fetch(`${apiHost}/health`, {
           method: 'GET',
           cache: 'no-store',
@@ -67,8 +71,11 @@ export function GitHubConnectButton({
     }
 
     if (!awake) {
+      oauthLaunchLock = false;
       setStatus('error');
-      setErrorMsg('Authentication service is taking longer than expected to wake up. Please retry.');
+      setErrorMsg(
+        'Render backend is taking longer than expected to wake up. Wait a few seconds and click Connect GitHub again.'
+      );
       return;
     }
 

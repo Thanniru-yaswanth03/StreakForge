@@ -5,18 +5,18 @@ import {
   Check,
   Github,
   Globe,
-  Award,
-  Code2,
-  GitBranch,
   ShieldCheck,
-  Activity
+  Settings,
+  AlertTriangle,
+  Flame,
+  Clock
 } from 'lucide-react';
 import type {
   ExtensionConfig,
   DetectedSubmission,
   ActiveProblemContext
 } from '../shared/types';
-import { StorageManager } from '../shared/storage';
+import { StorageManager, DEFAULT_SERVER_URL, DEFAULT_WEB_APP_URL } from '../shared/storage';
 
 interface LeetCodeStats {
   username: string;
@@ -36,64 +36,45 @@ export function App() {
   const [config, setConfig] = useState<ExtensionConfig | null>(null);
   const [activeProblem, setActiveProblem] = useState<ActiveProblemContext | undefined>();
   const [syncedHistory, setSyncedHistory] = useState<DetectedSubmission[]>([]);
+  const [pendingQueue, setPendingQueue] = useState<DetectedSubmission[]>([]);
   const [leetcodeStats, setLeetcodeStats] = useState<LeetCodeStats | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isOnLeetCode, setIsOnLeetCode] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Lightweight local-storage read for fast popup UI polling (does not hammer backend)
   const loadLocalState = useCallback(async () => {
     try {
-      const [cfg, prob, history] = await Promise.all([
+      const [cfg, prob, history, queue] = await Promise.all([
         StorageManager.getConfig(),
         StorageManager.getActiveProblem(),
-        StorageManager.getSyncedHistory()
+        StorageManager.getSyncedHistory(),
+        StorageManager.getPendingQueue()
       ]);
       setConfig(cfg);
       setActiveProblem(prob);
       setSyncedHistory(history);
+      setPendingQueue(queue);
     } catch (err) {
       console.warn('Failed to load local extension storage:', err);
     }
   }, []);
 
-  // Load state from Chrome local storage & StreakForge Backend (run on mount + explicit Sync Now)
   const loadState = useCallback(async () => {
     try {
       const cfg = await StorageManager.getConfig();
-      const prob = await StorageManager.getActiveProblem();
-      let history = await StorageManager.getSyncedHistory();
+      const [prob, history, queue] = await Promise.all([
+        StorageManager.getActiveProblem(),
+        StorageManager.getSyncedHistory(),
+        StorageManager.getPendingQueue()
+      ]);
 
-      // If auth token is missing in extension storage, attempt to detect from web app cookie
-      if (!cfg.authToken && typeof chrome !== 'undefined' && chrome.cookies?.get) {
-        try {
-          const cookie = await new Promise<chrome.cookies.Cookie | null>((resolve) => {
-            chrome.cookies.get({ url: 'http://localhost:3000', name: 'streakforge_token' }, (c) => {
-              if (c) return resolve(c);
-              chrome.cookies.get({ url: 'http://127.0.0.1:3000', name: 'streakforge_token' }, resolve);
-            });
-          });
+      setConfig(cfg);
+      setActiveProblem(prob);
+      setSyncedHistory(history);
+      setPendingQueue(queue);
 
-          if (cookie?.value) {
-            chrome.runtime.sendMessage(
-              { type: 'AUTO_PAIR_TOKEN', payload: { token: cookie.value } },
-              async () => {
-                const refreshedCfg = await StorageManager.getConfig();
-                const refreshedHist = await StorageManager.getSyncedHistory();
-                setConfig(refreshedCfg);
-                setSyncedHistory(refreshedHist);
-              }
-            );
-          }
-        } catch {
-          // Cookies query skipped
-        }
-      }
-
-      // Fetch authentic live statistics and history directly from backend
-      const sUrl = cfg.serverUrl || 'https://streakforge-api-5uhs.onrender.com';
+      const sUrl = (cfg.serverUrl || DEFAULT_SERVER_URL).replace(/\/+$/, '');
       if (cfg.authToken) {
-        // 1. Fetch user & LeetCode profile stats
         try {
           const pRes = await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats`, {
             headers: { Authorization: `Bearer ${cfg.authToken}` },
@@ -101,54 +82,12 @@ export function App() {
           });
           if (pRes.ok) {
             const pJson = await pRes.json();
-            if (pJson.data) {
-              setLeetcodeStats(pJson.data);
-            }
+            if (pJson.data) setLeetcodeStats(pJson.data);
           }
         } catch {
-          // Keep stored stats
-        }
-
-        // 2. Fetch submissions history
-        try {
-          const hRes = await fetch(`${sUrl}/api/v1/sync/leetcode/history?limit=100`, {
-            headers: { Authorization: `Bearer ${cfg.authToken}` },
-            signal: AbortSignal.timeout(10000)
-          });
-          if (hRes.ok) {
-            const hJson = await hRes.json();
-            const items = Array.isArray(hJson.data) ? hJson.data : (hJson.data?.items || []);
-            const freshMapped = items.map((sub: any) => ({
-              submissionId: sub.submissionId || String(sub._id),
-              questionId: String(sub.questionId),
-              questionTitle: sub.questionTitle,
-              questionSlug: sub.questionSlug,
-              difficulty: sub.difficulty,
-              language: sub.language,
-              code: sub.code || '',
-              runtimeMs: sub.runtimeMs || 0,
-              runtimePercentile: sub.runtimePercentile || 0,
-              memoryBytes: sub.memoryBytes || 0,
-              memoryPercentile: sub.memoryPercentile || 0,
-              verdict: 'Accepted',
-              topicTags: sub.topicTags || [],
-              submittedAt: sub.submittedAt || new Date().toISOString(),
-              state: 'SYNCED',
-              commitSha: sub.githubCommitSha,
-              commitUrl: sub.githubCommitUrl,
-              filePath: sub.filePath
-            }));
-            history = freshMapped;
-            await StorageManager.setSyncedHistory(freshMapped);
-          }
-        } catch {
-          // Use stored history
+          // Keep cached state on transient failure
         }
       }
-
-      setConfig(cfg);
-      setActiveProblem(prob);
-      setSyncedHistory(history);
 
       if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -164,66 +103,76 @@ export function App() {
   useEffect(() => {
     loadState();
 
-    // Auto-refresh authentic statistics from backend on popup open
+    // Ask background worker to fetch canonical /sync/state once on popup open
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage({ type: 'SYNC_FROM_BACKEND' }, (resp) => {
         if (resp?.success) {
+          loadLocalState();
+        } else {
           loadLocalState();
         }
       });
     }
 
-    // Only poll local extension storage in the UI (never flood backend every 2.5s)
     const interval = setInterval(loadLocalState, 2500);
     return () => clearInterval(interval);
   }, [loadState, loadLocalState]);
 
   const showStatus = (msg: string) => {
     setStatusMessage(msg);
-    setTimeout(() => setStatusMessage(null), 3000);
+    setTimeout(() => setStatusMessage(null), 3500);
   };
 
-  const handleToggleSetting = async (key: 'exportNewOnly' | 'allowMultipleSubmissions' | 'addSolutionComments') => {
+  const handleToggleSetting = async (
+    key: 'autoSyncEnabled' | 'exportNewOnly' | 'allowMultipleSubmissions' | 'addSolutionComments'
+  ) => {
     if (!config) return;
-    const currentVal = Boolean(config[key]);
-    const updated = await StorageManager.updateConfig({ [key]: !currentVal });
+    const nextVal = !Boolean(config[key]);
+    let patchLocal: Partial<ExtensionConfig> = { [key]: nextVal };
+    let backendPatch: Record<string, any> = {};
+
+    if (key === 'autoSyncEnabled') {
+      backendPatch = { autoSyncEnabled: nextVal };
+    } else if (key === 'exportNewOnly') {
+      patchLocal = {
+        exportNewOnly: nextVal,
+        allowMultipleSubmissions: nextVal ? false : config.allowMultipleSubmissions,
+        exportPolicy: nextVal ? 'NEW_ONLY' : 'ALLOW_MULTIPLE'
+      };
+      backendPatch = { exportPolicy: nextVal ? 'NEW_ONLY' : 'ALLOW_MULTIPLE' };
+    } else if (key === 'allowMultipleSubmissions') {
+      patchLocal = {
+        allowMultipleSubmissions: nextVal,
+        exportNewOnly: nextVal ? false : config.exportNewOnly,
+        exportPolicy: nextVal ? 'ALLOW_MULTIPLE' : 'LATEST_ONLY'
+      };
+      backendPatch = { exportPolicy: nextVal ? 'ALLOW_MULTIPLE' : 'LATEST_ONLY' };
+    } else if (key === 'addSolutionComments') {
+      backendPatch = { includeHeader: nextVal };
+    }
+
+    const updated = await StorageManager.updateConfig(patchLocal);
     setConfig(updated);
-    showStatus('Setting saved');
+
+    if (config.authToken && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        type: 'PUSH_PREFERENCES_TO_BACKEND',
+        payload: { syncPreferences: backendPatch }
+      });
+    }
+    showStatus('Preference synced across devices');
   };
 
   const handleForceSync = async () => {
     setIsSyncing(true);
-
-    const sUrl = config?.serverUrl || 'https://streakforge-api-5uhs.onrender.com';
+    const sUrl = (config?.serverUrl || DEFAULT_SERVER_URL).replace(/\/+$/, '');
     if (!config?.authToken) {
       setIsSyncing(false);
-      showStatus('Sign in on StreakForge first to sync.');
+      showStatus('Sign in on StreakForge dashboard to sync.');
       return;
     }
 
-    // 1. Force refresh live LeetCode stats from backend
-    try {
-      const refreshRes = await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${config.authToken}`
-        },
-        body: JSON.stringify(config.leetcodeUsername ? { username: config.leetcodeUsername } : {}),
-        signal: AbortSignal.timeout(10000)
-      });
-      if (refreshRes.ok) {
-        const rJson = await refreshRes.json();
-        if (rJson.data) {
-          setLeetcodeStats(rJson.data);
-        }
-      }
-    } catch (err) {
-      console.warn('Failed immediate profile refresh:', err);
-    }
-
-    // 2. Manual capture ONLY if an authentic Accepted submission verdict exists on the active tab
-    let manualNote = '';
+    // 1. Capture active LeetCode tab if currently viewing an Accepted verdict
     if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const activeTab = tabs[0];
@@ -251,33 +200,37 @@ export function App() {
                   state: 'DETECTED'
                 }
               });
-            } else if (p?.result?.verdict && p.result.verdict !== 'Accepted') {
-              manualNote = `Skipped export (${p.result.verdict})`;
             }
           });
         }
       });
     }
 
-    // 3. Synchronize from backend database
+    // 2. Process queued items + fetch canonical state + refresh LeetCode stats
+    try {
+      await fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${config.authToken}`
+        },
+        body: JSON.stringify(config.leetcodeUsername ? { username: config.leetcodeUsername } : {}),
+        signal: AbortSignal.timeout(12000)
+      });
+    } catch {
+      // Non-fatal
+    }
+
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage({ type: 'SYNC_FROM_BACKEND' }, (resp) => {
+      chrome.runtime.sendMessage({ type: 'FORCE_SYNC_PENDING' }, () => {
         setTimeout(async () => {
           await loadState();
           setIsSyncing(false);
-          if (!resp?.success) {
-            showStatus(resp?.error || 'Backend sync unavailable');
-            return;
-          }
-          const solvedMsg = manualNote
-            ? `✓ Refreshed (${manualNote})`
-            : `✓ Synced! ${leetcodeStats?.totalSolved ?? totalSolved} Solved (${leetcodeStats?.easySolved ?? easyCount}E, ${leetcodeStats?.mediumSolved ?? mediumCount}M)`;
-          showStatus(solvedMsg);
+          showStatus('Synchronization complete');
         }, 500);
       });
     } else {
       setIsSyncing(false);
-      showStatus('Extension runtime unavailable');
     }
   };
 
@@ -289,295 +242,272 @@ export function App() {
     }
   };
 
-  const webAppUrl = config?.webAppUrl || (typeof window !== 'undefined' && window.location.origin.includes('vercel.app') ? window.location.origin : 'https://streak-forge-six.vercel.app');
+  const webAppUrl = config?.webAppUrl || DEFAULT_WEB_APP_URL;
 
-  const openDashboard = () => {
-    openUrl(webAppUrl);
-  };
-
-  const openRepository = () => {
-    if (config?.targetRepoFullName) {
-      openUrl(`https://github.com/${config.targetRepoFullName}`);
+  const openDashboard = () => openUrl(webAppUrl);
+  const openOptions = () => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
     } else {
-      openUrl(`${webAppUrl}/?tab=repos`);
-    }
-  };
-
-  const handleUnlink = async () => {
-    if (!config?.targetRepoFullName) return;
-    if (!confirm(`Unlink ${config.targetRepoFullName}? You can choose another repository on the dashboard.`)) {
-      return;
-    }
-
-    const oldRepo = config.targetRepoFullName;
-    const updated = await StorageManager.updateConfig({ targetRepoFullName: '' });
-    setConfig(updated);
-    showStatus('Repository unlinked');
-
-    if (config.authToken) {
-      try {
-        const serverUrl = config.serverUrl || 'http://localhost:4000';
-        await fetch(`${serverUrl}/api/v1/repos/${encodeURIComponent(oldRepo)}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${config.authToken}`
-          },
-          body: JSON.stringify({ isTargetForLeetCode: false })
-        });
-      } catch (err) {
-        console.warn('Failed to notify backend of unlinking:', err);
-      }
+      openUrl(`${webAppUrl}/?tab=settings`);
     }
   };
 
   const handleLogout = async () => {
-    if (confirm('Log out from StreakForge?')) {
+    if (confirm('Sign out from StreakForge extension?')) {
       const updated = await StorageManager.updateConfig({
         authToken: '',
+        authState: 'UNAUTHENTICATED',
         userProfile: undefined,
-        targetRepoFullName: ''
+        targetRepoFullName: '',
+        metrics: undefined
       });
       await StorageManager.setSyncedHistory([]);
       setConfig(updated);
       setSyncedHistory([]);
-      showStatus('Logged out');
+      showStatus('Signed out');
     }
   };
 
-  // Authentic statistics values
   const easyCount = leetcodeStats?.easySolved ?? 0;
   const mediumCount = leetcodeStats?.mediumSolved ?? 0;
   const hardCount = leetcodeStats?.hardSolved ?? 0;
-  const totalSolved = leetcodeStats?.totalSolved ?? (easyCount + mediumCount + hardCount);
+  const uniqueSolved =
+    config?.metrics?.uniqueProblemsSolved ??
+    leetcodeStats?.totalSolved ??
+    easyCount + mediumCount + hardCount;
 
-  const username = config?.userProfile?.username || 'Guest Developer';
-  const targetRepo = config?.targetRepoFullName || 'No repository selected';
-  const lastSynced = syncedHistory.length > 0 ? syncedHistory[0] : null;
+  const verifiedExportedList = syncedHistory.filter(
+    (s) => s.state === 'SYNCED' && Boolean(s.commitSha)
+  );
+  const exportedCount = config?.metrics?.exportedCount ?? verifiedExportedList.length;
+  const queuedPendingCount =
+    (config?.metrics?.pendingCount ?? 0) +
+    (config?.metrics?.failedCount ?? 0) +
+    pendingQueue.filter((q) => q.state !== 'SYNCED').length;
+
+  const lastSynced = verifiedExportedList.length > 0 ? verifiedExportedList[0] : null;
+  const username = config?.userProfile?.username;
+  const targetRepo = config?.targetRepoFullName;
+  const targetBranch = config?.targetBranch || 'main';
+  const authState = config?.authToken ? config?.authState || 'AUTHENTICATED' : 'UNAUTHENTICATED';
 
   return (
-    <div className="w-[360px] bg-[#0d1117] text-[#f0f6fc] font-sans select-none flex flex-col shadow-2xl text-xs overflow-hidden border border-[#30363d]">
-      {/* 1. GitHub Dark Header */}
-      <div className="px-4 py-3 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between">
+    <div className="w-[368px] bg-[#0d1117] text-[#f0f6fc] font-sans select-none flex flex-col shadow-2xl text-xs overflow-hidden border border-[#30363d]">
+      {/* 1. Header */}
+      <div className="px-4 py-2.5 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-md bg-[#238636] flex items-center justify-center text-white">
             <Check className="w-3.5 h-3.5 stroke-[3]" />
           </div>
           <span className="text-sm font-bold tracking-tight text-[#f0f6fc]">
-            StreakForge <span className="text-[#3fb950] font-mono text-[11px] font-normal">v3.0</span>
+            StreakForge <span className="text-[#3fb950] font-mono text-[10px]">v4.0</span>
           </span>
         </div>
 
-        <button
-          onClick={openDashboard}
-          className="text-xs text-[#8b949e] hover:text-[#58a6ff] font-medium flex items-center gap-1.5 transition"
-          title="Open Web Dashboard"
-        >
-          <Globe className="w-3.5 h-3.5" />
-          <span>Dashboard</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={openOptions}
+            className="text-[#8b949e] hover:text-[#f0f6fc] p-1 rounded hover:bg-[#21262d] transition cursor-pointer"
+            title="Extension Settings, Notifications & Import"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={openDashboard}
+            className="text-xs text-[#8b949e] hover:text-[#58a6ff] font-medium flex items-center gap-1 transition cursor-pointer"
+            title="Open Web Dashboard"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Dashboard</span>
+          </button>
+        </div>
       </div>
 
-      {/* 2. Authentic LeetCode Statistics Box (GitHub Dark Style) */}
-      <div className="p-3.5 space-y-3">
-        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3">
-          {/* LeetCode Profile Header */}
-          <div className="flex items-center justify-between pb-2.5 border-b border-[#30363d]">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={`w-2 h-2 rounded-full ${leetcodeStats?.username ? 'bg-[#3fb950] animate-pulse' : 'bg-gray-500'}`} />
-              <div className="truncate">
-                <span className="font-semibold text-xs text-[#f0f6fc]">
-                  {leetcodeStats?.username ? `@${leetcodeStats.username}` : (config?.leetcodeUsername ? `@${config.leetcodeUsername}` : 'No LeetCode Account')}
-                </span>
-                {leetcodeStats?.realName && (
-                  <span className="text-[10px] text-[#8b949e] ml-1.5 truncate">
-                    ({leetcodeStats.realName})
-                  </span>
-                )}
-              </div>
+      <div className="p-3.5 space-y-2.5">
+        {/* Auth State Banner when unauthenticated, expired, or backend offline */}
+        {authState !== 'AUTHENTICATED' && (
+          <div
+            className={`p-2.5 rounded-lg border text-[11px] flex items-center justify-between gap-2 ${
+              authState === 'EXPIRED'
+                ? 'bg-[#f85149]/10 border-[#f85149]/40 text-[#ff7b72]'
+                : authState === 'NETWORK_ERROR'
+                  ? 'bg-[#d29922]/10 border-[#d29922]/40 text-[#e3b341]'
+                  : 'bg-[#1f6feb]/10 border-[#388bfd]/40 text-[#79c0ff]'
+            }`}
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">
+                {config?.authErrorReason ||
+                  (authState === 'UNAUTHENTICATED'
+                    ? 'Sign in on web dashboard to link GitHub'
+                    : 'Session attention required')}
+              </span>
             </div>
-
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#21262d] text-[#8b949e] border border-[#30363d]">
-              {leetcodeStats?.ranking ? `Rank #${leetcodeStats.ranking.toLocaleString()}` : 'Unranked'}
-            </span>
-          </div>
-
-          {/* Difficulty Metrics: Authentic 37 / 4 / 1 */}
-          <div className="grid grid-cols-3 gap-2 py-3 text-center">
-            <div className="bg-[#0d1117] rounded-md p-2 border border-[#30363d]/60">
-              <span className="text-[10px] font-semibold text-[#8b949e] block">Easy</span>
-              <span className="text-base font-bold text-[#3fb950] tabular-nums">{easyCount}</span>
-            </div>
-
-            <div className="bg-[#0d1117] rounded-md p-2 border border-[#30363d]/60">
-              <span className="text-[10px] font-semibold text-[#8b949e] block">Medium</span>
-              <span className="text-base font-bold text-[#d29922] tabular-nums">{mediumCount}</span>
-            </div>
-
-            <div className="bg-[#0d1117] rounded-md p-2 border border-[#30363d]/60">
-              <span className="text-[10px] font-semibold text-[#8b949e] block">Hard</span>
-              <span className="text-base font-bold text-[#f85149] tabular-nums">{hardCount}</span>
-            </div>
-          </div>
-
-          {/* Segmented Progress Bar */}
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-[10px] text-[#8b949e]">
-              <span>Authentic Solves: <strong className="text-[#f0f6fc]">{totalSolved}</strong></span>
-              <span>Acceptance: <strong className="text-[#58a6ff]">{leetcodeStats?.acceptanceRate != null ? `${leetcodeStats.acceptanceRate.toFixed(1)}%` : 'N/A'}</strong></span>
-            </div>
-            <div className="w-full h-1.5 bg-[#21262d] rounded-full overflow-hidden flex">
-              <div
-                style={{ width: `${(easyCount / Math.max(totalSolved, 1)) * 100}%` }}
-                className="bg-[#3fb950] h-full"
-                title={`Easy: ${easyCount}`}
-              />
-              <div
-                style={{ width: `${(mediumCount / Math.max(totalSolved, 1)) * 100}%` }}
-                className="bg-[#d29922] h-full"
-                title={`Medium: ${mediumCount}`}
-              />
-              <div
-                style={{ width: `${(hardCount / Math.max(totalSolved, 1)) * 100}%` }}
-                className="bg-[#f85149] h-full"
-                title={`Hard: ${hardCount}`}
-              />
-            </div>
-          </div>
-
-          {/* Repository Link Footer */}
-          <div className="pt-2.5 mt-2.5 border-t border-[#30363d] flex items-center justify-between text-[11px]">
             <button
-              onClick={openRepository}
-              className="text-[#58a6ff] hover:underline flex items-center gap-1 cursor-pointer font-medium"
+              onClick={openDashboard}
+              className="px-2 py-0.5 rounded bg-[#21262d] hover:bg-[#30363d] text-[#f0f6fc] font-semibold text-[10px] flex-shrink-0 cursor-pointer"
             >
-              <Github className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[200px]">{targetRepo.split('/')[1] || targetRepo}</span>
-              <ExternalLink className="w-3 h-3 ml-0.5" />
+              Open Web
             </button>
+          </div>
+        )}
 
-            <span className="text-[10px] text-[#8b949e]">
-              {syncedHistory.length} exported
+        {/* 2. Authentic Profile & Difficulty Card */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3">
+          <div className="flex items-center justify-between pb-2 border-b border-[#30363d]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  config?.leetcodeUsername || leetcodeStats?.username
+                    ? 'bg-[#3fb950]'
+                    : 'bg-gray-500'
+                }`}
+              />
+              <span className="font-semibold text-xs text-[#f0f6fc] truncate">
+                {leetcodeStats?.username || config?.leetcodeUsername
+                  ? `@${leetcodeStats?.username || config?.leetcodeUsername}`
+                  : 'Connect LeetCode Profile'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[10px] font-mono">
+              <span className="px-1.5 py-0.5 rounded bg-[#21262d] text-[#f0883e] border border-[#30363d] flex items-center gap-1">
+                <Flame className="w-2.5 h-2.5" />
+                {config?.metrics?.currentStreak ?? 0}d
+              </span>
+              {leetcodeStats?.ranking ? (
+                <span className="px-1.5 py-0.5 rounded bg-[#21262d] text-[#8b949e] border border-[#30363d]">
+                  #{leetcodeStats.ranking.toLocaleString()}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Easy / Medium / Hard + Exported */}
+          <div className="grid grid-cols-4 gap-1.5 py-2.5 text-center">
+            <div className="bg-[#0d1117] rounded-md p-1.5 border border-[#30363d]/60">
+              <span className="text-[9px] text-[#8b949e] block">Easy</span>
+              <span className="text-sm font-bold text-[#3fb950] tabular-nums">{easyCount}</span>
+            </div>
+            <div className="bg-[#0d1117] rounded-md p-1.5 border border-[#30363d]/60">
+              <span className="text-[9px] text-[#8b949e] block">Med</span>
+              <span className="text-sm font-bold text-[#d29922] tabular-nums">{mediumCount}</span>
+            </div>
+            <div className="bg-[#0d1117] rounded-md p-1.5 border border-[#30363d]/60">
+              <span className="text-[9px] text-[#8b949e] block">Hard</span>
+              <span className="text-sm font-bold text-[#f85149] tabular-nums">{hardCount}</span>
+            </div>
+            <div className="bg-[#0d1117] rounded-md p-1.5 border border-[#30363d]/60">
+              <span className="text-[9px] text-[#8b949e] block">Pushed</span>
+              <span className="text-sm font-bold text-[#58a6ff] tabular-nums">{exportedCount}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-[10px] text-[#8b949e] pt-1">
+            <span>
+              Unique Solved: <strong className="text-[#f0f6fc]">{uniqueSolved}</strong>
             </span>
+            {queuedPendingCount > 0 ? (
+              <span className="text-[#d29922] font-semibold">
+                {queuedPendingCount} pending/failed
+              </span>
+            ) : (
+              <span className="text-[#3fb950]">All caught up</span>
+            )}
           </div>
         </div>
 
-        {/* Status Notice */}
+        {/* Active LeetCode Problem Context */}
+        {isOnLeetCode && activeProblem && (
+          <div className="px-3 py-2 bg-[#161b22] border border-[#30363d] rounded-lg flex items-center justify-between text-[11px]">
+            <span className="text-[#8b949e]">Active:</span>
+            <span className="font-medium text-[#f0f6fc] truncate max-w-[240px]">
+              {activeProblem.id !== '0' ? `${activeProblem.id}. ` : ''}
+              {activeProblem.title}
+            </span>
+          </div>
+        )}
+
         {statusMessage && (
-          <div className="p-2 bg-[#238636]/15 border border-[#238636]/30 text-[#3fb950] text-[11px] rounded-md text-center font-medium animate-in fade-in">
+          <div className="p-2 bg-[#238636]/15 border border-[#238636]/30 text-[#3fb950] text-[11px] rounded-md text-center font-medium">
             {statusMessage}
           </div>
         )}
 
-        {/* 3. Settings Toggles (GitHub Dark) */}
-        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3 space-y-3">
-          <div className="flex items-center justify-between text-xs font-semibold text-[#8b949e] uppercase tracking-wider">
-            <span>Sync Engine Policies</span>
+        {/* 3. Essential Sync Toggles */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3 space-y-2.5">
+          <div className="flex items-center justify-between text-[10px] font-semibold text-[#8b949e] uppercase tracking-wider">
+            <span>Auto-Sync Controls</span>
             <ShieldCheck className="w-3.5 h-3.5 text-[#3fb950]" />
           </div>
 
-          {/* Toggle 1: Submit only new solutions */}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-[#c9d1d9] leading-tight">
-              Submit only new solutions
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={Boolean(config?.exportNewOnly)}
-              onClick={() => handleToggleSetting('exportNewOnly')}
-              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                config?.exportNewOnly ? 'bg-[#238636]' : 'bg-[#21262d] border border-[#30363d]'
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-xs transform transition-transform ${
-                  config?.exportNewOnly ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
+          <label className="flex items-center justify-between gap-2 cursor-pointer">
+            <span className="text-xs text-[#c9d1d9]">Auto-sync accepted submissions</span>
+            <input
+              type="checkbox"
+              checked={config?.autoSyncEnabled !== false}
+              onChange={() => handleToggleSetting('autoSyncEnabled')}
+              className="accent-[#238636] w-4 h-4 cursor-pointer"
+            />
+          </label>
 
-          {/* Toggle 2: Sync multiple submissions */}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-[#c9d1d9] leading-tight">
-              Sync multiple submissions for same problem
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={Boolean(config?.allowMultipleSubmissions)}
-              onClick={() => handleToggleSetting('allowMultipleSubmissions')}
-              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                config?.allowMultipleSubmissions ? 'bg-[#238636]' : 'bg-[#21262d] border border-[#30363d]'
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-xs transform transition-transform ${
-                  config?.allowMultipleSubmissions ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
+          <label className="flex items-center justify-between gap-2 cursor-pointer">
+            <span className="text-xs text-[#c9d1d9]">New problems only (skip re-solves)</span>
+            <input
+              type="checkbox"
+              checked={Boolean(config?.exportNewOnly)}
+              onChange={() => handleToggleSetting('exportNewOnly')}
+              className="accent-[#238636] w-4 h-4 cursor-pointer"
+            />
+          </label>
 
-          {/* Toggle 3: Add comments to submissions */}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-[#c9d1d9] leading-tight">
-              Add explanation header & runtime comments
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={Boolean(config?.addSolutionComments)}
-              onClick={() => handleToggleSetting('addSolutionComments')}
-              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                config?.addSolutionComments ? 'bg-[#238636]' : 'bg-[#21262d] border border-[#30363d]'
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-xs transform transition-transform ${
-                  config?.addSolutionComments ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
+          <label className="flex items-center justify-between gap-2 cursor-pointer">
+            <span className="text-xs text-[#c9d1d9]">Include header &amp; stats comments</span>
+            <input
+              type="checkbox"
+              checked={config?.addSolutionComments !== false}
+              onChange={() => handleToggleSetting('addSolutionComments')}
+              className="accent-[#238636] w-4 h-4 cursor-pointer"
+            />
+          </label>
 
-          {/* Manual Trigger Button */}
-          <div className="pt-2 border-t border-[#30363d] flex items-center justify-between">
-            <div className="text-[11px] text-[#8b949e]">
-              Synchronize pending queue
-            </div>
+          <div className="pt-2 border-t border-[#30363d] flex items-center justify-between gap-2">
+            <span className="text-[10px] text-[#8b949e] flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {config?.lastBackendSyncAt
+                ? `Updated ${new Date(config.lastBackendSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : 'Not synced yet'}
+            </span>
             <button
               onClick={handleForceSync}
               disabled={isSyncing}
-              className="px-3 py-1 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-[#f0f6fc] rounded-md font-medium text-xs flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
+              className="px-3 py-1 bg-[#238636] hover:bg-[#2ea043] text-white rounded-md font-semibold text-xs flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer"
             >
-              <RotateCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-[#3fb950]' : ''}`} />
+              <RotateCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
             </button>
           </div>
         </div>
 
-        {/* 4. Active Target & Status */}
-        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[#8b949e]">Target Repository</span>
-            <span className="font-mono text-[#58a6ff] text-[11px] truncate max-w-[190px]">
-              {targetRepo}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[#8b949e]">GitHub User</span>
+        {/* 4. GitHub Identity, Repo & Last Synced Commit */}
+        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-[#8b949e]">GitHub Account</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[#f0f6fc] text-[11px]">
-                @{username}
+              <span className="font-mono text-[#f0f6fc]">
+                {username ? `@${username}` : 'Not connected'}
               </span>
+              {config?.tokenHealthStatus && config.tokenHealthStatus !== 'VALID' && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-[#f85149]/20 text-[#ff7b72]">
+                  {config.tokenHealthStatus}
+                </span>
+              )}
               {config?.authToken && (
                 <button
                   onClick={handleLogout}
                   className="text-[10px] text-[#f85149] hover:underline cursor-pointer"
-                  title="Sign out from extension"
                 >
                   Sign out
                 </button>
@@ -585,28 +515,49 @@ export function App() {
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[#30363d] text-[11px] text-[#8b949e] flex items-center justify-between">
-            <span>Last Synced Solution:</span>
-            <span className="text-[#3fb950] font-semibold truncate max-w-[170px]">
-              {lastSynced ? `${lastSynced.questionTitle} (${lastSynced.language})` : 'None synced yet'}
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-[#8b949e]">Target Repo</span>
+            <span className="font-mono text-[#58a6ff] truncate max-w-[205px]">
+              {targetRepo ? `${targetRepo} (${targetBranch})` : 'None selected'}
             </span>
+          </div>
+
+          <div className="pt-1.5 border-t border-[#30363d] flex items-center justify-between text-[11px] gap-2">
+            <span className="text-[#8b949e] flex-shrink-0">Last Commit:</span>
+            {lastSynced ? (
+              <a
+                href={
+                  lastSynced.commitUrl ||
+                  (targetRepo ? `https://github.com/${targetRepo}` : '#')
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="text-[#3fb950] hover:underline font-semibold truncate flex items-center gap-1"
+              >
+                <span className="truncate">
+                  {lastSynced.questionTitle} ({lastSynced.language})
+                </span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+              </a>
+            ) : (
+              <span className="text-[#8b949e]">None pushed yet</span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 5. Footer with Website Redirection */}
-      <div className="mt-auto px-4 py-2.5 bg-[#161b22] border-t border-[#30363d] flex items-center justify-between text-[11px]">
+      {/* 5. Footer */}
+      <div className="mt-auto px-4 py-2 bg-[#161b22] border-t border-[#30363d] flex items-center justify-between text-[11px]">
         <button
-          onClick={openDashboard}
-          className="text-[#c9d1d9] hover:text-[#58a6ff] font-medium flex items-center gap-1.5 transition cursor-pointer"
+          onClick={openOptions}
+          className="text-[#c9d1d9] hover:text-[#58a6ff] font-medium cursor-pointer"
         >
-          <Globe className="w-3.5 h-3.5" />
-          <span>Open Main Website</span>
+          Notification &amp; Import Settings
         </button>
 
-        {config?.targetRepoFullName ? (
+        {targetRepo ? (
           <a
-            href={`https://github.com/${config.targetRepoFullName}`}
+            href={`https://github.com/${targetRepo}`}
             target="_blank"
             rel="noreferrer"
             className="text-[#58a6ff] hover:underline flex items-center gap-1 font-semibold"
@@ -616,7 +567,7 @@ export function App() {
           </a>
         ) : (
           <button
-            onClick={openRepository}
+            onClick={() => openUrl(`${webAppUrl}/?tab=repos`)}
             className="text-[#58a6ff] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
           >
             <Github className="w-3.5 h-3.5" />

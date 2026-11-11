@@ -36,9 +36,40 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
     const startTime = Date.now();
     logger.info(`[Handler:LEETCODE_EXPORT] Running for user ${userId}`, { payload });
 
-    // If a specific submission was provided in the payload, export it
-    if (payload.submissionId) {
-      if (!payload.code || typeof payload.code !== 'string' || payload.code.trim().length === 0) {
+    // If a specific submission was provided in the payload, load from DB only when code field was omitted (queue retry)
+    if (payload.submissionId || payload.submissionDbId) {
+      let submissionInput = payload as any;
+      if (submissionInput.code === undefined) {
+        const stored = await LeetCodeSubmission.findOne({
+          userId: new Types.ObjectId(userId),
+          ...(payload.submissionDbId && Types.ObjectId.isValid(payload.submissionDbId)
+            ? { _id: new Types.ObjectId(payload.submissionDbId) }
+            : { submissionId: payload.submissionId })
+        });
+        if (!stored || !stored.code || stored.code.trim().length === 0) {
+          return {
+            success: false,
+            summary: `Export rejected for ${payload.questionTitle || payload.submissionId}: Submission code is missing or empty.`,
+            durationMs: Date.now() - startTime
+          };
+        }
+        submissionInput = {
+          submissionId: stored.submissionId,
+          questionId: stored.questionId,
+          questionTitle: stored.questionTitle,
+          questionSlug: stored.questionSlug,
+          difficulty: stored.difficulty,
+          language: stored.language,
+          code: stored.code,
+          runtimeMs: stored.runtimeMs,
+          runtimePercentile: stored.runtimePercentile,
+          memoryBytes: stored.memoryBytes,
+          memoryPercentile: stored.memoryPercentile,
+          submittedAt: stored.submittedAt.toISOString(),
+          topicTags: stored.topicTags,
+          problemUrl: stored.problemUrl
+        };
+      } else if (typeof submissionInput.code !== 'string' || submissionInput.code.trim().length === 0) {
         logger.warn(`[Handler:LEETCODE_EXPORT] Refusing export for ${payload.submissionId}: empty or missing source code`);
         return {
           success: false,
@@ -47,34 +78,28 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
         };
       }
 
-      const result = await processLeetCodeSubmission(userId, payload as any);
-      await createNotification({
-        userId,
-        category: 'EXPORT_SUCCESS',
-        severity: 'SUCCESS',
-        title: 'LeetCode Solution Exported',
-        message: `Exported solution for ${payload.questionTitle || payload.questionSlug} to GitHub.`,
-        link: result.commitUrl,
-        metadata: { submissionId: payload.submissionId, commitSha: result.commitSha }
-      });
+      const result = await processLeetCodeSubmission(userId, submissionInput, { forceExport: true });
       return {
-        success: true,
-        summary: `Exported solution ${payload.submissionId} (commit: ${result.commitSha?.slice(0, 7) || 'done'})`,
+        success: result.syncStatus === 'SYNCED' || result.syncStatus === 'SKIPPED',
+        summary: `Exported solution ${submissionInput.submissionId} (status: ${result.syncStatus}, commit: ${result.commitSha?.slice(0, 7) || 'n/a'})`,
         data: result,
         durationMs: Date.now() - startTime
       };
     }
 
-    // Otherwise find any pending accepted submissions that need export
+    // Otherwise find any pending or failed accepted submissions that have code and need recovery
     const pending = await LeetCodeSubmission.find({
       userId: new Types.ObjectId(userId),
-      syncStatus: 'PENDING'
-    }).limit(10);
+      syncStatus: { $in: ['PENDING', 'FAILED'] },
+      code: { $exists: true, $ne: '' }
+    })
+      .sort({ submittedAt: -1 })
+      .limit(15);
 
     if (pending.length === 0) {
       return {
         success: true,
-        summary: 'No pending LeetCode submissions found for export.',
+        summary: 'No pending or failed LeetCode submissions with code found for export.',
         durationMs: Date.now() - startTime
       };
     }
@@ -84,34 +109,26 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
 
     for (const sub of pending) {
       try {
-        if (!sub.code || sub.code.trim().length === 0) {
-          sub.syncStatus = 'FAILED';
-          sub.syncErrorMessage = 'Missing source code for submission';
-          await sub.save();
-          await createNotification({
-            userId,
-            category: 'MISSING_SOURCE',
-            severity: 'WARNING',
-            title: 'Export Skipped: Missing Code',
-            message: `Submission for ${sub.questionTitle} had no source code attached.`
-          });
-          continue;
-        }
-
-        const res = await processLeetCodeSubmission(userId, {
-          submissionId: sub.submissionId,
-          questionId: sub.questionId,
-          questionTitle: sub.questionTitle,
-          questionSlug: sub.questionSlug,
-          difficulty: sub.difficulty,
-          language: sub.language,
-          code: sub.code,
-          runtimeMs: sub.runtimeMs,
-          runtimePercentile: sub.runtimePercentile,
-          memoryBytes: sub.memoryBytes,
-          memoryPercentile: sub.memoryPercentile,
-          submittedAt: sub.submittedAt.toISOString()
-        });
+        await processLeetCodeSubmission(
+          userId,
+          {
+            submissionId: sub.submissionId,
+            questionId: sub.questionId,
+            questionTitle: sub.questionTitle,
+            questionSlug: sub.questionSlug,
+            difficulty: sub.difficulty,
+            language: sub.language,
+            code: sub.code,
+            runtimeMs: sub.runtimeMs,
+            runtimePercentile: sub.runtimePercentile,
+            memoryBytes: sub.memoryBytes,
+            memoryPercentile: sub.memoryPercentile,
+            submittedAt: sub.submittedAt.toISOString(),
+            topicTags: sub.topicTags,
+            problemUrl: sub.problemUrl
+          },
+          { forceExport: true }
+        );
         exported++;
       } catch (err: any) {
         errors.push(`${sub.questionTitle}: ${err.message}`);
@@ -168,39 +185,44 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
   },
 
   /**
-   * 3. Scheduled local backups.
-   * Safety: Creates a genuine backup branch/tag with [streakforge-backup] label.
-   * Strictly excluded from coding streak calculations.
+   * 3. Export & configuration snapshot audit.
+   * Note: Strictly records repository metadata & submission sync state summary (never fakes Git commits or inflates streaks).
    */
   LOCAL_BACKUP: async (userId, payload) => {
     const startTime = Date.now();
-    logger.info(`[Handler:LOCAL_BACKUP] Running scheduled backup for user ${userId}`, { payload });
+    logger.info(`[Handler:LOCAL_BACKUP] Recording metadata snapshot for user ${userId}`, { payload });
 
-    const targetRepos = await RepositoryConnection.find({
-      userId: new Types.ObjectId(userId)
-    }).limit(5);
+    const [targetRepos, submissionCount, syncedCount] = await Promise.all([
+      RepositoryConnection.find({ userId: new Types.ObjectId(userId) }).limit(10),
+      LeetCodeSubmission.countDocuments({ userId: new Types.ObjectId(userId) }),
+      LeetCodeSubmission.countDocuments({ userId: new Types.ObjectId(userId), syncStatus: 'SYNCED' })
+    ]);
+
+    if (targetRepos.length === 0 && submissionCount === 0) {
+      return {
+        success: true,
+        summary: 'Skipped snapshot: no connected repositories or LeetCode submissions yet.',
+        durationMs: Date.now() - startTime
+      };
+    }
 
     await logAuditEvent({
       userId,
       component: 'API',
-      action: 'SCHEDULED_BACKUP_EXECUTED',
+      action: 'METADATA_SNAPSHOT_RECORDED',
       status: 'SUCCESS',
-      description: `Executed scheduled repository backup snapshot across ${targetRepos.length} repositories.`,
-      metadata: { repos: targetRepos.map((r) => r.repoFullName) }
-    });
-
-    await createNotification({
-      userId,
-      category: 'BACKUP_COMPLETED',
-      severity: 'INFO',
-      title: 'Scheduled Backup Completed',
-      message: `Repository safety backup completed for ${targetRepos.length} repositories.`
+      description: `Recorded StreakForge state snapshot (${targetRepos.length} repo(s), ${syncedCount}/${submissionCount} synced submissions).`,
+      metadata: {
+        repos: targetRepos.map((r) => r.repoFullName),
+        submissionCount,
+        syncedCount
+      }
     });
 
     return {
       success: true,
-      summary: `Created safety backup snapshot for ${targetRepos.length} connected repositories.`,
-      data: { backupCount: targetRepos.length },
+      summary: `State snapshot verified: ${targetRepos.length} connected repo(s), ${syncedCount}/${submissionCount} synced solutions.`,
+      data: { repoCount: targetRepos.length, submissionCount, syncedCount },
       durationMs: Date.now() - startTime
     };
   },
@@ -327,20 +349,27 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
   },
 
   /**
-   * 7. Daily reminders.
+   * 7. Daily reminders (checks user notification preferences).
    */
   DAILY_REMINDERS: async (userId, payload) => {
     const startTime = Date.now();
-    logger.info(`[Handler:DAILY_REMINDERS] Evaluating daily streak reminders for user ${userId}`);
+    logger.info(`[Handler:DAILY_REMINDERS] Evaluating daily streak reminders for user ${userId}`, { payload });
+
+    const user = await User.findById(userId);
+    const notifPrefs = user?.notificationPreferences as any;
+    const allowDaily = notifPrefs?.inApp !== false && notifPrefs?.dailySummary !== false;
+    const allowStreakWarning = notifPrefs?.inApp !== false && notifPrefs?.streakWarning !== false;
 
     const reminders = await ReminderService.generateReminders(userId);
     let createdCount = 0;
 
     for (const r of reminders) {
       if (r.urgency === 'WARNING' || r.urgency === 'CRITICAL') {
+        const isStreak = r.type === 'NO_ACTIVITY_TODAY';
+        if ((isStreak && !allowStreakWarning) || (!isStreak && !allowDaily)) continue;
         await createNotification({
           userId,
-          category: r.type === 'NO_ACTIVITY_TODAY' ? 'STREAK_WARNING' : 'GENERAL',
+          category: isStreak ? 'STREAK_WARNING' : 'GENERAL',
           severity: r.urgency === 'CRITICAL' ? 'ERROR' : 'WARNING',
           title: r.title,
           message: r.message,
@@ -359,13 +388,16 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
   },
 
   /**
-   * 8. Weekly analytics generation.
+   * 8. Weekly analytics generation (checks user notification preferences).
    */
   WEEKLY_ANALYTICS: async (userId, payload) => {
     const startTime = Date.now();
-    logger.info(`[Handler:WEEKLY_ANALYTICS] Computing weekly score and analytics for user ${userId}`);
+    logger.info(`[Handler:WEEKLY_ANALYTICS] Computing weekly score and analytics for user ${userId}`, { payload });
 
-    const overview = await getStreakOverview(userId);
+    const [overview, user] = await Promise.all([
+      getStreakOverview(userId),
+      User.findById(userId)
+    ]);
 
     await logAuditEvent({
       userId,
@@ -380,14 +412,17 @@ export const JOB_HANDLERS: Record<AutomationType, JobHandlerFn> = {
       }
     });
 
-    await createNotification({
-      userId,
-      category: 'GENERAL',
-      severity: 'INFO',
-      title: 'Weekly Analytics Ready',
-      message: `Your weekly coding score is ${overview.weeklyActivityScore}/100 with a ${overview.currentStreak}-day active streak.`,
-      link: '/?tab=analytics'
-    });
+    const notifPrefs = user?.notificationPreferences as any;
+    if (notifPrefs?.inApp !== false && notifPrefs?.weeklyReport !== false) {
+      await createNotification({
+        userId,
+        category: 'GENERAL',
+        severity: 'INFO',
+        title: 'Weekly Analytics Ready',
+        message: `Your weekly coding score is ${overview.weeklyActivityScore}/100 with a ${overview.currentStreak}-day active streak.`,
+        link: '/?tab=reports'
+      });
+    }
 
     return {
       success: true,

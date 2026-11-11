@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Settings,
   FolderGit2,
   KeyRound,
   ShieldCheck,
@@ -11,79 +10,87 @@ import {
   Bell,
   Code2,
   ExternalLink,
-  Laptop,
-  Flame,
-  Archive,
-  HelpCircle
+  History
 } from 'lucide-react';
-import { StorageManager } from '../shared/storage';
+import { SOLUTION_STRUCTURE_PRESETS } from '@streakforge/config';
+import { StorageManager, DEFAULT_SERVER_URL, DEFAULT_WEB_APP_URL } from '../shared/storage';
 import { DuplicateRegistry } from '../shared/duplicateRegistry';
 import { resolveSolutionPath } from '../shared/templateResolver';
 import type {
   ExtensionConfig,
   StateTransitionLog,
-  FailedSubmission
+  ExtensionNotificationItem,
+  DetectedSubmission
 } from '../shared/types';
 
 export function Options() {
   const [config, setConfig] = useState<ExtensionConfig | null>(null);
   const [authToken, setAuthToken] = useState<string>('');
-  const [serverUrl, setServerUrl] = useState<string>('https://streakforge-api-5uhs.onrender.com');
+  const [serverUrl, setServerUrl] = useState<string>(DEFAULT_SERVER_URL);
   const [targetRepo, setTargetRepo] = useState<string>('');
   const [targetBranch, setTargetBranch] = useState<string>('main');
-  const [template, setTemplate] = useState<string>(
-    'leetcode-solutions/{Language}/{Topic}/{id}_{slug}{ext}'
-  );
+  const [template, setTemplate] = useState<string>('solutions/{difficulty}/{id}-{slug}');
   const [archiveFailed, setArchiveFailed] = useState<boolean>(true);
+  const [notifySolved, setNotifySolved] = useState<boolean>(true);
   const [notifySuccess, setNotifySuccess] = useState<boolean>(true);
+  const [notifyFailure, setNotifyFailure] = useState<boolean>(true);
   const [autoSync, setAutoSync] = useState<boolean>(true);
 
-  // Status & Telemetry
+  const [permissionLevel, setPermissionLevel] = useState<string>('checking');
+  const [notifications, setNotifications] = useState<ExtensionNotificationItem[]>([]);
+  const [pendingQueue, setPendingQueue] = useState<DetectedSubmission[]>([]);
   const [registryCount, setRegistryCount] = useState<number>(0);
   const [transitionLogs, setTransitionLogs] = useState<StateTransitionLog[]>([]);
-  const [failedArchive, setFailedArchive] = useState<FailedSubmission[]>([]);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
-  // Load existing configuration
-  useEffect(() => {
-    (async () => {
-      const cfg = await StorageManager.getConfig();
-      setConfig(cfg);
-      setAuthToken(cfg.authToken || '');
-      setServerUrl(cfg.serverUrl || 'https://streakforge-api-5uhs.onrender.com');
-      setTargetRepo(cfg.targetRepoFullName || '');
-      setTargetBranch(cfg.targetBranch || 'main');
-      setTemplate(
-        cfg.folderStructureTemplate ||
-        'leetcode-solutions/{Language}/{Topic}/{id}_{slug}{ext}'
-      );
-      setArchiveFailed(cfg.archiveFailedSubmissionsLocally !== false);
-      setNotifySuccess(cfg.notifyOnSuccess !== false);
-      setAutoSync(cfg.autoSyncEnabled !== false);
+  const loadAll = useCallback(async () => {
+    const [cfg, count, logs, notifs, queue] = await Promise.all([
+      StorageManager.getConfig(),
+      DuplicateRegistry.count(),
+      StorageManager.getTransitionLogs(),
+      StorageManager.getNotificationHistory(),
+      StorageManager.getPendingQueue()
+    ]);
 
-      const count = await DuplicateRegistry.count();
-      setRegistryCount(count);
+    setConfig(cfg);
+    setAuthToken(cfg.authToken || '');
+    setServerUrl(cfg.serverUrl || DEFAULT_SERVER_URL);
+    setTargetRepo(cfg.targetRepoFullName || '');
+    setTargetBranch(cfg.targetBranch || 'main');
+    setTemplate(cfg.folderStructureTemplate || 'solutions/{difficulty}/{id}-{slug}');
+    setArchiveFailed(cfg.archiveFailedSubmissionsLocally !== false);
+    setNotifySolved(cfg.notifyOnSolved !== false);
+    setNotifySuccess(cfg.notifyOnSuccess !== false);
+    setNotifyFailure(cfg.notifyOnSyncFailure !== false);
+    setAutoSync(cfg.autoSyncEnabled !== false);
+    setRegistryCount(count);
+    setTransitionLogs(logs.slice(0, 20));
+    setNotifications(notifs.slice(0, 25));
+    setPendingQueue(queue);
 
-      const logs = await StorageManager.getTransitionLogs();
-      setTransitionLogs(logs.slice(0, 20));
-
-      const failed = await StorageManager.getFailedArchive();
-      setFailedArchive(failed.slice(0, 10));
-    })();
+    if (typeof chrome !== 'undefined' && chrome.notifications?.getPermissionLevel) {
+      chrome.notifications.getPermissionLevel((level) => setPermissionLevel(level));
+    } else {
+      setPermissionLevel('unavailable');
+    }
   }, []);
 
-  // Compute live path preview from template
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
   const previewPath = resolveSolutionPath(template, {
-    language: 'python3',
+    language: 'java',
     topic: 'Arrays',
     difficulty: 'Easy',
     questionId: '1',
     questionSlug: 'two-sum'
   });
 
-  // Save changes
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const updated = await StorageManager.updateConfig({
@@ -93,49 +100,53 @@ export function Options() {
       targetBranch: targetBranch.trim() || 'main',
       folderStructureTemplate: template.trim(),
       archiveFailedSubmissionsLocally: archiveFailed,
+      notifyOnSolved: notifySolved,
       notifyOnSuccess: notifySuccess,
+      notifyOnSyncFailure: notifyFailure,
       autoSyncEnabled: autoSync
     });
     setConfig(updated);
+
+    if (authToken.trim() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        type: 'PUSH_PREFERENCES_TO_BACKEND',
+        payload: {
+          syncPreferences: {
+            autoSyncEnabled: autoSync,
+            folderPattern: template.trim()
+          },
+          notificationPreferences: {
+            problemSolved: notifySolved,
+            syncSuccess: notifySuccess,
+            syncFailure: notifyFailure
+          }
+        }
+      });
+    }
+
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
-  // Test API Connection
   const handleTestConnection = async () => {
     if (!authToken.trim()) {
       setTestResult({ success: false, message: 'Please enter a valid Bearer token.' });
       return;
     }
-
     setIsTesting(true);
     setTestResult(null);
-
     try {
       const url = `${serverUrl.trim().replace(/\/+$/, '')}/api/v1/auth/me`;
       const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${authToken.trim()}`
-        }
+        headers: { Authorization: `Bearer ${authToken.trim()}` },
+        signal: AbortSignal.timeout(12000)
       });
       const data = await res.json();
-
       if (res.ok && data.success) {
         setTestResult({
           success: true,
-          message: `Connected successfully as @${data.data?.user?.username || 'user'}`
+          message: `Authenticated as @${data.data?.user?.username || 'user'} (GitHub token: ${data.data?.user?.githubTokenHealth?.status || 'checked'})`
         });
-
-        // Save verified user profile
-        if (data.data?.user) {
-          await StorageManager.updateConfig({
-            userProfile: {
-              username: data.data.user.username,
-              email: data.data.user.email,
-              avatarUrl: data.data.user.avatarUrl
-            }
-          });
-        }
       } else {
         setTestResult({
           success: false,
@@ -143,27 +154,65 @@ export function Options() {
         });
       }
     } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: `Cannot connect to API server: ${err.message}`
-      });
+      setTestResult({ success: false, message: `Cannot reach API server: ${err.message}` });
     } finally {
       setIsTesting(false);
     }
   };
 
-  // Clear duplicate cache
+  const handleTestNotification = () => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'TEST_NOTIFICATION' }, () => {
+        setTimeout(loadAll, 400);
+      });
+    }
+  };
+
+  const handleImportHistory = () => {
+    if (!config?.authToken) {
+      setImportStatus('Authenticate with StreakForge first before importing LeetCode history.');
+      return;
+    }
+    setIsImporting(true);
+    setImportStatus('Fetching accepted LeetCode submissions from your active leetcode.com session...');
+    chrome.runtime.sendMessage(
+      { type: 'IMPORT_LEETCODE_HISTORY', payload: { limit: 100, autoExportToGitHub: false } },
+      (res) => {
+        setIsImporting(false);
+        if (!res?.success) {
+          setImportStatus(res?.error || 'History import failed.');
+          return;
+        }
+        const d = res.data || {};
+        setImportStatus(
+          `Imported ${d.importedCount || 0} accepted submission(s) (${d.skippedDuplicates || 0} already tracked). Visit LeetCode Sync on the dashboard to review or push to GitHub.`
+        );
+        loadAll();
+      }
+    );
+  };
+
+  const handleClearQueue = async () => {
+    if (confirm('Clear local extension retry queue? Server records on the dashboard are unaffected.')) {
+      await StorageManager.setPendingQueue([]);
+      loadAll();
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    await StorageManager.clearNotifications();
+    setNotifications([]);
+  };
+
   const handleClearRegistry = async () => {
-    if (confirm('Are you sure you want to clear the local duplicate registry?')) {
+    if (confirm('Clear local duplicate cache?')) {
       await DuplicateRegistry.clear();
       setRegistryCount(0);
-      alert('Duplicate registry cleared.');
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8 font-sans">
-      {/* Top Header */}
+    <div className="max-w-4xl mx-auto p-6 space-y-7 font-sans bg-slate-950 text-slate-100 min-h-screen">
       <div className="flex items-center justify-between border-b border-slate-800 pb-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center font-black text-slate-950 text-lg shadow-sm">
@@ -171,16 +220,16 @@ export function Options() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white tracking-tight">
-              StreakForge LeetCode Sync Settings
+              StreakForge V4 Extension Settings
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Configure automatic authentic source-code export, path templates, and security rules
+              Persistent auth, notifications, LeetCode session import, and GitHub path formatting
             </p>
           </div>
         </div>
 
         <a
-          href={config?.webAppUrl || 'https://streak-forge-six.vercel.app'}
+          href={config?.webAppUrl || DEFAULT_WEB_APP_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-semibold text-slate-200 transition"
@@ -191,37 +240,31 @@ export function Options() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* 1. Authentication & API Endpoint */}
+        {/* 1. Auth & Server */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
           <h2 className="text-sm font-bold text-white flex items-center gap-2">
             <KeyRound className="w-4 h-4 text-emerald-400" />
-            <span>StreakForge API &amp; Authentication</span>
+            <span>StreakForge API &amp; Session Status</span>
           </h2>
-          <p className="text-xs text-slate-400">
-            Copy your session token from the StreakForge web app (<span className="text-slate-200 font-mono">Settings &rarr; LeetCode Extension</span>).
-          </p>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                API Server URL
+                Backend Server URL
               </label>
               <input
-                type="text"
+                type="url"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
                 required
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 outline-none focus:border-emerald-500"
               />
             </div>
-
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Bearer Token
+                Session Bearer Token (auto-paired via Dashboard)
               </label>
               <input
                 type="password"
-                placeholder="Paste Bearer Token..."
                 value={authToken}
                 onChange={(e) => setAuthToken(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 outline-none focus:border-emerald-500"
@@ -229,21 +272,21 @@ export function Options() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={handleTestConnection}
-              disabled={isTesting || !authToken}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg transition disabled:opacity-50"
+              disabled={isTesting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white rounded-lg transition"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
-              <span>{isTesting ? 'Verifying...' : 'Test Connection'}</span>
+              <span>Verify Connection &amp; GitHub Token</span>
             </button>
-
             {testResult && (
               <span
-                className={`text-xs font-medium flex items-center gap-1.5 ${testResult.success ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
+                className={`text-xs font-medium flex items-center gap-1.5 ${
+                  testResult.success ? 'text-emerald-400' : 'text-rose-400'
+                }`}
               >
                 {testResult.success ? (
                   <CheckCircle2 className="w-4 h-4" />
@@ -256,219 +299,273 @@ export function Options() {
           </div>
         </div>
 
-        {/* 2. Target Repository & Branch */}
+        {/* 2. Repository & Folder Structure */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
           <h2 className="text-sm font-bold text-white flex items-center gap-2">
             <FolderGit2 className="w-4 h-4 text-emerald-400" />
-            <span>Target GitHub Repository</span>
+            <span>Target Repository &amp; Structure</span>
           </h2>
-          <p className="text-xs text-slate-400">
-            Specify the GitHub repository and branch where accepted LeetCode solutions will be committed.
-          </p>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Repository Full Name
+                Target Repository (owner/repo)
               </label>
               <input
                 type="text"
-                placeholder="e.g. username/leetcode-solutions"
                 value={targetRepo}
                 onChange={(e) => setTargetRepo(e.target.value)}
+                placeholder="owner/repo"
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 outline-none focus:border-emerald-500"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Target Branch
-              </label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Target Branch</label>
               <input
                 type="text"
-                placeholder="main"
                 value={targetBranch}
                 onChange={(e) => setTargetBranch(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 outline-none focus:border-emerald-500"
               />
             </div>
           </div>
-        </div>
 
-        {/* 3. Folder Structure Customization with Live Preview */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <Code2 className="w-4 h-4 text-emerald-400" />
-            <span>Folder Structure Template</span>
-          </h2>
-          <p className="text-xs text-slate-400">
-            Customize how solution files and READMEs are structured in your GitHub repository.
-          </p>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Path Pattern Template
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-300">
+              Folder / File Path Pattern
             </label>
             <input
               type="text"
               value={template}
               onChange={(e) => setTemplate(e.target.value)}
-              required
               className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 outline-none focus:border-emerald-500"
             />
-          </div>
-
-          {/* Live Path Preview */}
-          <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1 text-xs font-mono">
-            <div className="text-[11px] text-slate-400 font-sans font-semibold">Live Preview (Example: Two Sum in Python):</div>
-            <div className="text-emerald-400">📄 {previewPath.codeFilePath}</div>
-            <div className="text-slate-400">📘 {previewPath.readmeFilePath}</div>
-          </div>
-
-          <div className="text-[11px] text-slate-400 space-y-1 bg-slate-950/50 p-3 rounded-lg border border-slate-800">
-            <div className="font-semibold text-slate-300">Available Template Variables:</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-[10px]">
-              <div><code className="text-emerald-400">&#123;Language&#125;</code> (e.g. Python3)</div>
-              <div><code className="text-emerald-400">&#123;Topic&#125;</code> (e.g. Arrays)</div>
-              <div><code className="text-emerald-400">&#123;Difficulty&#125;</code> (e.g. Easy)</div>
-              <div><code className="text-emerald-400">&#123;id&#125;</code> (e.g. 001)</div>
-              <div><code className="text-emerald-400">&#123;slug&#125;</code> (e.g. two-sum)</div>
-              <div><code className="text-emerald-400">&#123;ext&#125;</code> (e.g. .py)</div>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {SOLUTION_STRUCTURE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setTemplate(`${preset.folderPattern}/${preset.fileNamingPattern}`)}
+                  className="px-2 py-1 text-[11px] bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded text-slate-300"
+                >
+                  {preset.example}
+                </button>
+              ))}
+            </div>
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono space-y-1">
+              <div className="text-[11px] text-slate-400 font-sans">Live Preview:</div>
+              <div className="text-emerald-400">{previewPath.codeFilePath}</div>
+              <div className="text-slate-400">{previewPath.readmeFilePath}</div>
             </div>
           </div>
         </div>
 
-        {/* 4. Sync & Privacy Preferences */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Synchronization &amp; Privacy Preferences</span>
-          </h2>
+        {/* 3. Background Chrome Notifications & Preferences */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <Bell className="w-4 h-4 text-emerald-400" />
+              <span>Background Chrome Notifications</span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-slate-300">
+                Permission: <strong>{permissionLevel}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleTestNotification}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded text-emerald-400"
+              >
+                Send Test Notification
+              </button>
+            </div>
+          </div>
 
-          <div className="space-y-3 pt-1">
-            <label className="flex items-start gap-2.5 cursor-pointer">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={autoSync}
-                onChange={(e) => setAutoSync(e.target.checked)}
-                className="mt-0.5 rounded text-emerald-500"
+                checked={notifySolved}
+                onChange={(e) => setNotifySolved(e.target.checked)}
+                className="accent-emerald-500"
               />
-              <div>
-                <span className="text-xs font-semibold text-slate-200 block">
-                  Enable Automatic Synchronization
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Automatically export accepted solutions upon detection without requiring manual triggers.
-                </span>
-              </div>
+              <span>Notify when Accepted problem is detected</span>
             </label>
-
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={archiveFailed}
-                onChange={(e) => setArchiveFailed(e.target.checked)}
-                className="mt-0.5 rounded text-emerald-500"
-              />
-              <div>
-                <span className="text-xs font-semibold text-slate-200 block">
-                  Archive Failed Attempts Locally in Extension
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Maintains a private local record of Wrong Answer, TLE, and Compile Errors. Never pushed to GitHub.
-                </span>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-2.5 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={notifySuccess}
                 onChange={(e) => setNotifySuccess(e.target.checked)}
-                className="mt-0.5 rounded text-emerald-500"
+                className="accent-emerald-500"
               />
-              <div>
-                <span className="text-xs font-semibold text-slate-200 block">
-                  Desktop Notifications
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Display a notification banner whenever a solution is committed to GitHub.
-                </span>
-              </div>
+              <span>Notify on confirmed GitHub commit</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifyFailure}
+                onChange={(e) => setNotifyFailure(e.target.checked)}
+                className="accent-emerald-500"
+              />
+              <span>Notify on GitHub sync failure / auth expiry</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoSync}
+                onChange={(e) => setAutoSync(e.target.checked)}
+                className="accent-emerald-500"
+              />
+              <span>Automatic GitHub sync on solve</span>
             </label>
           </div>
         </div>
 
-        {/* 5. Duplicate Prevention Registry Telemetry */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              Duplicate Prevention Registry
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Currently tracking <strong className="text-emerald-400 font-mono">{registryCount}</strong> unique synchronized submissions. Prevents duplicate commits.
-            </p>
+        {/* 4. Historical LeetCode Session Import */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <History className="w-4 h-4 text-emerald-400" />
+                <span>Import Historical LeetCode Solutions</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Backfills previously solved accepted submissions with source code from your active{' '}
+                <code>leetcode.com</code> browser session (up to 100 submissions per batch).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleImportHistory}
+              disabled={isImporting}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg disabled:opacity-50"
+            >
+              {isImporting ? 'Importing...' : 'Import Previous Solutions'}
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleClearRegistry}
-            className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-rose-500/10 hover:text-rose-400 text-xs font-semibold text-slate-300 rounded-lg transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Cache</span>
-          </button>
+          {importStatus && (
+            <div className="p-2.5 rounded bg-slate-950 border border-slate-800 text-xs text-slate-300">
+              {importStatus}
+            </div>
+          )}
         </div>
 
-        {/* 6. State Machine Audit Logs */}
-        {transitionLogs.length > 0 && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <RotateCw className="w-4 h-4 text-emerald-400" />
-              State Machine Audit Logs (Recent Transitions)
-            </h3>
-            <div className="space-y-1.5 max-h-48 overflow-y-auto font-mono text-[11px]">
-              {transitionLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="p-2 bg-slate-950 border border-slate-800/80 rounded flex items-center justify-between gap-2"
-                >
-                  <div className="truncate">
-                    <span className="text-slate-400 font-semibold">{log.fromState}</span>
-                    <span className="text-emerald-400 mx-1">&rarr;</span>
-                    <span className="text-emerald-400 font-bold">{log.toState}</span>
-                    {log.reason && (
-                      <span className="text-slate-400 ml-2 italic truncate">({log.reason})</span>
-                    )}
-                  </div>
-                  <span className="text-slate-400 text-[10px] flex-shrink-0">
-                    {new Date(log.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Save Bar */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+        <div className="flex items-center justify-end gap-3">
           {saveSuccess && (
             <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
               <CheckCircle2 className="w-4 h-4" />
-              Settings Saved Successfully
+              <span>Preferences Saved</span>
             </span>
           )}
-
           <button
             type="submit"
-            className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-bold text-xs rounded-lg transition shadow-xs"
+            className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg"
           >
-            Save All Preferences
+            Save Preferences
           </button>
         </div>
       </form>
+
+      {/* 5. Queue & Cache Diagnostics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+              <Code2 className="w-4 h-4 text-amber-400" />
+              Pending / Retry Queue ({pendingQueue.length})
+            </h3>
+            <button
+              type="button"
+              onClick={handleClearQueue}
+              className="text-xs text-slate-400 hover:text-rose-400 flex items-center gap-1"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear Queue
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Queued submissions retry automatically with exponential backoff every 5 minutes.
+          </p>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              Duplicate Registry ({registryCount})
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Tracks verified commits to prevent redundant pushes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleClearRegistry}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-rose-500/10 hover:text-rose-400 text-xs font-semibold rounded-lg"
+          >
+            Clear Cache
+          </button>
+        </div>
+      </div>
+
+      {/* 6. Extension Notification History */}
+      {notifications.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+              Notification History ({notifications.length})
+            </h3>
+            <button
+              type="button"
+              onClick={handleClearNotifications}
+              className="text-xs text-slate-400 hover:text-rose-400"
+            >
+              Clear History
+            </button>
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto text-xs">
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                className="p-2 bg-slate-950 border border-slate-800 rounded flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <span className="font-semibold text-slate-200">{n.title}</span>
+                  <span className="text-slate-400 ml-2">{n.message}</span>
+                </div>
+                <span className="text-[10px] text-slate-500 flex-shrink-0">
+                  {new Date(n.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 7. State Transition Logs */}
+      {transitionLogs.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+            Recent Sync State Transitions
+          </h3>
+          <div className="space-y-1 max-h-40 overflow-y-auto font-mono text-[11px]">
+            {transitionLogs.map((log) => (
+              <div
+                key={log.id}
+                className="p-1.5 bg-slate-950 border border-slate-800/80 rounded flex justify-between gap-2"
+              >
+                <span className="truncate">
+                  {log.fromState} &rarr; <strong className="text-emerald-400">{log.toState}</strong>{' '}
+                  {log.reason ? `(${log.reason})` : ''}
+                </span>
+                <span className="text-slate-500 text-[10px] flex-shrink-0">
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -30,7 +30,17 @@ interface HeaderProps {
 
 export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProps) {
   const { effectiveTheme, toggleTheme } = useTheme();
-  const { user, overview, refreshData, isLoading, backendError, connectedRepos, notifications } = useData();
+  const {
+    user,
+    overview,
+    refreshData,
+    isLoading,
+    isStaleData,
+    lastUpdatedAt,
+    backendError,
+    connectedRepos,
+    notifications
+  } = useData();
 
   const tabTitles: Record<string, string> = {
     overview: 'Developer Overview',
@@ -122,6 +132,33 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
             <Flame className={`w-3.5 h-3.5 ${verifiedStreak > 0 ? 'fill-emerald-500 text-emerald-500 animate-pulse' : 'text-theme-muted'}`} />
             <span className="tabular-nums font-mono">{verifiedStreak}d Streak</span>
           </div>
+
+          {/* Last Synced / Cache Freshness Indicator */}
+          {user && lastUpdatedAt && (
+            <span
+              className={`hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                isStaleData
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  : 'bg-theme-surface border-theme-border text-theme-muted'
+              }`}
+              title={`Last synced at ${new Date(lastUpdatedAt).toLocaleString()}`}
+            >
+              {isStaleData ? 'Cached • ' : ''}
+              {new Date(lastUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+
+          {/* GitHub Token Health Warning if expired/revoked */}
+          {user?.githubTokenHealth && !user.githubTokenHealth.valid && (
+            <button
+              type="button"
+              onClick={() => onTabChange('settings')}
+              className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 border border-rose-500/40 text-rose-400 hover:bg-rose-500/25 cursor-pointer"
+              title={user.githubTokenHealth.message || 'GitHub authorization expired'}
+            >
+              GitHub {user.githubTokenHealth.status}
+            </button>
+          )}
 
           {/* Quick Refresh Button */}
           <button

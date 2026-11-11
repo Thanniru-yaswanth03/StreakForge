@@ -247,6 +247,30 @@ router.post('/jobs/:id/retry', async (req: AuthenticatedRequest, res: Response, 
 });
 
 /**
+ * DELETE /api/v1/automations/jobs
+ * Clear completed/failed/cancelled automation job logs (never deletes active running jobs).
+ */
+router.delete('/jobs', async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const scope = (req.query.scope as string) || 'finished';
+    const statuses =
+      scope === 'queue'
+        ? ['QUEUED', 'RETRYING', 'FAILED']
+        : ['COMPLETED', 'FAILED', 'CANCELLED'];
+    const result = await JobRecord.deleteMany({
+      userId: new Types.ObjectId(req.userId!),
+      status: { $in: statuses }
+    });
+    res.json({
+      success: true,
+      data: { deletedCount: result.deletedCount }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/v1/automations/stats
  * Queue statistics and success rate.
  */
