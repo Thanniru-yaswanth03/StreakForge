@@ -115,7 +115,8 @@ const UserSchema = new Schema<IUserDocument>(
       enabledModules: { type: [String], default: () => [...DEFAULT_UI_ENABLED_MODULES] },
       sidebarOrder: { type: [String], default: () => [...DEFAULT_SIDEBAR_ORDER] },
       compactSidebar: { type: Boolean, default: false },
-      theme: { type: String, enum: ['dark', 'light'], default: 'dark' }
+      theme: { type: String, enum: ['dark', 'light'], default: 'dark' },
+      customized: { type: Boolean, default: false }
     },
     leetcodeUsername: { type: String, default: null },
     leetcodeStats: { type: Schema.Types.Mixed, default: null },

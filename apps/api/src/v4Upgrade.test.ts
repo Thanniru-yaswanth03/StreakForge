@@ -66,6 +66,8 @@ describe('StreakForge V4.0 End-to-End Scenarios (API Layer)', () => {
     expect(meRes.status).toBe(200);
     expect(meRes.body.data.user.githubTokenHealth.status).toBe('MISSING');
     expect(meRes.body.data.user.syncPreferences.exportPolicy).toBe('ALLOW_MULTIPLE');
+    expect(meRes.body.data.user.uiPreferences.enabledModules).toContain('mock');
+    expect(meRes.body.data.user.uiPreferences.enabledModules).toContain('curriculum');
     expect(meRes.body.data.user.sessionExpiresAt).toBeTruthy();
 
     // 2. Verify sliding /auth/refresh issues new token without re-login
@@ -105,6 +107,9 @@ describe('StreakForge V4.0 End-to-End Scenarios (API Layer)', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(resetRes.status).toBe(200);
     expect(resetRes.body.data.syncPreferences.exportPolicy).toBe('ALLOW_MULTIPLE');
+    expect(resetRes.body.data.uiPreferences.customized).toBe(false);
+    expect(resetRes.body.data.uiPreferences.enabledModules).toContain('mock');
+    expect(resetRes.body.data.uiPreferences.enabledModules).toContain('curriculum');
   });
 
   // Scenario 2 & 3: Repository Endpoints Validation & Zero Hardcoded Owner

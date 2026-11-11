@@ -63,12 +63,15 @@ export function Sidebar({ currentTab, onTabChange, mobileOpen, onMobileClose }: 
   const totalLeetCode = leetcodeStats?.totalSolved ?? (user?.leetcodeStats?.totalSolved ?? 0);
   const currentStreak = user ? (overview?.currentStreak ?? 0) : 0;
 
-  const enabledModules = user?.uiPreferences?.enabledModules?.length
-    ? user.uiPreferences.enabledModules
-    : DEFAULT_UI_ENABLED_MODULES;
-  const sidebarOrder = user?.uiPreferences?.sidebarOrder?.length
-    ? user.uiPreferences.sidebarOrder
-    : DEFAULT_SIDEBAR_ORDER;
+  const isModulesCustomized = Boolean(user?.uiPreferences?.customized);
+  const enabledModules =
+    isModulesCustomized && user?.uiPreferences?.enabledModules?.length
+      ? user.uiPreferences.enabledModules
+      : DEFAULT_UI_ENABLED_MODULES;
+  const sidebarOrder =
+    isModulesCustomized && user?.uiPreferences?.sidebarOrder?.length
+      ? user.uiPreferences.sidebarOrder
+      : DEFAULT_SIDEBAR_ORDER;
 
   const enabledSet = new Set<string>([...enabledModules, 'overview', 'settings']);
   const orderMap = new Map<string, number>();

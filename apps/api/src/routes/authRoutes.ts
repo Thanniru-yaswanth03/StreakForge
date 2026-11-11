@@ -515,10 +515,17 @@ authRouter.patch(
         };
       }
       if (req.body.uiPreferences) {
+        const incoming = req.body.uiPreferences;
+        const marksCustomized =
+          incoming.customized ??
+          (incoming.enabledModules !== undefined || incoming.sidebarOrder !== undefined
+            ? true
+            : user.uiPreferences?.customized ?? false);
         user.uiPreferences = {
           ...getDefaultUiPreferences(),
           ...(user.uiPreferences || {}),
-          ...req.body.uiPreferences
+          ...incoming,
+          customized: marksCustomized
         };
       }
 

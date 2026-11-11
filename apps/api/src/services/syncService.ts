@@ -19,7 +19,7 @@ import { createNotification } from './notificationService.js';
 import {
   verifyGitHubTokenHealth,
   getDefaultSyncPreferences,
-  getDefaultUiPreferences,
+  resolveUserUiPreferences,
   formatUserResponse
 } from './authService.js';
 import { invalidateGitHubActivityCache } from './githubService.js';
@@ -788,10 +788,7 @@ export async function getCanonicalSyncState(
       ...getDefaultSyncPreferences(),
       ...(user?.syncPreferences || {})
     },
-    uiPreferences: {
-      ...getDefaultUiPreferences(),
-      ...(user?.uiPreferences || {})
-    },
+    uiPreferences: resolveUserUiPreferences(user?.uiPreferences),
     metrics: {
       uniqueProblemsSolved: historyData.metrics.uniqueProblemsSolved,
       acceptedSubmissions: historyData.metrics.acceptedSubmissions,

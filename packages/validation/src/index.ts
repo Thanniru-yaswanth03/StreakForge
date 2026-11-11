@@ -258,7 +258,8 @@ export const UserUiPreferencesSchema = z.object({
   enabledModules: z.array(z.string().min(1)).max(40).optional(),
   sidebarOrder: z.array(z.string().min(1)).max(40).optional(),
   compactSidebar: z.boolean().optional(),
-  theme: z.enum(['dark', 'light']).optional()
+  theme: z.enum(['dark', 'light']).optional(),
+  customized: z.boolean().optional()
 });
 
 export const UserUpdatePreferencesSchema = z.object({

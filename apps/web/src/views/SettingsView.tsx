@@ -58,13 +58,14 @@ export function SettingsView() {
     | 'danger'
   >('github');
 
+  const isModulesCustomized = Boolean(user?.uiPreferences?.customized);
   const [enabledModules, setEnabledModules] = useState<string[]>(
-    user?.uiPreferences?.enabledModules?.length
+    isModulesCustomized && user?.uiPreferences?.enabledModules?.length
       ? user.uiPreferences.enabledModules
       : [...DEFAULT_UI_ENABLED_MODULES]
   );
   const [sidebarOrder, setSidebarOrder] = useState<string[]>(
-    user?.uiPreferences?.sidebarOrder?.length
+    isModulesCustomized && user?.uiPreferences?.sidebarOrder?.length
       ? user.uiPreferences.sidebarOrder
       : [...DEFAULT_SIDEBAR_ORDER]
   );
@@ -779,9 +780,21 @@ export function SettingsView() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setEnabledModules([...DEFAULT_UI_ENABLED_MODULES]);
-                      setSidebarOrder([...DEFAULT_SIDEBAR_ORDER]);
+                    onClick={async () => {
+                      const defaults = [...DEFAULT_UI_ENABLED_MODULES];
+                      const defaultOrder = [...DEFAULT_SIDEBAR_ORDER];
+                      setEnabledModules(defaults);
+                      setSidebarOrder(defaultOrder);
+                      await api.auth.updatePreferences({
+                        uiPreferences: {
+                          enabledModules: defaults,
+                          sidebarOrder: defaultOrder,
+                          customized: false
+                        }
+                      });
+                      setModulesSavedMsg('Default modules restored!');
+                      setTimeout(() => setModulesSavedMsg(null), 2500);
+                      refreshData();
                     }}
                     className="px-3 py-1.5 rounded-lg bg-theme-elevated border border-theme-border text-xs font-medium text-theme-secondary flex items-center gap-1 cursor-pointer"
                   >
@@ -792,7 +805,7 @@ export function SettingsView() {
                     type="button"
                     onClick={async () => {
                       await api.auth.updatePreferences({
-                        uiPreferences: { enabledModules, sidebarOrder }
+                        uiPreferences: { enabledModules, sidebarOrder, customized: true }
                       });
                       setModulesSavedMsg('Navigation layout saved!');
                       setTimeout(() => setModulesSavedMsg(null), 2500);

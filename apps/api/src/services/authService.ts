@@ -52,7 +52,31 @@ export function getDefaultUiPreferences(): UserUiPreferences {
     enabledModules: [...DEFAULT_UI_ENABLED_MODULES],
     sidebarOrder: [...DEFAULT_SIDEBAR_ORDER],
     compactSidebar: false,
-    theme: 'dark'
+    theme: 'dark',
+    customized: false
+  };
+}
+
+/**
+ * Resolves UI preferences while restoring all default modules for users who have
+ * not explicitly customized their sidebar layout.
+ */
+export function resolveUserUiPreferences(raw?: Partial<UserUiPreferences> | null): UserUiPreferences {
+  const defaults = getDefaultUiPreferences();
+  if (!raw?.customized) {
+    return {
+      ...defaults,
+      compactSidebar: raw?.compactSidebar ?? defaults.compactSidebar,
+      theme: raw?.theme ?? defaults.theme,
+      customized: false
+    };
+  }
+  return {
+    ...defaults,
+    ...raw,
+    enabledModules: raw.enabledModules?.length ? raw.enabledModules : defaults.enabledModules,
+    sidebarOrder: raw.sidebarOrder?.length ? raw.sidebarOrder : defaults.sidebarOrder,
+    customized: true
   };
 }
 
@@ -544,10 +568,7 @@ export function formatUserResponse(
       ...getDefaultSyncPreferences(),
       ...(user.syncPreferences || {})
     },
-    uiPreferences: {
-      ...getDefaultUiPreferences(),
-      ...(user.uiPreferences || {})
-    },
+    uiPreferences: resolveUserUiPreferences(user.uiPreferences),
     leetcodeUsername: user.leetcodeUsername || null,
     leetcodeStats: user.leetcodeStats || null,
     githubTokenHealth,

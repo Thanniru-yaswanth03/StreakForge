@@ -56,6 +56,7 @@ export interface UserUiPreferences {
   sidebarOrder: string[];
   compactSidebar: boolean;
   theme?: 'dark' | 'light';
+  customized?: boolean;
 }
 
 export interface GitHubTokenHealth {
