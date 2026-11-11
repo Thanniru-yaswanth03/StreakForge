@@ -3,10 +3,10 @@ import type { DetectedSubmission, ActiveProblemContext } from '../shared/types';
 
 console.log('[StreakForge] LeetCode authentic activity observer initialized.');
 
-let lastObservedSubmissionId: string | null = null;
-let lastReportedSlug: string | null = null;
-let lastDispatchedSlug = '';
+let lastVerifiedSubmissionId: string | null = null;
 let lastDispatchedTime = 0;
+let lastDispatchedWasVerified = false;
+let lastReportedSlug: string | null = null;
 let isUserSubmitting = false;
 let submitTimestamp = 0;
 let cachedSubmitCode = '';
@@ -35,29 +35,44 @@ function reportActiveProblem(): void {
   lastReportedSlug = slug;
 
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-    chrome.runtime.sendMessage({
-      type: 'PROBLEM_VIEWED',
-      payload
-    }).catch(() => {
-      // Background worker might be idle
-    });
+    chrome.runtime
+      .sendMessage({
+        type: 'PROBLEM_VIEWED',
+        payload
+      })
+      .catch(() => {});
   }
 }
 
 /**
- * Helper to dispatch submission payload to background worker
+ * Helper to dispatch submission payload to background worker.
+ * Verified interceptor submissions ALWAYS take precedence over fallback DOM detections.
  */
-function dispatchSubmission(submissionPayload: DetectedSubmission): void {
-  const now = Date.now();
-  if (
-    lastObservedSubmissionId === submissionPayload.submissionId ||
-    (lastDispatchedSlug === submissionPayload.questionSlug && now - lastDispatchedTime < 15000)
-  ) {
+function dispatchSubmission(
+  submissionPayload: DetectedSubmission,
+  isVerifiedInterceptor: boolean = false
+): void {
+  if (!submissionPayload.code || LeetCodeDomExtractor.isLikelyNonCodeSnippet(submissionPayload.code)) {
+    console.warn('[StreakForge] Refusing dispatch of empty or non-code snippet');
     return;
   }
-  lastObservedSubmissionId = submissionPayload.submissionId;
-  lastDispatchedSlug = submissionPayload.questionSlug;
+
+  const now = Date.now();
+  if (lastVerifiedSubmissionId === submissionPayload.submissionId) {
+    return;
+  }
+
+  // Never let DOM fallback shadow/block an authentic verified interceptor event!
+  if (!isVerifiedInterceptor && lastDispatchedWasVerified && now - lastDispatchedTime < 30000) {
+    return;
+  }
+  if (!isVerifiedInterceptor && !lastDispatchedWasVerified && now - lastDispatchedTime < 15000) {
+    return;
+  }
+
+  lastVerifiedSubmissionId = submissionPayload.submissionId;
   lastDispatchedTime = now;
+  lastDispatchedWasVerified = isVerifiedInterceptor;
 
   console.log('[StreakForge] Dispatching verified submission to worker:', {
     id: submissionPayload.submissionId,
@@ -68,17 +83,19 @@ function dispatchSubmission(submissionPayload: DetectedSubmission): void {
   });
 
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-    chrome.runtime.sendMessage({
-      type: 'LEETCODE_SUBMISSION_DETECTED',
-      payload: submissionPayload
-    }).catch((err) => {
-      console.warn('[StreakForge] Failed to dispatch submission message to worker:', err);
-    });
+    chrome.runtime
+      .sendMessage({
+        type: 'LEETCODE_SUBMISSION_DETECTED',
+        payload: submissionPayload
+      })
+      .catch((err) => {
+        console.warn('[StreakForge] Failed to dispatch submission message to worker:', err);
+      });
   }
 }
 
 /**
- * Hook into LeetCode's submit buttons
+ * Hook into LeetCode's submit buttons and capture exact Monaco code via MAIN world bridge
  */
 function attachSubmitListeners(): void {
   const buttons = document.querySelectorAll(
@@ -87,72 +104,32 @@ function attachSubmitListeners(): void {
 
   buttons.forEach((btn) => {
     const text = btn.textContent?.trim() || '';
-    const hasSubmitText = /submit/i.test(text);
+    const hasSubmitText = /^submit$/i.test(text) || text.toLowerCase() === 'submit';
     const hasAttr = btn.getAttribute('data-e2e-locator') === 'console-submit-button';
 
     if ((hasSubmitText || hasAttr) && !(btn as any).__streakforge_attached) {
       (btn as any).__streakforge_attached = true;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         isUserSubmitting = true;
         submitTimestamp = Date.now();
-        cachedSubmitCode = LeetCodeDomExtractor.extractEditorCode();
-        cachedSubmitLanguage = LeetCodeDomExtractor.extractLanguage(cachedSubmitCode);
-        console.log('[StreakForge] Submit button click intercepted. Language:', cachedSubmitLanguage);
+        cachedSubmitCode = '';
+        cachedSubmitLanguage = '';
+
+        const mainState = await LeetCodeDomExtractor.requestMainWorldEditorState(500);
+        if (mainState.code && !LeetCodeDomExtractor.isLikelyNonCodeSnippet(mainState.code)) {
+          cachedSubmitCode = mainState.code;
+          cachedSubmitLanguage =
+            mainState.language || LeetCodeDomExtractor.extractLanguage(mainState.code);
+        } else {
+          const domCode = LeetCodeDomExtractor.extractEditorCode();
+          if (domCode && !LeetCodeDomExtractor.isLikelyNonCodeSnippet(domCode)) {
+            cachedSubmitCode = domCode;
+            cachedSubmitLanguage = LeetCodeDomExtractor.extractLanguage(domCode);
+          }
+        }
       });
     }
   });
-}
-
-/**
- * Scans for submission events and results in the DOM (fallback to interceptor)
- */
-function checkSubmissionResult(): void {
-  // Only check if user recently submitted or if viewing a submission detail page
-  const isSubmissionDetailPage = window.location.pathname.includes('/submissions/');
-  const isRecentSubmit = isUserSubmitting && (Date.now() - submitTimestamp < 90000);
-
-  if (!isRecentSubmit && !isSubmissionDetailPage) {
-    return;
-  }
-
-  const result = LeetCodeDomExtractor.extractSubmissionResult();
-  if (!result || result.verdict !== 'Accepted') return;
-
-  // Prevent duplicate submissions of the exact same result
-  if (lastObservedSubmissionId === result.submissionId) {
-    return;
-  }
-
-  const code = cachedSubmitCode || LeetCodeDomExtractor.extractEditorCode();
-  if (!code || code.trim().length === 0) {
-    console.warn('[StreakForge] Source code not yet available in DOM. Waiting...');
-    return;
-  }
-
-  const problem = LeetCodeDomExtractor.extractProblemDetails();
-  const language = LeetCodeDomExtractor.extractLanguage(code) || cachedSubmitLanguage || 'javascript';
-
-  isUserSubmitting = false;
-
-  const submissionPayload: DetectedSubmission = {
-    submissionId: result.submissionId,
-    questionId: problem.id,
-    questionTitle: problem.title,
-    questionSlug: problem.slug,
-    difficulty: problem.difficulty,
-    language,
-    code,
-    runtimeMs: result.runtimeMs,
-    runtimePercentile: result.runtimePercentile,
-    memoryBytes: result.memoryBytes,
-    memoryPercentile: result.memoryPercentile,
-    verdict: 'Accepted',
-    topicTags: problem.topicTags,
-    submittedAt: new Date().toISOString(),
-    state: 'DETECTED'
-  };
-
-  dispatchSubmission(submissionPayload);
 }
 
 async function enrichSubmissionWithGraphQL(
@@ -165,15 +142,12 @@ async function enrichSubmissionWithGraphQL(
   difficulty?: 'Easy' | 'Medium' | 'Hard';
   topicTags?: string[];
   language?: string;
+  runtimeMs?: number;
+  runtimePercentile?: number;
+  memoryBytes?: number;
+  memoryPercentile?: number;
 }> {
-  const result: {
-    code?: string;
-    questionId?: string;
-    questionTitle?: string;
-    difficulty?: 'Easy' | 'Medium' | 'Hard';
-    topicTags?: string[];
-    language?: string;
-  } = {};
+  const result: any = {};
 
   if (submissionId && /^\d+$/.test(submissionId)) {
     try {
@@ -186,6 +160,10 @@ async function enrichSubmissionWithGraphQL(
             query submissionDetails($submissionId: Int!) {
               submissionDetails(submissionId: $submissionId) {
                 code
+                runtimeDisplay
+                runtimePercentile
+                memoryDisplay
+                memoryPercentile
                 lang { name }
                 question {
                   questionFrontendId
@@ -206,6 +184,16 @@ async function enrichSubmissionWithGraphQL(
         if (details) {
           if (details.code) result.code = details.code;
           if (details.lang?.name) result.language = details.lang.name;
+          const rt = parseFloat(String(details.runtimeDisplay || '').replace(/[^0-9.]/g, ''));
+          if (Number.isFinite(rt)) result.runtimeMs = rt;
+          if (Number.isFinite(details.runtimePercentile)) {
+            result.runtimePercentile = details.runtimePercentile;
+          }
+          const memMb = parseFloat(String(details.memoryDisplay || '').replace(/[^0-9.]/g, ''));
+          if (Number.isFinite(memMb)) result.memoryBytes = Math.round(memMb * 1024 * 1024);
+          if (Number.isFinite(details.memoryPercentile)) {
+            result.memoryPercentile = details.memoryPercentile;
+          }
           if (details.question) {
             result.questionId = String(details.question.questionFrontendId || '');
             result.questionTitle = details.question.title;
@@ -265,7 +253,160 @@ async function enrichSubmissionWithGraphQL(
   return result;
 }
 
-// 1. Listen for Main World Interceptor Messages (Direct API Interception)
+/**
+ * Fetch the latest accepted submission for the active problem slug via LeetCode GraphQL (used on manual Sync Now)
+ */
+async function fetchLatestAcceptedForProblem(slug: string): Promise<{
+  submissionId: string;
+  code: string;
+  language: string;
+  runtimeMs: number;
+  runtimePercentile: number;
+  memoryBytes: number;
+  memoryPercentile: number;
+  questionId?: string;
+  questionTitle?: string;
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  topicTags?: string[];
+  submittedAt: string;
+} | null> {
+  if (!slug) return null;
+  try {
+    const listRes = await fetch('https://leetcode.com/graphql', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `
+          query submissionList($questionSlug: String!, $offset: Int!, $limit: Int!) {
+            submissionList(questionSlug: $questionSlug, offset: $offset, limit: $limit) {
+              submissions {
+                id
+                statusDisplay
+                lang
+                timestamp
+              }
+            }
+          }
+        `,
+        variables: { questionSlug: slug, offset: 0, limit: 15 }
+      })
+    });
+    if (!listRes.ok) return null;
+    const listJson = await listRes.json();
+    const subs = listJson?.data?.submissionList?.submissions || [];
+    const latestAc = subs.find((s: any) => s.statusDisplay === 'Accepted');
+    if (!latestAc?.id) return null;
+
+    const det = await enrichSubmissionWithGraphQL(String(latestAc.id), slug);
+    if (!det.code) return null;
+
+    return {
+      submissionId: String(latestAc.id),
+      code: det.code,
+      language: det.language || latestAc.lang || 'javascript',
+      runtimeMs: det.runtimeMs || 0,
+      runtimePercentile: det.runtimePercentile || 0,
+      memoryBytes: det.memoryBytes || 0,
+      memoryPercentile: det.memoryPercentile || 0,
+      questionId: det.questionId,
+      questionTitle: det.questionTitle,
+      difficulty: det.difficulty,
+      topicTags: det.topicTags,
+      submittedAt: Number(latestAc.timestamp)
+        ? new Date(Number(latestAc.timestamp) * 1000).toISOString()
+        : new Date().toISOString()
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fallback DOM observer (waits 4s after Submit click so MAIN-world API interceptor always finishes first)
+ */
+async function checkSubmissionResult(): Promise<void> {
+  const isSubmissionDetailPage = window.location.pathname.includes('/submissions/');
+  const elapsed = Date.now() - submitTimestamp;
+  const isRecentSubmit = isUserSubmitting && elapsed >= 4000 && elapsed < 90000;
+
+  if (!isRecentSubmit && !isSubmissionDetailPage) {
+    return;
+  }
+
+  const result = LeetCodeDomExtractor.extractSubmissionResult();
+  if (!result || result.verdict !== 'Accepted') return;
+
+  if (lastVerifiedSubmissionId === result.submissionId) return;
+
+  const problem = LeetCodeDomExtractor.extractProblemDetails();
+  let code = cachedSubmitCode || '';
+  let language = cachedSubmitLanguage || '';
+  let runtimeMs = result.runtimeMs;
+  let runtimePercentile = result.runtimePercentile;
+  let memoryBytes = result.memoryBytes;
+  let memoryPercentile = result.memoryPercentile;
+  let questionId = problem.id;
+  let questionTitle = problem.title;
+  let difficulty = problem.difficulty;
+  let topicTags = problem.topicTags;
+
+  // Prefer authoritative GraphQL submissionDetails if we have a numeric submissionId!
+  if (/^\d+$/.test(result.submissionId)) {
+    const det = await enrichSubmissionWithGraphQL(result.submissionId, problem.slug);
+    if (det.code) code = det.code;
+    if (det.language) language = det.language;
+    if (det.runtimeMs) runtimeMs = det.runtimeMs;
+    if (det.runtimePercentile) runtimePercentile = det.runtimePercentile;
+    if (det.memoryBytes) memoryBytes = det.memoryBytes;
+    if (det.memoryPercentile) memoryPercentile = det.memoryPercentile;
+    if (det.questionId) questionId = det.questionId;
+    if (det.questionTitle) questionTitle = det.questionTitle;
+    if (det.difficulty) difficulty = det.difficulty;
+    if (det.topicTags?.length) topicTags = det.topicTags;
+  }
+
+  if (!code || LeetCodeDomExtractor.isLikelyNonCodeSnippet(code)) {
+    const mainState = await LeetCodeDomExtractor.requestMainWorldEditorState(500);
+    if (mainState.code && !LeetCodeDomExtractor.isLikelyNonCodeSnippet(mainState.code)) {
+      code = mainState.code;
+      if (!language && mainState.language) language = mainState.language;
+    } else {
+      const domCode = LeetCodeDomExtractor.extractEditorCode();
+      if (domCode && !LeetCodeDomExtractor.isLikelyNonCodeSnippet(domCode)) {
+        code = domCode;
+      }
+    }
+  }
+
+  if (!code || LeetCodeDomExtractor.isLikelyNonCodeSnippet(code)) {
+    return;
+  }
+
+  isUserSubmitting = false;
+
+  const submissionPayload: DetectedSubmission = {
+    submissionId: result.submissionId,
+    questionId,
+    questionTitle,
+    questionSlug: problem.slug,
+    difficulty,
+    language: language || LeetCodeDomExtractor.extractLanguage(code) || 'javascript',
+    code,
+    runtimeMs,
+    runtimePercentile,
+    memoryBytes,
+    memoryPercentile,
+    verdict: 'Accepted',
+    topicTags,
+    submittedAt: new Date().toISOString(),
+    state: 'DETECTED'
+  };
+
+  dispatchSubmission(submissionPayload, false);
+}
+
+// 1. Listen for Main World Interceptor Messages (Authoritative API Interception)
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
   if (event.data?.type === 'STREAKFORGE_VERIFIED_SUBMISSION') {
@@ -278,21 +419,51 @@ window.addEventListener('message', (event) => {
     (async () => {
       const problem = LeetCodeDomExtractor.extractProblemDetails();
       const targetSlug = raw.questionSlug || problem.slug;
-      let code = raw.code || cachedSubmitCode || LeetCodeDomExtractor.extractEditorCode();
+      let code = raw.code || '';
       let questionId = String(raw.questionId || problem.id || '');
       let questionTitle = problem.title;
       let difficulty = problem.difficulty;
       let topicTags = problem.topicTags;
-      let language = raw.language || LeetCodeDomExtractor.extractLanguage(code) || 'javascript';
+      let language = raw.language || '';
+      let runtimeMs = raw.runtimeMs || 0;
+      let runtimePercentile = raw.runtimePercentile || 0;
+      let memoryBytes = raw.memoryBytes || 0;
+      let memoryPercentile = raw.memoryPercentile || 0;
 
-      if (!code || !questionId || questionId === '0' || !questionTitle) {
+      // Always fetch authoritative submissionDetails when numeric submissionId exists and anything is incomplete
+      // (or if code didn't come straight from /submit/ typed_code POST body!)
+      const needServerVerification =
+        !raw.fromSubmitBody ||
+        !code ||
+        LeetCodeDomExtractor.isLikelyNonCodeSnippet(code) ||
+        !questionId ||
+        questionId === '0' ||
+        !questionTitle;
+
+      if (needServerVerification) {
         const enriched = await enrichSubmissionWithGraphQL(String(raw.submissionId || ''), targetSlug);
-        if (!code && enriched.code) code = enriched.code;
+        if (enriched.code) code = enriched.code;
+        if (enriched.language && (!raw.fromSubmitBody || !language)) language = enriched.language;
         if (enriched.questionId) questionId = enriched.questionId;
         if (enriched.questionTitle) questionTitle = enriched.questionTitle;
         if (enriched.difficulty) difficulty = enriched.difficulty;
         if (enriched.topicTags?.length) topicTags = enriched.topicTags;
-        if (!raw.language && enriched.language) language = enriched.language;
+        if (enriched.runtimeMs && !runtimeMs) runtimeMs = enriched.runtimeMs;
+        if (enriched.runtimePercentile && !runtimePercentile) {
+          runtimePercentile = enriched.runtimePercentile;
+        }
+        if (enriched.memoryBytes && !memoryBytes) memoryBytes = enriched.memoryBytes;
+        if (enriched.memoryPercentile && !memoryPercentile) {
+          memoryPercentile = enriched.memoryPercentile;
+        }
+      }
+
+      if (!code || LeetCodeDomExtractor.isLikelyNonCodeSnippet(code)) {
+        const mainState = await LeetCodeDomExtractor.requestMainWorldEditorState(500);
+        if (mainState.code && !LeetCodeDomExtractor.isLikelyNonCodeSnippet(mainState.code)) {
+          code = mainState.code;
+          if (!language && mainState.language) language = mainState.language;
+        }
       }
 
       const submissionPayload: DetectedSubmission = {
@@ -301,12 +472,12 @@ window.addEventListener('message', (event) => {
         questionTitle,
         questionSlug: targetSlug,
         difficulty,
-        language,
+        language: language || LeetCodeDomExtractor.extractLanguage(code) || 'javascript',
         code,
-        runtimeMs: raw.runtimeMs || 0,
-        runtimePercentile: raw.runtimePercentile || 0,
-        memoryBytes: raw.memoryBytes || 0,
-        memoryPercentile: raw.memoryPercentile || 0,
+        runtimeMs,
+        runtimePercentile,
+        memoryBytes,
+        memoryPercentile,
         verdict: 'Accepted',
         topicTags,
         submittedAt: raw.submittedAt || new Date().toISOString(),
@@ -314,7 +485,7 @@ window.addEventListener('message', (event) => {
       };
 
       isUserSubmitting = false;
-      dispatchSubmission(submissionPayload);
+      dispatchSubmission(submissionPayload, true);
     })();
   }
 });
@@ -396,7 +567,6 @@ function showOnScreenToast(data: {
   const rawLink = data.commitUrl || (data.repo ? `https://github.com/${data.repo}` : '#');
   const commitLink = rawLink.startsWith('https://') ? rawLink : '#';
 
-  // Build DOM nodes with textContent to avoid HTML injection from problem/repo names
   const headerRow = document.createElement('div');
   headerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
 
@@ -442,16 +612,14 @@ function showOnScreenToast(data: {
   footerRow.append(repoSpan, commitAnchor);
 
   toast.append(headerRow, detailRow, footerRow);
-
   document.body.appendChild(toast);
 
-  const closeBtn = closeButton;
   const dismiss = () => {
     toast.style.animation = 'streakforge-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards';
     setTimeout(() => toast.remove(), 300);
   };
 
-  closeBtn?.addEventListener('click', dismiss);
+  closeButton?.addEventListener('click', dismiss);
   setTimeout(dismiss, 6500);
 }
 
@@ -465,20 +633,57 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
     }
 
     if (message.type === 'MANUAL_CAPTURE_REQUEST') {
-      const code = LeetCodeDomExtractor.extractEditorCode();
-      const language = LeetCodeDomExtractor.extractLanguage();
-      const problem = LeetCodeDomExtractor.extractProblemDetails();
-      const result = LeetCodeDomExtractor.extractSubmissionResult();
+      (async () => {
+        const problem = LeetCodeDomExtractor.extractProblemDetails();
+        const result = LeetCodeDomExtractor.extractSubmissionResult();
 
-      sendResponse({
-        success: true,
-        payload: {
-          code,
-          language,
-          problem,
-          result
+        // Try fetching the genuine latest Accepted submission for this problem from LeetCode GraphQL first
+        const latestAc = await fetchLatestAcceptedForProblem(problem.slug);
+        if (latestAc) {
+          sendResponse({
+            success: true,
+            payload: {
+              code: latestAc.code,
+              language: latestAc.language,
+              problem: {
+                ...problem,
+                id: latestAc.questionId || problem.id,
+                title: latestAc.questionTitle || problem.title,
+                difficulty: latestAc.difficulty || problem.difficulty,
+                topicTags: latestAc.topicTags?.length ? latestAc.topicTags : problem.topicTags
+              },
+              result: {
+                verdict: 'Accepted',
+                submissionId: latestAc.submissionId,
+                runtimeMs: latestAc.runtimeMs,
+                runtimePercentile: latestAc.runtimePercentile,
+                memoryBytes: latestAc.memoryBytes,
+                memoryPercentile: latestAc.memoryPercentile
+              }
+            }
+          });
+          return;
         }
-      });
+
+        // Fallback to active MAIN-world Monaco editor when viewing an active Accepted result
+        const mainState = await LeetCodeDomExtractor.requestMainWorldEditorState(500);
+        const code =
+          mainState.code && !LeetCodeDomExtractor.isLikelyNonCodeSnippet(mainState.code)
+            ? mainState.code
+            : LeetCodeDomExtractor.extractEditorCode();
+        const language =
+          mainState.language || LeetCodeDomExtractor.extractLanguage(code);
+
+        sendResponse({
+          success: true,
+          payload: {
+            code,
+            language,
+            problem,
+            result
+          }
+        });
+      })();
       return true;
     }
   });

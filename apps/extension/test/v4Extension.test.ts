@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SyncManager, dispatchBackgroundNotification } from '../src/background/sync-manager';
 import { StorageManager, DEFAULT_SERVER_URL } from '../src/shared/storage';
+import { LeetCodeDomExtractor } from '../src/content/dom-extractor';
 import type { DetectedSubmission } from '../src/shared/types';
 
 function createChromeStorageMock(initial: Record<string, any> = {}) {
@@ -186,6 +187,19 @@ describe('StreakForge V4.0 Extension Reliability & Notifications', () => {
 
     const storedNotifs = await StorageManager.getNotificationHistory();
     expect(storedNotifs.length).toBe(1);
+  });
+
+  it('rejects problem-statement Input:/Example testcase blocks from being mistaken for submitted code', () => {
+    expect(
+      LeetCodeDomExtractor.isLikelyNonCodeSnippet('Input: strs = ["flower","flow","flight"]')
+    ).toBe(true);
+    expect(LeetCodeDomExtractor.isLikelyNonCodeSnippet('Output: "fl"')).toBe(true);
+    expect(LeetCodeDomExtractor.isLikelyNonCodeSnippet('Example 1: nums = [2,7,11,15]')).toBe(true);
+    expect(
+      LeetCodeDomExtractor.isLikelyNonCodeSnippet(
+        'class Solution { public String longestCommonPrefix(String[] strs) { return ""; } }'
+      )
+    ).toBe(false);
   });
 });
 

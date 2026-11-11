@@ -221,24 +221,74 @@ export class LeetCodeDomExtractor {
   }
 
   /**
+   * Rejects problem statement example blocks / console testcase outputs accidentally matched as code
+   */
+  public static isLikelyNonCodeSnippet(text: string): boolean {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return true;
+    if (/^(Input|Output|Explanation|Example\s*\d*|Constraints)\s*:/i.test(trimmed)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Requests authentic Monaco editor code & language from MAIN world via postMessage bridge
+   */
+  public static async requestMainWorldEditorState(
+    timeoutMs: number = 600
+  ): Promise<{ code: string; language: string | null }> {
+    if (typeof window === 'undefined') return { code: '', language: null };
+    return new Promise((resolve) => {
+      const requestId = `sf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const timer = setTimeout(() => {
+        window.removeEventListener('message', onMsg);
+        resolve({ code: '', language: null });
+      }, timeoutMs);
+
+      function onMsg(event: MessageEvent) {
+        if (event.source !== window) return;
+        if (
+          event.data?.type === 'STREAKFORGE_EDITOR_STATE' &&
+          event.data?.requestId === requestId
+        ) {
+          clearTimeout(timer);
+          window.removeEventListener('message', onMsg);
+          resolve({
+            code: typeof event.data.code === 'string' ? event.data.code : '',
+            language: typeof event.data.language === 'string' ? event.data.language : null
+          });
+        }
+      }
+
+      window.addEventListener('message', onMsg);
+      window.postMessage(
+        { type: 'STREAKFORGE_GET_EDITOR_STATE', requestId },
+        window.location.origin
+      );
+    });
+  }
+
+  /**
    * Extracts the actual source code currently residing in Monaco editor or submission view
    */
   public static extractEditorCode(): string {
-    // 1. Try window hook exposed by Main World interceptor
+    // 1. Check same-world hook (if available in tests/legacy contexts)
     try {
       const hookCode = (window as any).__streakforge_getMonacoCode?.();
-      if (hookCode && hookCode.trim().length > 0) {
+      if (hookCode && hookCode.trim().length > 0 && !this.isLikelyNonCodeSnippet(hookCode)) {
         return hookCode;
       }
     } catch {}
 
-    // 2. Primary on submission tab: full unvirtualized submission code in pre/code container
+    // 2. Primary on submission detail tab ONLY (never global problem-statement <pre> tags!)
     const codeSelectors = [
       '.submission-detail code',
       'div[class*="submission-detail"] code',
       'div[class*="submission-detail"] pre',
-      'pre code[class*="language-"]',
-      '[class*="submission-code"]',
+      '[data-e2e-locator="submission-detail"] pre code',
+      '[class*="submission-code"] code',
+      '[class*="submission-code"] pre',
       '[data-key="code"] pre',
       'div.ace_editor'
     ];
@@ -246,24 +296,32 @@ export class LeetCodeDomExtractor {
     for (const sel of codeSelectors) {
       const codeEl = document.querySelector(sel);
       if (codeEl && codeEl.textContent && codeEl.textContent.trim().length > 0) {
-        return codeEl.textContent;
+        if (!this.isLikelyNonCodeSnippet(codeEl.textContent)) {
+          return codeEl.textContent;
+        }
       }
     }
 
-    // 3. Monaco editor DOM lines
-    const lines = document.querySelectorAll('.monaco-editor .view-line');
+    // 3. Monaco editor DOM lines (scoped specifically to active code editor widget)
+    const lines = document.querySelectorAll('.monaco-editor .view-lines .view-line');
     if (lines.length > 0) {
       const code = Array.from(lines)
         .map((line) => line.textContent || '')
-        .join('\n');
-      if (code.trim().length > 0) {
+        .join('\n')
+        .replace(/\u00a0/g, ' ');
+      if (code.trim().length > 0 && !this.isLikelyNonCodeSnippet(code)) {
         return code;
       }
     }
 
     // 4. Fallback: Monaco hidden textarea
     const textarea = document.querySelector('textarea.inputarea') as HTMLTextAreaElement | null;
-    if (textarea && textarea.value && textarea.value.trim().length > 0) {
+    if (
+      textarea &&
+      textarea.value &&
+      textarea.value.trim().length > 0 &&
+      !this.isLikelyNonCodeSnippet(textarea.value)
+    ) {
       return textarea.value;
     }
 
