@@ -91,11 +91,18 @@ describe('StreakForge V4.0 End-to-End Scenarios (API Layer)', () => {
         uiPreferences: {
           enabledModules: ['overview', 'leetcode', 'settings'],
           sidebarOrder: ['overview', 'settings', 'leetcode']
+        },
+        notificationPreferences: {
+          syncSuccess: false,
+          weeklyReport: false
         }
       });
     expect(patchRes.status).toBe(200);
     expect(patchRes.body.data.syncPreferences.folderPattern).toBe('{Difficulty}/{id4}-{slug}');
     expect(patchRes.body.data.syncPreferences.fileNamingPattern).toBe('solution{ext}');
+    expect(patchRes.body.data.notificationPreferences.syncSuccess).toBe(false);
+    expect(patchRes.body.data.notificationPreferences.weeklyReport).toBe(false);
+    expect(patchRes.body.data.notificationPreferences.problemSolved).toBe(true);
     expect(patchRes.body.data.uiPreferences.enabledModules).toEqual([
       'overview',
       'leetcode',

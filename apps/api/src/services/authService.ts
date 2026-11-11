@@ -58,24 +58,35 @@ export function getDefaultUiPreferences(): UserUiPreferences {
 }
 
 /**
+ * Unwraps Mongoose subdocuments safely into plain JS objects before spreading.
+ */
+export function toPlainObject<T>(val: T): T {
+  if (val && typeof (val as any).toObject === 'function') {
+    return (val as any).toObject();
+  }
+  return val;
+}
+
+/**
  * Resolves UI preferences while restoring all default modules for users who have
  * not explicitly customized their sidebar layout.
  */
 export function resolveUserUiPreferences(raw?: Partial<UserUiPreferences> | null): UserUiPreferences {
+  const plainRaw = toPlainObject(raw);
   const defaults = getDefaultUiPreferences();
-  if (!raw?.customized) {
+  if (!plainRaw?.customized) {
     return {
       ...defaults,
-      compactSidebar: raw?.compactSidebar ?? defaults.compactSidebar,
-      theme: raw?.theme ?? defaults.theme,
+      compactSidebar: plainRaw?.compactSidebar ?? defaults.compactSidebar,
+      theme: plainRaw?.theme ?? defaults.theme,
       customized: false
     };
   }
   return {
     ...defaults,
-    ...raw,
-    enabledModules: raw.enabledModules?.length ? raw.enabledModules : defaults.enabledModules,
-    sidebarOrder: raw.sidebarOrder?.length ? raw.sidebarOrder : defaults.sidebarOrder,
+    ...plainRaw,
+    enabledModules: plainRaw.enabledModules?.length ? plainRaw.enabledModules : defaults.enabledModules,
+    sidebarOrder: plainRaw.sidebarOrder?.length ? plainRaw.sidebarOrder : defaults.sidebarOrder,
     customized: true
   };
 }
@@ -562,11 +573,11 @@ export function formatUserResponse(
     streakGoalPerDay: user.streakGoalPerDay,
     notificationPreferences: {
       ...getDefaultNotificationPreferences(),
-      ...(user.notificationPreferences || {})
+      ...(toPlainObject(user.notificationPreferences) || {})
     },
     syncPreferences: {
       ...getDefaultSyncPreferences(),
-      ...(user.syncPreferences || {})
+      ...(toPlainObject(user.syncPreferences) || {})
     },
     uiPreferences: resolveUserUiPreferences(user.uiPreferences),
     leetcodeUsername: user.leetcodeUsername || null,

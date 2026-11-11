@@ -15,6 +15,7 @@ import {
   getDefaultNotificationPreferences,
   getDefaultSyncPreferences,
   getDefaultUiPreferences,
+  toPlainObject,
   disconnectGitHubAccount,
   deleteUserAccount,
   getOrCreateDevUser,
@@ -503,30 +504,34 @@ authRouter.patch(
       if (req.body.notificationPreferences) {
         user.notificationPreferences = {
           ...getDefaultNotificationPreferences(),
-          ...(user.notificationPreferences || {}),
+          ...(toPlainObject(user.notificationPreferences) || {}),
           ...req.body.notificationPreferences
         };
+        user.markModified?.('notificationPreferences');
       }
       if (req.body.syncPreferences) {
         user.syncPreferences = {
           ...getDefaultSyncPreferences(),
-          ...(user.syncPreferences || {}),
+          ...(toPlainObject(user.syncPreferences) || {}),
           ...req.body.syncPreferences
         };
+        user.markModified?.('syncPreferences');
       }
       if (req.body.uiPreferences) {
         const incoming = req.body.uiPreferences;
+        const currentUi = toPlainObject(user.uiPreferences) || {};
         const marksCustomized =
           incoming.customized ??
           (incoming.enabledModules !== undefined || incoming.sidebarOrder !== undefined
             ? true
-            : user.uiPreferences?.customized ?? false);
+            : currentUi.customized ?? false);
         user.uiPreferences = {
           ...getDefaultUiPreferences(),
-          ...(user.uiPreferences || {}),
+          ...currentUi,
           ...incoming,
           customized: marksCustomized
         };
+        user.markModified?.('uiPreferences');
       }
 
       await user.save();

@@ -146,6 +146,11 @@ interface DataContextValue {
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
   clearNotifications: () => void;
+  patchUserPreferencesLocal: (
+    patch: Partial<
+      Pick<User, 'timezone' | 'streakGoalPerDay' | 'notificationPreferences' | 'syncPreferences' | 'uiPreferences'>
+    >
+  ) => void;
 }
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
@@ -693,19 +698,82 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     api.automations.deleteRule(id).catch(() => {});
   };
 
+  const patchUserPreferencesLocal = useCallback(
+    (
+      patch: Partial<
+        Pick<User, 'timezone' | 'streakGoalPerDay' | 'notificationPreferences' | 'syncPreferences' | 'uiPreferences'>
+      >
+    ) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updatedUser: User = {
+          ...prev,
+          ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+          ...(patch.streakGoalPerDay !== undefined ? { streakGoalPerDay: patch.streakGoalPerDay } : {}),
+          ...(patch.notificationPreferences
+            ? {
+                notificationPreferences: {
+                  ...prev.notificationPreferences,
+                  ...patch.notificationPreferences
+                }
+              }
+            : {}),
+          ...(patch.syncPreferences
+            ? {
+                syncPreferences: {
+                  ...prev.syncPreferences,
+                  ...patch.syncPreferences
+                }
+              }
+            : {}),
+          ...(patch.uiPreferences
+            ? {
+                uiPreferences: {
+                  ...prev.uiPreferences,
+                  ...patch.uiPreferences
+                } as any
+              }
+            : {})
+        };
+
+        if (typeof window !== 'undefined') {
+          try {
+            const rawSnap = localStorage.getItem(SNAPSHOT_CACHE_KEY);
+            if (rawSnap) {
+              const snap = JSON.parse(rawSnap);
+              snap.user = updatedUser;
+              localStorage.setItem(SNAPSHOT_CACHE_KEY, JSON.stringify(snap));
+            }
+          } catch {
+            // Ignore snapshot update error
+          }
+        }
+
+        return updatedUser;
+      });
+    },
+    []
+  );
+
   const markNotificationAsRead = (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-    api.notifications.markAsRead(id).catch(() => {});
+    api.notifications.markAsRead(id).catch(() => {
+      refreshData();
+    });
   };
 
   const markAllNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    api.notifications.markAllAsRead().catch(() => {});
+    api.notifications.markAllAsRead().catch(() => {
+      refreshData();
+    });
   };
 
   const clearNotifications = () => {
     setNotifications([]);
-    api.notifications.clearAll().catch(() => {});
+    api.notifications.clearAll().catch(() => {
+      refreshData();
+    });
   };
 
   return (
@@ -740,7 +808,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         deleteAutomation,
         markNotificationAsRead,
         markAllNotificationsAsRead,
-        clearNotifications
+        clearNotifications,
+        patchUserPreferencesLocal
       }}
     >
       {children}

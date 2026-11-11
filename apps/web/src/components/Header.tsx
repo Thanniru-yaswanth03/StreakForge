@@ -54,6 +54,7 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
     calendar: 'Streak Calendar',
     repos: 'Connected Repositories',
     automation: 'Automations',
+    notifications: 'Notification Center',
     settings: 'Settings',
     planner: 'Personal Coding Planner',
     vault: 'DSA Knowledge Vault',

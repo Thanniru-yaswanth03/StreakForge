@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell,
+  Check,
   CheckCheck,
   Trash2,
   ExternalLink,
@@ -18,6 +19,14 @@ import type { StreakReminder } from '@streakforge/shared-types';
 import { useData } from '../context/DataContext';
 import { api } from '../lib/api';
 
+type NotifCategoryKey =
+  | 'problemSolved'
+  | 'syncSuccess'
+  | 'syncFailure'
+  | 'dailySummary'
+  | 'weeklyReport'
+  | 'streakWarning';
+
 export function NotificationsView() {
   const {
     user,
@@ -25,7 +34,7 @@ export function NotificationsView() {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     clearNotifications,
-    refreshData
+    patchUserPreferencesLocal
   } = useData();
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'WARNINGS'>('ALL');
   const [reminders, setReminders] = useState<StreakReminder[]>([]);
@@ -34,20 +43,52 @@ export function NotificationsView() {
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
   );
 
-  const np = user?.notificationPreferences || ({} as any);
-  const [savingPref, setSavingPref] = useState<boolean>(false);
+  const [localPrefs, setLocalPrefs] = useState<Record<string, any>>(
+    () => ({ ...(user?.notificationPreferences || {}) })
+  );
+  const [prefStatus, setPrefStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [prefError, setPrefError] = useState<string | null>(null);
+  const pendingOpsRef = useRef<number>(0);
 
-  const toggleNotifCategory = async (key: string) => {
-    setSavingPref(true);
+  useEffect(() => {
+    if (pendingOpsRef.current === 0 && user?.notificationPreferences) {
+      setLocalPrefs({ ...user.notificationPreferences });
+    }
+  }, [user?.notificationPreferences]);
+
+  const toggleNotifCategory = async (key: NotifCategoryKey) => {
+    const prevVal = localPrefs[key] !== false;
+    const nextVal = !prevVal;
+
+    // Optimistic update immediately so rapid/multi-checkbox clicks respond at 0ms
+    setLocalPrefs((prev) => ({ ...prev, [key]: nextVal }));
+    setPrefStatus('saving');
+    setPrefError(null);
+    pendingOpsRef.current += 1;
+
     try {
-      await api.auth.updatePreferences({
-        notificationPreferences: {
-          [key]: np[key] === false ? true : false
-        }
+      const updated = await api.auth.updatePreferences({
+        notificationPreferences: { [key]: nextVal }
       });
-      await refreshData();
+      const mergedPrefs = updated?.notificationPreferences || {
+        inApp: true,
+        email: false,
+        streakWarningHoursBefore: 3,
+        ...(user?.notificationPreferences || {}),
+        [key]: nextVal
+      };
+      patchUserPreferencesLocal({ notificationPreferences: mergedPrefs });
+      if (pendingOpsRef.current <= 1) {
+        setLocalPrefs({ ...mergedPrefs });
+      }
+      setPrefStatus('saved');
+      setTimeout(() => setPrefStatus((s) => (s === 'saved' ? 'idle' : s)), 1800);
+    } catch (err: any) {
+      setLocalPrefs((prev) => ({ ...prev, [key]: prevVal }));
+      setPrefStatus('error');
+      setPrefError(err?.message || 'Could not update preference. Please try again.');
     } finally {
-      setSavingPref(false);
+      pendingOpsRef.current = Math.max(0, pendingOpsRef.current - 1);
     }
   };
 
@@ -126,8 +167,16 @@ export function NotificationsView() {
       {/* Category & Browser Permission Settings */}
       <div className="bg-theme-surface border border-theme-border rounded-xl p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs font-bold text-theme-primary uppercase tracking-wider">
-            Notification Categories &amp; Browser Alerts
+          <div className="flex items-center gap-2.5">
+            <div className="text-xs font-bold text-theme-primary uppercase tracking-wider">
+              Notification Categories &amp; Browser Alerts
+            </div>
+            {prefStatus === 'saving' && (
+              <span className="text-[11px] font-mono text-theme-muted">Saving...</span>
+            )}
+            {prefStatus === 'saved' && (
+              <span className="text-[11px] font-mono text-emerald-400">Saved</span>
+            )}
           </div>
           {browserPerm !== 'granted' && browserPerm !== 'unsupported' ? (
             <button
@@ -143,28 +192,44 @@ export function NotificationsView() {
             </span>
           )}
         </div>
+        {prefError && (
+          <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-400">
+            {prefError}
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-          {[
-            { key: 'problemSolved', label: 'Problem Solved' },
-            { key: 'syncSuccess', label: 'GitHub Sync Success' },
-            { key: 'syncFailure', label: 'GitHub Sync Failure' },
-            { key: 'dailySummary', label: 'Daily Summary' },
-            { key: 'weeklyReport', label: 'Weekly Report' },
-            { key: 'streakWarning', label: 'Streak Warning' }
-          ].map((c) => (
-            <label
-              key={c.key}
-              className="flex items-center gap-2 p-2 bg-theme-elevated rounded-lg border border-theme-border cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                disabled={savingPref}
-                checked={np[c.key] !== false}
-                onChange={() => toggleNotifCategory(c.key)}
-              />
-              <span className="text-theme-secondary">{c.label}</span>
-            </label>
-          ))}
+          {(
+            [
+              { key: 'problemSolved', label: 'Problem Solved' },
+              { key: 'syncSuccess', label: 'GitHub Sync Success' },
+              { key: 'syncFailure', label: 'GitHub Sync Failure' },
+              { key: 'dailySummary', label: 'Daily Summary' },
+              { key: 'weeklyReport', label: 'Weekly Report' },
+              { key: 'streakWarning', label: 'Streak Warning' }
+            ] as const
+          ).map((c) => {
+            const isChecked = localPrefs[c.key] !== false;
+            return (
+              <label
+                key={c.key}
+                className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition select-none ${
+                  isChecked
+                    ? 'bg-theme-elevated border-emerald-500/40 text-theme-primary'
+                    : 'bg-theme-elevated/60 border-theme-border text-theme-muted hover:border-theme-accent/40'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleNotifCategory(c.key)}
+                  className="w-4 h-4 rounded accent-emerald-500 cursor-pointer flex-shrink-0"
+                />
+                <span className={isChecked ? 'text-theme-primary font-medium' : 'text-theme-secondary'}>
+                  {c.label}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -274,8 +339,22 @@ export function NotificationsView() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 flex-shrink-0 text-right">
+              <div className="flex items-center gap-2.5 flex-shrink-0 text-right">
                 <span className="text-[11px] text-theme-muted font-mono">{item.timestamp}</span>
+                {!item.isRead && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markNotificationAsRead(item.id);
+                    }}
+                    title="Mark as read"
+                    aria-label="Mark notification as read"
+                    className="p-1.5 hover:bg-emerald-500/15 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-md transition cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 {item.link && (
                   <a
                     href={item.link}

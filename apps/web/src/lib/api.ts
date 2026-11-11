@@ -183,7 +183,13 @@ export const api = {
         body: JSON.stringify({ pat })
       }),
     updatePreferences: (prefs: any) =>
-      apiFetch('/auth/preferences', {
+      apiFetch<{
+        timezone?: string;
+        streakGoalPerDay?: number;
+        notificationPreferences?: User['notificationPreferences'];
+        syncPreferences?: User['syncPreferences'];
+        uiPreferences?: User['uiPreferences'];
+      }>('/auth/preferences', {
         method: 'PATCH',
         body: JSON.stringify(prefs)
       }),
