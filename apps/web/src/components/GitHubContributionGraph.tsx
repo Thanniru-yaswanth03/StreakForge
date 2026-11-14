@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import type { HeatmapDay } from '@streakforge/shared-types';
 import { HelpCircle, Info, ChevronDown, Check } from 'lucide-react';
 
@@ -30,6 +31,11 @@ export function GitHubContributionGraph({
   const [hoveredDay, setHoveredDay] = useState<{ day: HeatmapDay; x: number; y: number } | null>(null);
   const [showLearnModal, setShowLearnModal] = useState<boolean>(false);
   const [showSettingsDropdown, setShowSettingsDropdown] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const activeFilter = controlledFilter !== undefined ? controlledFilter : internalFilter;
 
@@ -290,38 +296,47 @@ export function GitHubContributionGraph({
           </div>
         </div>
 
-        {/* 4. Floating GitHub Tooltip */}
-        {hoveredDay && (
-          <div
-            className="fixed z-50 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 bg-[#24292f] border border-[#30363d] text-white text-xs py-1 px-2.5 rounded-md shadow-2xl whitespace-nowrap animate-in fade-in zoom-in-95 duration-100"
-            style={{
-              left: `${hoveredDay.x}px`,
-              top: `${hoveredDay.y - 8}px`
-            }}
-          >
-            <div className="font-semibold text-slate-100">
-              {(() => {
-                const count =
-                  activeFilter === 'github'
-                    ? hoveredDay.day.gitCommits || 0
-                    : activeFilter === 'leetcode'
-                    ? (hoveredDay.day.leetCode?.submissions ?? hoveredDay.day.leetCode?.accepted ?? hoveredDay.day.leetCodeSubmissions ?? 0)
-                    : hoveredDay.day.count;
-                if (count === 0) {
-                  return `No contributions on ${formatTooltipDate(hoveredDay.day.date)}`;
-                }
-                return `${count} ${count === 1 ? 'contribution' : 'contributions'} on ${formatTooltipDate(
-                  hoveredDay.day.date
-                )}`;
-              })()}
-            </div>
-            {hoveredDay.day.count > 0 && (
-              <div className="text-[10px] text-slate-400 mt-0.5">
-                {hoveredDay.day.gitCommits || 0} git commits • {hoveredDay.day.leetCodeSubmissions || 0} LeetCode accepted
+        {/* 4. Floating GitHub Tooltip via Portal */}
+        {mounted &&
+          hoveredDay &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <div
+              className={`fixed z-[9999] pointer-events-none transform -translate-x-1/2 ${
+                hoveredDay.y < 45 ? 'translate-y-0 mt-2' : '-translate-y-full mb-2'
+              } bg-[#24292f] border border-[#30363d] text-white text-xs py-1 px-2.5 rounded-md shadow-2xl whitespace-nowrap animate-in fade-in zoom-in-95 duration-100`}
+              style={{
+                left: `${hoveredDay.x}px`,
+                top: hoveredDay.y < 45 ? `${hoveredDay.y + 20}px` : `${hoveredDay.y - 8}px`
+              }}
+            >
+              <div className="font-semibold text-slate-100">
+                {(() => {
+                  const count =
+                    activeFilter === 'github'
+                      ? hoveredDay.day.gitCommits || 0
+                      : activeFilter === 'leetcode'
+                      ? (hoveredDay.day.leetCode?.submissions ??
+                        hoveredDay.day.leetCode?.accepted ??
+                        hoveredDay.day.leetCodeSubmissions ??
+                        0)
+                      : hoveredDay.day.count;
+                  if (count === 0) {
+                    return `No contributions on ${formatTooltipDate(hoveredDay.day.date)}`;
+                  }
+                  return `${count} ${count === 1 ? 'contribution' : 'contributions'} on ${formatTooltipDate(
+                    hoveredDay.day.date
+                  )}`;
+                })()}
               </div>
-            )}
-          </div>
-        )}
+              {hoveredDay.day.count > 0 && (
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  {hoveredDay.day.gitCommits || 0} git commits • {hoveredDay.day.leetCodeSubmissions || 0} LeetCode accepted
+                </div>
+              )}
+            </div>,
+            document.body
+          )}
       </div>
 
       {/* 5. "Learn how we count contributions" Modal */}

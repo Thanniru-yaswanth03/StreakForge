@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ExternalLink,
   RotateCw,
@@ -616,18 +617,24 @@ export function LeetCodeStatsCard() {
           </div>
         </div>
 
-        {/* Floating Tooltip */}
-        {hoveredCalDay && (
-          <div
-            className="fixed z-50 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 bg-[#24292f] border border-[#30363d] text-white text-xs py-1 px-2.5 rounded-md shadow-2xl whitespace-nowrap animate-in fade-in zoom-in-95 duration-100"
-            style={{
-              left: `${hoveredCalDay.x}px`,
-              top: `${hoveredCalDay.y - 8}px`
-            }}
-          >
-            <strong className="text-[#3fb950]">{hoveredCalDay.count} submissions</strong> on {hoveredCalDay.date}
-          </div>
-        )}
+        {/* Floating Tooltip via Portal (escapes stacking contexts & backdrop-filter) */}
+        {mounted &&
+          hoveredCalDay &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <div
+              className={`fixed z-[9999] pointer-events-none transform -translate-x-1/2 ${
+                hoveredCalDay.y < 45 ? 'translate-y-0 mt-2' : '-translate-y-full mb-2'
+              } bg-[#24292f] border border-[#30363d] text-white text-xs py-1 px-2.5 rounded-md shadow-2xl whitespace-nowrap animate-in fade-in zoom-in-95 duration-100`}
+              style={{
+                left: `${hoveredCalDay.x}px`,
+                top: hoveredCalDay.y < 45 ? `${hoveredCalDay.y + 20}px` : `${hoveredCalDay.y - 8}px`
+              }}
+            >
+              <strong className="text-[#3fb950]">{hoveredCalDay.count} submissions</strong> on {hoveredCalDay.date}
+            </div>,
+            document.body
+          )}
       </div>
     </div>
   );
