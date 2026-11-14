@@ -42,6 +42,8 @@ describe('Sync Engine - LeetCode Transformation', () => {
     expect(res.codeContent).toContain('Performance: 48 ms');
     expect(res.readmeContent).toContain('# 1. [Two Sum]');
     expect(res.readmeContent).toContain('Difficulty-Easy-brightgreen');
+    expect(res.readmeContent).toContain('## 📝 Submitted Code');
+    expect(res.readmeContent).toContain('function twoSum(nums: number[], target: number)');
     expect(res.commitMessage).toBe('feat(leetcode): solve [1] Two Sum (48ms, 50.0 MB)');
   });
 

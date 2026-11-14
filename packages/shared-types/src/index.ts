@@ -59,13 +59,33 @@ export interface UserUiPreferences {
   customized?: boolean;
 }
 
+export type GitHubConnectionStatus =
+  | 'CONNECTED'
+  | 'DISCONNECTED'
+  | 'TOKEN_INVALID'
+  | 'AUTHORIZATION_REVOKED'
+  | 'INSUFFICIENT_PERMISSIONS'
+  | 'CONNECTION_ERROR'
+  | 'RATE_LIMITED'
+  | 'CHECKING_CONNECTION';
+
 export interface GitHubTokenHealth {
   valid: boolean;
-  status: 'VALID' | 'EXPIRED' | 'REVOKED' | 'MISSING' | 'UNKNOWN';
+  status:
+    | 'VALID'
+    | 'EXPIRED'
+    | 'REVOKED'
+    | 'MISSING'
+    | 'UNKNOWN'
+    | GitHubConnectionStatus;
+  connectionStatus?: GitHubConnectionStatus;
   username?: string;
   scopes?: string[];
   checkedAt: string;
   message?: string;
+  rateLimitRemaining?: number;
+  rateLimitReset?: string;
+  hasPushAccess?: boolean;
 }
 
 export interface User {

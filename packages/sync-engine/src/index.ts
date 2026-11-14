@@ -205,6 +205,21 @@ ${hasRuntime ? `| **Runtime** | **${submission.runtimeMs} ms** | Beats **${submi
       ? `- **Topics**: ${options.topicTags.map((t) => `\`${t}\``).join(', ')}\n`
       : '';
 
+  const codeFenceLang =
+    meta.extension === 'py'
+      ? 'python'
+      : meta.extension === 'js'
+        ? 'javascript'
+        : meta.extension === 'ts'
+          ? 'typescript'
+          : meta.extension === 'cpp' || meta.extension === 'cc'
+            ? 'cpp'
+            : meta.extension === 'cs'
+              ? 'csharp'
+              : meta.extension === 'rs'
+                ? 'rust'
+                : meta.extension;
+
   const readmeContent = `# ${submission.questionId}. [${submission.questionTitle}](${leetcodeUrl})
 
 ![Difficulty: ${submission.difficulty}](https://img.shields.io/badge/Difficulty-${submission.difficulty}-${diffColor}.svg)
@@ -217,6 +232,12 @@ ${performanceSection}
 - **File**: [\`${codeFileName}\`](./${codeFileName})
 - **Language**: \`${meta.name}\`
 ${topicLine}- **Submitted**: \`${new Date(submission.submittedAt).toUTCString()}\`
+
+## 📝 Submitted Code
+
+\`\`\`${codeFenceLang}
+${submission.code}
+\`\`\`
 
 ---
 *Synchronized automatically by [StreakForge](https://github.com/streakforge).*

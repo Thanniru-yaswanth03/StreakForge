@@ -29,7 +29,11 @@ const tokenHealthCache = new Map<string, { health: GitHubTokenHealth; expiresAt:
 const TOKEN_HEALTH_TTL_MS = 5 * 60 * 1000;
 
 export function invalidateTokenHealthCache(userId: string): void {
-  tokenHealthCache.delete(userId);
+  for (const k of tokenHealthCache.keys()) {
+    if (k === userId || k.startsWith(`${userId}:`)) {
+      tokenHealthCache.delete(k);
+    }
+  }
 }
 
 export function getDefaultSyncPreferences(): UserSyncPreferences {
@@ -468,13 +472,17 @@ async function discoverUserRepositories(
 
 /**
  * Verify live GitHub OAuth/PAT token validity & scopes (cached 5m unless forced)
+ * Accurately categorizes state into:
+ * CONNECTED, DISCONNECTED, TOKEN_INVALID, AUTHORIZATION_REVOKED, INSUFFICIENT_PERMISSIONS, CONNECTION_ERROR, RATE_LIMITED
  */
 export async function verifyGitHubTokenHealth(
   userId: string,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  targetRepoFullName?: string
 ): Promise<GitHubTokenHealth> {
+  const cacheKey = `${userId}:${targetRepoFullName || 'default'}`;
   if (!forceRefresh) {
-    const cached = tokenHealthCache.get(userId);
+    const cached = tokenHealthCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.health;
     }
@@ -486,10 +494,11 @@ export async function verifyGitHubTokenHealth(
     const health: GitHubTokenHealth = {
       valid: false,
       status: 'MISSING',
+      connectionStatus: 'DISCONNECTED',
       checkedAt: nowIso,
-      message: 'No GitHub token stored. Please reconnect GitHub.'
+      message: 'No GitHub account linked. Connect GitHub to enable automatic synchronization.'
     };
-    tokenHealthCache.set(userId, { health, expiresAt: Date.now() + 30_000 });
+    tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 30_000 });
     return health;
   }
 
@@ -499,11 +508,12 @@ export async function verifyGitHubTokenHealth(
   } catch {
     const health: GitHubTokenHealth = {
       valid: false,
-      status: 'INVALID' as any,
+      status: 'TOKEN_INVALID',
+      connectionStatus: 'TOKEN_INVALID',
       checkedAt: nowIso,
-      message: 'Stored GitHub credentials could not be decrypted. Please reconnect GitHub.'
+      message: 'Stored GitHub credentials could not be decrypted. Reconnecting GitHub will restore access.'
     };
-    health.status = 'REVOKED';
+    tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 60_000 });
     return health;
   }
 
@@ -515,31 +525,143 @@ export async function verifyGitHubTokenHealth(
       .map((s) => s.trim())
       .filter(Boolean);
 
+    const rateRemainingRaw = res.headers['x-ratelimit-remaining'];
+    const rateResetRaw = res.headers['x-ratelimit-reset'];
+    const rateLimitRemaining =
+      typeof rateRemainingRaw === 'string' ? parseInt(rateRemainingRaw, 10) : undefined;
+    const rateLimitReset =
+      typeof rateResetRaw === 'string'
+        ? new Date(parseInt(rateResetRaw, 10) * 1000).toISOString()
+        : undefined;
+
+    let hasPushAccess: boolean | undefined;
+    let repoToCheck = targetRepoFullName;
+    if (!repoToCheck) {
+      const activeRepo = await RepositoryConnection.findOne({
+        userId,
+        isTargetForLeetCode: true
+      });
+      if (activeRepo?.repoFullName) {
+        repoToCheck = activeRepo.repoFullName;
+      }
+    }
+
+    if (repoToCheck && repoToCheck.includes('/')) {
+      try {
+        const [owner, repo] = repoToCheck.split('/');
+        const repoRes = await octokit.rest.repos.get({ owner, repo });
+        hasPushAccess = Boolean(repoRes.data.permissions?.push || repoRes.data.permissions?.admin);
+      } catch {
+        hasPushAccess = false;
+      }
+    }
+
     const health: GitHubTokenHealth = {
       valid: true,
       status: 'VALID',
+      connectionStatus: 'CONNECTED',
       username: res.data.login,
       scopes: headerScopes && headerScopes.length > 0 ? headerScopes : account.scopes,
-      checkedAt: nowIso
+      checkedAt: nowIso,
+      rateLimitRemaining,
+      rateLimitReset,
+      hasPushAccess
     };
-    tokenHealthCache.set(userId, { health, expiresAt: Date.now() + TOKEN_HEALTH_TTL_MS });
+    tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + TOKEN_HEALTH_TTL_MS });
     return health;
   } catch (err: any) {
     const status = err?.status || err?.response?.status;
-    const isRevoked = status === 401 || status === 403;
+    const errMsg = String(err?.message || '').toLowerCase();
+    const rateRemainingRaw = err?.response?.headers?.['x-ratelimit-remaining'];
+    const rateLimitRemaining =
+      typeof rateRemainingRaw === 'string' ? parseInt(rateRemainingRaw, 10) : undefined;
+    const rateResetRaw = err?.response?.headers?.['x-ratelimit-reset'];
+    const rateLimitReset =
+      typeof rateResetRaw === 'string'
+        ? new Date(parseInt(rateResetRaw, 10) * 1000).toISOString()
+        : undefined;
+
+    const isRateLimit =
+      status === 403 &&
+      (rateLimitRemaining === 0 || errMsg.includes('rate limit') || errMsg.includes('secondary rate'));
+    const isScopeError =
+      status === 403 &&
+      (errMsg.includes('scope') || errMsg.includes('permission') || errMsg.includes('resource not accessible'));
+    const isRevoked =
+      status === 401 ||
+      (status === 403 && (errMsg.includes('bad credentials') || errMsg.includes('revoked')));
+    const isNetwork =
+      !status ||
+      status >= 500 ||
+      err?.code === 'ENOTFOUND' ||
+      err?.code === 'ETIMEDOUT' ||
+      errMsg.includes('fetch') ||
+      errMsg.includes('network');
+
+    if (isRateLimit) {
+      const health: GitHubTokenHealth = {
+        valid: true, // Do not invalidate user session or trigger scary REVOKED banner on temporary rate limit
+        status: 'RATE_LIMITED',
+        connectionStatus: 'RATE_LIMITED',
+        scopes: account.scopes,
+        checkedAt: nowIso,
+        rateLimitRemaining: 0,
+        rateLimitReset,
+        message: 'GitHub API rate limit reached. Automatically retrying once the window resets.'
+      };
+      tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 20_000 });
+      return health;
+    }
+
+    if (isScopeError) {
+      const health: GitHubTokenHealth = {
+        valid: false,
+        status: 'INSUFFICIENT_PERMISSIONS',
+        connectionStatus: 'INSUFFICIENT_PERMISSIONS',
+        scopes: account.scopes,
+        checkedAt: nowIso,
+        message: 'GitHub token lacks repository write permissions. Reconnect GitHub with repo scope.'
+      };
+      tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 60_000 });
+      return health;
+    }
+
+    if (isRevoked) {
+      const health: GitHubTokenHealth = {
+        valid: false,
+        status: 'REVOKED',
+        connectionStatus: 'AUTHORIZATION_REVOKED',
+        scopes: account.scopes,
+        checkedAt: nowIso,
+        message: 'GitHub authorization expired or was revoked. Reconnect GitHub to resume syncing.'
+      };
+      tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 60_000 });
+      return health;
+    }
+
+    if (isNetwork) {
+      const health: GitHubTokenHealth = {
+        valid: true, // Preserve session continuity on transient network hiccup
+        status: 'UNKNOWN',
+        connectionStatus: 'CONNECTION_ERROR',
+        scopes: account.scopes,
+        checkedAt: nowIso,
+        message: `Temporary connection issue verifying GitHub (${err?.message || 'offline'}). Retrying shortly.`
+      };
+      tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 10_000 });
+      return health;
+    }
+
+    // Default catch-all
     const health: GitHubTokenHealth = {
       valid: false,
-      status: isRevoked ? 'REVOKED' : 'UNKNOWN',
+      status: 'UNKNOWN',
+      connectionStatus: 'CONNECTION_ERROR',
       scopes: account.scopes,
       checkedAt: nowIso,
-      message: isRevoked
-        ? 'GitHub authorization expired or was revoked. Reconnect GitHub to resume syncing.'
-        : `GitHub verification check failed (${err?.message || 'network error'}).`
+      message: `GitHub check failed (${err?.message || 'unknown error'}).`
     };
-    tokenHealthCache.set(userId, {
-      health,
-      expiresAt: Date.now() + (isRevoked ? 60_000 : 15_000)
-    });
+    tokenHealthCache.set(cacheKey, { health, expiresAt: Date.now() + 15_000 });
     return health;
   }
 }

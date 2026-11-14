@@ -107,7 +107,7 @@ export function App() {
       if (cfg.authToken) {
         await Promise.allSettled([
           fetchAndSyncCanonicalState(cfg.authToken, sUrl, {
-            fetchHistory: false,
+            fetchHistory: true,
             allowRefresh: false
           }).then(() => loadLocalState()),
           fetch(`${sUrl}/api/v1/sync/leetcode/profile-stats`, {

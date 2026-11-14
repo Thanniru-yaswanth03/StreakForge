@@ -126,10 +126,25 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
                 {user ? `@${user.username}` : 'Guest Developer'}
               </h2>
               {user ? (
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#238636]/30 flex items-center gap-1 shadow-[0_0_8px_rgba(35,134,54,0.3)]">
-                  <CheckCircle2 className="w-3 h-3 text-[#3fb950]" />
-                  Verified Contributor
-                </span>
+                user.githubTokenHealth && !user.githubTokenHealth.valid ? (
+                  <span
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1 cursor-pointer"
+                    onClick={() => onNavigate?.('settings')}
+                    title={user.githubTokenHealth.message || 'GitHub re-authentication required'}
+                  >
+                    <AlertTriangle className="w-3 h-3 text-rose-400" />
+                    {user.githubTokenHealth.status === 'RATE_LIMITED'
+                      ? 'GitHub Rate Limited'
+                      : user.githubTokenHealth.status === 'INSUFFICIENT_PERMISSIONS'
+                        ? 'Insufficient Scopes'
+                        : 'Re-auth Required'}
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#238636]/15 text-[#3fb950] border border-[#238636]/30 flex items-center gap-1 shadow-[0_0_8px_rgba(35,134,54,0.3)]">
+                    <CheckCircle2 className="w-3 h-3 text-[#3fb950]" />
+                    Verified Contributor
+                  </span>
+                )
               ) : (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#30363d]/40 text-[#8b949e] border border-[#30363d]">
                   Unauthenticated Session
@@ -161,6 +176,16 @@ export function OverviewView({ onNavigate }: OverviewViewProps = {}) {
         </div>
 
         <div className="flex items-center gap-2.5 flex-shrink-0">
+          {user?.githubTokenHealth && !user.githubTokenHealth.valid && (
+            <a
+              href="/api/v1/auth/github"
+              className="github-glossy-button-primary px-3 py-1.5 text-xs flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold transition shadow-md cursor-pointer"
+              title="Initiate clean GitHub OAuth authorization"
+            >
+              <Github className="w-3.5 h-3.5" />
+              <span>Reconnect GitHub</span>
+            </a>
+          )}
           {user ? (
             <button
               onClick={async () => {

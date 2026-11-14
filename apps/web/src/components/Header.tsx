@@ -15,7 +15,8 @@ import {
   BookOpen,
   Brain,
   FileText,
-  Award
+  Award,
+  AlertCircle
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useData } from '../context/DataContext';
@@ -154,10 +155,20 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
             <button
               type="button"
               onClick={() => onTabChange('settings')}
-              className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 border border-rose-500/40 text-rose-400 hover:bg-rose-500/25 cursor-pointer"
-              title={user.githubTokenHealth.message || 'GitHub authorization expired'}
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500/25 cursor-pointer transition"
+              title={user.githubTokenHealth.message || 'GitHub connection attention required'}
             >
-              GitHub {user.githubTokenHealth.status}
+              <AlertCircle className="w-3 h-3 text-rose-400 flex-shrink-0" />
+              <span>
+                {user.githubTokenHealth.status === 'REVOKED' ||
+                user.githubTokenHealth.connectionStatus === 'AUTHORIZATION_REVOKED'
+                  ? 'Reconnect GitHub'
+                  : user.githubTokenHealth.status === 'INSUFFICIENT_PERMISSIONS'
+                    ? 'Grant Repo Scope'
+                    : user.githubTokenHealth.status === 'RATE_LIMITED'
+                      ? 'GitHub Rate Limited'
+                      : 'Check GitHub Access'}
+              </span>
             </button>
           )}
 
