@@ -1,4 +1,4 @@
-# ⚡ StreakForge 3.0 — Engineering Consistency & Technical Interview Preparation Ecosystem
+# ⚡ StreakForge v4.0 — Zero-Fabrication Developer Consistency & Automated Sync Ecosystem
 
 <p align="center">
   <img src="apps/extension/icons/icon-128.png" alt="StreakForge Logo" width="100" height="100" />
@@ -11,12 +11,12 @@
 <p align="center">
   <a href="https://streak-forge-six.vercel.app"><img src="https://img.shields.io/badge/Production%20Web-streak--forge--six.vercel.app-238636?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Web App" /></a>
   <a href="https://streakforge-api-5uhs.onrender.com/health"><img src="https://img.shields.io/badge/API%20Health-200%20OK-0969da?style=for-the-badge&logo=render&logoColor=white" alt="API Health" /></a>
-  <a href="https://github.com/Thanniru-yaswanth03/StreakForge"><img src="https://img.shields.io/badge/Release-v3.0.0--stable-8957e5?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
+  <a href="https://github.com/Thanniru-yaswanth03/StreakForge"><img src="https://img.shields.io/badge/Release-v4.0.0--stable-8957e5?style=for-the-badge&logo=github&logoColor=white" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Tests-108%2F108%20Passing%20(100%25)-success?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-141%2F141%20Passing%20(100%25)-success?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/TypeScript-5.6%20Strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Next.js-15.5%20App%20Router-black?style=flat-square&logo=next.js" alt="Next.js" />
   <img src="https://img.shields.io/badge/Node.js-%3E%3D20.0.0-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
@@ -28,22 +28,22 @@
 
 ## 📑 Table of Contents
 
-- [⚡ What is StreakForge 3.0?](#-what-is-streakforge-30)
+- [⚡ What is StreakForge v4.0?](#-what-is-streakforge-v40)
 - [✨ Core Features & Capabilities](#-core-features--capabilities)
-  - [1. ⏱️ Mock Interview Practice Arena](#1-️-mock-interview-practice-arena)
-  - [2. 🧠 Interview Curricula & SuperMemo-2 Spaced Repetition (SRS)](#2--interview-curricula--supermemo-2-spaced-repetition-srs)
-  - [3. 🎯 Canonical Pattern Recognition (Pattern Explorer)](#3--canonical-pattern-recognition-pattern-explorer)
-  - [4. 📚 DSA Knowledge Vault](#4--dsa-knowledge-vault)
-  - [5. 📅 Personal Coding Planner & Sprint Tracker](#5--personal-coding-planner--sprint-tracker)
-  - [6. 📑 Weekly Developer Report & 1-Click Markdown Exporter](#6--weekly-developer-report--1-click-markdown-exporter)
-  - [7. 🛡️ Dynamic Profile SVG Badges](#7-️-dynamic-profile-svg-badges)
-  - [8. 📖 GitHub README Auto-Cataloging Engine](#8--github-readme-auto-cataloging-engine)
-  - [9. 🌐 Multi-Platform Telemetry Sync](#9--multi-platform-telemetry-sync)
-  - [10. 🧩 Manifest V3 Chrome Extension](#10--manifest-v3-chrome-extension)
-  - [11. 💻 Local Desktop Companion Agent Daemon](#11--local-desktop-companion-agent-daemon)
-  - [12. 🎨 High-Contrast Dual Theme Engine](#12--high-contrast-dual-theme-engine)
-  - [13. 👤 Dynamic User Identity & Guest Sandbox](#13--dynamic-user-identity--guest-sandbox)
-  - [14. 🔒 Enterprise Security & OAuth 2.0 Hardening](#14--enterprise-security--oauth-20-hardening)
+  - [1. 🛡️ Zero-Fabrication Commit Engine & Embedded Solution Source](#1-️-zero-fabrication-commit-engine--embedded-solution-source)
+  - [2. 🔄 Real-Time GitHub Commit Ingestion & Instant Streak Refresh](#2--real-time-github-commit-ingestion--instant-streak-refresh)
+  - [3. 🔒 Centralized GitHub Connection State Machine](#3--centralized-github-connection-state-machine)
+  - [4. ⏱️ Mock Interview Practice Arena](#4-️-mock-interview-practice-arena)
+  - [5. 🧠 Interview Curricula & SuperMemo-2 Spaced Repetition (SRS)](#5--interview-curricula--supermemo-2-spaced-repetition-srs)
+  - [6. 🎯 Canonical Pattern Recognition (Pattern Explorer)](#6--canonical-pattern-recognition-pattern-explorer)
+  - [7. 📚 DSA Knowledge Vault & Architectural Trade-Offs](#7--dsa-knowledge-vault--architectural-trade-offs)
+  - [8. 📅 Personal Coding Planner & Sprint Velocity Tracking](#8--personal-coding-planner--sprint-velocity-tracking)
+  - [9. 📑 Weekly Developer Report & 1-Click Markdown Exporter](#9--weekly-developer-report--1-click-markdown-exporter)
+  - [10. 🛡️ Dynamic Edge-Cached Profile SVG Badges](#10-️-dynamic-edge-cached-profile-svg-badges)
+  - [11. 📖 GitHub README Auto-Cataloging Engine](#11--github-readme-auto-cataloging-engine)
+  - [12. 🧩 Resilient Manifest V3 Chrome Extension](#12--resilient-manifest-v3-chrome-extension)
+  - [13. 💻 Local Desktop Companion Agent Daemon](#13--local-desktop-companion-agent-daemon)
+  - [14. 🎨 High-Contrast GitHub Dual Theme Engine](#14--high-contrast-github-dual-theme-engine)
 - [🏗️ System Architecture](#-system-architecture)
 - [📂 Monorepo Workspace Inventory](#-monorepo-workspace-inventory)
 - [🚀 Quick Start (Local Setup)](#-quick-start-local-setup)
@@ -58,22 +58,43 @@
 
 ---
 
-## ⚡ What is StreakForge 3.0?
+## ⚡ What is StreakForge v4.0?
 
-**StreakForge 3.0** is an open-source, full-stack developer ecosystem engineered to transform daily coding consistency into tangible career progression. It bridges verified Git commits, authentic LeetCode passing submissions, real-time mock interviews, spaced repetition recall, and automated repository documentation into an immutable activity ledger.
+**StreakForge v4.0** is an open-source, full-stack developer ecosystem engineered to transform daily coding consistency into tangible career progression. It bridges verified Git commits, authentic LeetCode passing submissions, real-time mock interviews, spaced repetition recall, and automated repository documentation into an immutable activity ledger.
 
 Unlike superficial streak counters or synthetic commit generators, StreakForge enforces a strict **Zero-Fabrication Principle**:
 * **Authentic Git Ledger**: Commits are pushed strictly from genuine local modifications or verified **Accepted** LeetCode passing verdicts.
-* **Dynamic User Identity**: Profiles, repositories, and streaks dynamically bind to the authenticated user. Unauthenticated visitors experience a clean guest workspace with zero data leakage.
+* **Embedded Source Code**: Every synchronized algorithm embeds the developer's exact submitted passing source code directly into its solution `README.md` with full commit SHA tracking.
+* **Instant Refresh Pipeline**: A single click on the dashboard triggers backend ingestion of fresh GitHub commits (`POST /api/v1/github/sync`), synchronizing streaks instantaneously.
+* **Resilient Extension Cold-Start Recovery**: Handles Render free-tier spin-up HTML delays gracefully without JSON parsing crashes, automatically retrying until the gateway wakes up.
 * **Pixel-Perfect Dual Theme**: Authentic GitHub Dark mode (`#0d1117`) and GitHub Light mode (`#ffffff` cards, `#1f2328` typography, `#d0d7de` borders) with zero opacity hacks.
 * **Timezone Integrity**: Day boundaries and streak continuity calculate strictly within the user's explicit IANA timezone.
-* **Delimiter Safeguards**: Automated README catalogs append strictly within comment delimiters (`<!-- STREAKFORGE:START -->` ... `<!-- STREAKFORGE:END -->`), never destroying custom markdown.
 
 ---
 
 ## ✨ Core Features & Capabilities
 
-### 1. ⏱️ Mock Interview Practice Arena
+### 1. 🛡️ Zero-Fabrication Commit Engine & Embedded Solution Source
+* Every synchronized LeetCode solution automatically commits the complete source code directly into your repository:
+  * Generates clean language-specific solution files (`solution.py`, `Solution.java`, `solution.ts`, `solution.rs`, etc.).
+  * Creates an informative `README.md` for each problem containing problem metadata, difficulty, runtime metrics, memory percentiles, and the submitted code fenced in appropriate markdown syntax.
+  * Links every activity entry to its verified Git commit SHA for tamper-proof verification.
+
+### 2. 🔄 Real-Time GitHub Commit Ingestion & Instant Streak Refresh
+* **Dynamic Sync Endpoint**: `POST /api/v1/github/sync` queries your connected GitHub repository's default branch, ingesting fresh commits directly into `ActivityRecord` and `DailyActivitySnapshot`.
+* **Instant Dashboard Update**: Clicking the **Refresh Metrics** button triggers an immediate GitHub crawl and recomputes the user's current streak and contribution count without waiting for hourly cron jobs.
+
+### 3. 🔒 Centralized GitHub Connection State Machine
+* Robust state management across both the frontend web app and Chrome extension:
+  * `CONNECTED`: GitHub OAuth token is valid, active, and repository access verified.
+  * `DISCONNECTED`: No GitHub account connected.
+  * `TOKEN_INVALID`: Stored token is malformed or invalid.
+  * `AUTHORIZATION_REVOKED`: GitHub OAuth authorization explicitly revoked by user.
+  * `INSUFFICIENT_PERMISSIONS`: Token lacks required `repo` or `read:user` scopes.
+  * `RATE_LIMITED`: GitHub API secondary rate limit encountered; gracefully pauses without falsely revoking credentials.
+  * `CHECKING_CONNECTION`: Non-blocking background health check in progress.
+
+### 4. ⏱️ Mock Interview Practice Arena
 * **Timed Real-World Simulations**:
   * **Warmup Session**: 30-minute Easy problem (focusing on fundamental data structures, array traversal, two pointers).
   * **Industry Standard**: 45-minute Medium paired set (reflecting typical FAANG/Tier-1 screening rounds: BFS, Sliding Window, DP).
@@ -85,45 +106,33 @@ Unlike superficial streak counters or synthetic commit generators, StreakForge e
   * Direct deep-links to full LeetCode problem specifications.
 * **Automated Post-Session Evaluation**: Calculates completion time, speed score, Big-O efficiency rating, and detailed interviewer feedback.
 
-### 2. 🧠 Interview Curricula & SuperMemo-2 Spaced Repetition (SRS)
+### 5. 🧠 Interview Curricula & SuperMemo-2 Spaced Repetition (SRS)
 * **Standard Roadmaps**: Built-in tracking for **Blind 75**, **NeetCode 150**, and **Top Interview 150**.
 * **SM-2 Algorithm Engine**: Automatically schedules recall flashcard reviews across expanding intervals (**1d**, **3d**, **7d**, **14d**, **30d**, **60d**, **90d**).
 * **Interactive Flashcard Reviews**: Review DSA concepts and algorithmic patterns with recall grades (`Again`, `Hard`, `Good`, `Easy`) and real-time next-review projection.
 * **Auto-Reconciliation**: Submitting an accepted LeetCode solution automatically marks the corresponding problem in your curriculum as solved and enqueues its first SRS review.
 
-### 3. 🎯 Canonical Pattern Recognition (Pattern Explorer)
+### 6. 🎯 Canonical Pattern Recognition (Pattern Explorer)
 * **16 Core Algorithmic Patterns Library**:
-  * Sliding Window
-  * Two Pointers
-  * Fast & Slow Pointers
-  * Monotonic Stack
-  * Interval Merging
-  * Cyclic Sort
-  * In-Place Reversal of LinkedList
-  * Breadth-First Search (Tree & Graph BFS)
-  * Depth-First Search (Tree & Graph DFS)
-  * Two Heaps
-  * Subsets & Backtracking
-  * Modified Binary Search
-  * Top 'K' Elements
-  * K-way Merge
-  * Topological Sort
-  * 0/1 Knapsack & Dynamic Programming
+  * Sliding Window, Two Pointers, Fast & Slow Pointers, Monotonic Stack
+  * Interval Merging, Cyclic Sort, In-Place Reversal of LinkedList
+  * Tree & Graph BFS, Tree & Graph DFS, Two Heaps, Subsets & Backtracking
+  * Modified Binary Search, Top 'K' Elements, K-way Merge, Topological Sort, 0/1 Knapsack & DP
 * **Pattern Deep-Dives**: Includes time/space complexity analysis, visual triggers ("When to Use"), reusable code templates, and canonical benchmark problems.
 
-### 4. 📚 DSA Knowledge Vault
-* **Architectural Cheat Sheets**: Searchable, categorised reference library covering Arrays, Strings, Trees, Graphs, Heaps, Disjoint Set Union (DSU), Tries, and Dynamic Programming.
+### 7. 📚 DSA Knowledge Vault & Architectural Trade-Offs
+* **Cheat Sheet Library**: Searchable reference library covering Arrays, Strings, Trees, Graphs, Heaps, Disjoint Set Union (DSU), Tries, and Dynamic Programming.
 * **Big-O Trade-Off Tables**: Worst/Average time complexities, auxiliary memory trade-offs, and common implementation traps to avoid during live interviews.
 
-### 5. 📅 Personal Coding Planner & Sprint Tracker
+### 8. 📅 Personal Coding Planner & Sprint Velocity Tracking
 * **Sprint Momentum**: Configure weekly problem goals and target difficulty distributions (e.g. 5 Easy, 8 Medium, 2 Hard).
 * **Progress Telemetry**: Live completion tracking, sprint velocity graphs, and weekly streak targets.
 
-### 6. 📑 Weekly Developer Report & 1-Click Markdown Exporter
+### 9. 📑 Weekly Developer Report & 1-Click Markdown Exporter
 * **Automated Activity Synthesis**: Analyzes 7-day performance, total problems solved, commit velocity, primary focus areas, and targeted weakness patterns.
 * **1-Click Markdown Export**: Generates beautifully formatted Markdown ready to paste into GitHub profile READMEs, LinkedIn developer updates, or engineering team standup notes.
 
-### 7. 🛡️ Dynamic Profile SVG Badges
+### 10. 🛡️ Dynamic Edge-Cached Profile SVG Badges
 * **Fast Public SVG Endpoint**: `/api/v1/badge/streak.svg?user=:username&theme=:theme`
 * **5 Tailored Themes**: `Dark Primer`, `Minimal Outline`, `Crisp Light`, `Hacker Terminal`, and `Vibrant Gradient`.
 * **Edge Cached & Secure**: Sub-millisecond response caching, XML-escaped SVG generation, and responsive rendering inside any markdown file.
@@ -133,39 +142,28 @@ Unlike superficial streak counters or synthetic commit generators, StreakForge e
 [![StreakForge Stats](https://streakforge-api-5uhs.onrender.com/api/v1/badge/streak.svg?user=Thanniru-yaswanth03&theme=dark)](https://github.com/Thanniru-yaswanth03)
 ```
 
-### 8. 📖 GitHub README Auto-Cataloging Engine
+### 11. 📖 GitHub README Auto-Cataloging Engine
 * Scans connected repositories and compiles an elegant, structured table of contents indexing all solved algorithms by difficulty and topic.
 * **Safe Delimiters**: Uses comment markers `<!-- STREAKFORGE:START -->` ... `<!-- STREAKFORGE:END -->` to preserve existing repository documentation.
 * **Diff Preview & Rollback**: Visual side-by-side diff preview prior to committing, with 1-click snapshot restoration.
 
-### 9. 🌐 Multi-Platform Telemetry Sync
-* Consolidates developer activity across **GitHub** (commits & pull requests), **LeetCode** (accepted solutions & difficulty breakdown), and **Codeforces** (competitive ratings & contests) into one unified timeline.
-
-### 10. 🧩 Manifest V3 Chrome Extension
+### 12. 🧩 Resilient Manifest V3 Chrome Extension
 * Intercepts accepted submissions on `leetcode.com` in real time via DOM and Monaco editor hooks.
 * **Multi-Language Detection**: Supports Python 3, Java, C++, TypeScript, JavaScript, Go, Rust, C#, Ruby, Swift, Kotlin, and PHP.
-* **Deduplication Locks**: Multi-layer nonce and timestamp locking prevents duplicate commit submissions or false triggers.
+* **Cold-Start Resilience**: Gracefully absorbs Render free-tier spin-up delays with exponential backoff and zero JSON parse crashes.
+* **Self-Reconciling Retry Queue**: Automatically detects verified exported commits and purges them from the local retry queue, with a 1-click **Clear Queue** button for instant manual management.
 
-### 11. 💻 Local Desktop Companion Agent Daemon
+### 13. 💻 Local Desktop Companion Agent Daemon
 * Background daemon monitoring local development repositories via native Git CLI.
 * **Secret Leak Scanner**: Intercepts staged diffs to prevent accidental commits containing AWS secret keys, GitHub Personal Access Tokens (`ghp_*`), or private SSH keys.
 * **Approval Mode**: Supports a proposal queue requiring developer approval before committing changes.
 * **Detached HEAD Guard**: Refuses to commit on detached HEAD states to prevent orphaned commits.
 
-### 12. 🎨 High-Contrast Dual Theme Engine
+### 14. 🎨 High-Contrast GitHub Dual Theme Engine
 * Built with Tailwind CSS semantic tokens (`bg-theme-bg`, `bg-theme-surface`, `bg-theme-elevated`, `border-theme-border`, `text-theme-primary`, `text-theme-muted`).
 * **Dark Theme**: Authentic GitHub Dark Primer (`#0d1117` background, `#161b22` cards, `#30363d` borders, `#f0f6fc` text).
-* **Light Theme**: High-contrast GitHub Light (`#f6f8fa` canvas, `#ffffff` cards, `#d0d7de` borders, `#1f2328` text). No washed-out gray boxes or invisible text.
-
-### 13. 👤 Dynamic User Identity & Guest Sandbox
-* **Authenticated Mode**: Binds personal GitHub identity, connected repositories, LeetCode statistics, and verified streak metrics strictly to the logged-in user.
-* **Guest Sandbox**: Unauthenticated visitors explore the interface in a secure sandbox displaying 0d streak, 0% setup progress, and public LeetCode handle lookup without seeing another user's private data.
-
-### 14. 🔒 Enterprise Security & OAuth 2.0 Hardening
-* **CSRF Nonce Protection**: OAuth states are cryptographically signed JWT tokens with 15-minute expiration and nonce verification.
-* **Dynamic Reverse-Proxy Adaptation**: Backend inspects `x-forwarded-host` to automatically reconcile callback URIs across Render instances (`streakforge-api-5uhs.onrender.com`).
-* **Live OAuth Diagnostics**: `GET /api/v1/auth/config-status` enables transparent configuration verification without exposing client secrets.
-* **Token Encryption**: Stored GitHub OAuth access tokens are encrypted at rest using **AES-256-GCM**.
+* **Light Theme**: High-contrast GitHub Light (`#f6f8fa` canvas, `#ffffff` cards, `#d0d7de` borders, `#1f2328` text).
+* **Portal-Rendered Heatmap Tooltips**: All calendar day tooltips render via React DOM Portals directly to `document.body`, eliminating z-index card clipping.
 
 ---
 
@@ -274,14 +272,14 @@ CORS_ORIGIN=http://localhost:3000,chrome-extension://*
 
 ### 3. Build & Verify Monorepo
 ```bash
-# Typecheck all 9 workspace packages
+# Typecheck all workspace packages
 pnpm -r typecheck
 
 # Build Chrome Extension into apps/extension/dist
 pnpm --filter @streakforge/extension build
 
-# Run test suite across all packages
-pnpm test
+# Run test suite across all packages (141 tests)
+pnpm -r test
 ```
 
 ### 4. Start Development Runtimes
@@ -308,7 +306,7 @@ In **Vercel Dashboard > streak-forge-six > Settings > Environment Variables**:
 
 | Variable | Value | Environment | Description |
 |---|---|---|---|
-| `NEXT_PUBLIC_API_URL` | `https://streakforge-api-5uhs.onrender.com/api/v1` | Production & Preview | Active Render backend API URL (includes `-5uhs`). |
+| `NEXT_PUBLIC_API_URL` | `https://streakforge-api-5uhs.onrender.com/api/v1` | Production & Preview | Active Render backend API URL. |
 | `NEXT_PUBLIC_APP_URL` | `https://streak-forge-six.vercel.app` | Production & Preview | Primary frontend application domain. |
 
 ---
@@ -346,11 +344,11 @@ Navigate to [github.com/settings/developers](https://github.com/settings/develop
 
 ## 🛠️ Automated Testing & Verification
 
-StreakForge maintains a comprehensive automated testing suite covering authentication security, zero-fabrication git safety, secret leak filtering, streak algorithms, and interview evaluation:
+StreakForge maintains a rigorous automated testing suite with **141/141 tests passing (100%)** across 15 test suites:
 
 ```bash
-# Run all 108 automated unit and integration tests
-pnpm test
+# Run all 141 automated unit and integration tests
+pnpm -r test
 
 # Verify TypeScript across all workspace packages
 pnpm -r typecheck
@@ -361,21 +359,26 @@ pnpm --filter @streakforge/web build
 
 ### Verification Highlights:
 ```
- ✓ apps/api/src/streakEngine.test.ts (16 tests)
- ✓ packages/sync-engine/src/index.test.ts (4 tests)
- ✓ apps/extension/test/extension.test.ts (11 tests)
- ✓ apps/api/src/crypto.test.ts (3 tests)
  ✓ packages/git-engine/src/index.test.ts (5 tests)
+ ✓ packages/sync-engine/src/index.test.ts (7 tests)
+ ✓ apps/extension/test/auditExtension.test.ts (4 tests)
+ ✓ apps/extension/test/extension.test.ts (11 tests)
+ ✓ apps/extension/test/v4Extension.test.ts (7 tests)
+ ✓ apps/api/src/streakEngine.test.ts (16 tests)
+ ✓ apps/api/src/crypto.test.ts (3 tests)
  ✓ apps/api/src/streak.test.ts (2 tests)
  ✓ apps/api/src/developerAnalytics.test.ts (5 tests)
  ✓ apps/api/src/automation.test.ts (11 tests)
+ ✓ apps/api/src/v4Upgrade.test.ts (10 tests)
+ ✓ apps/api/src/auditScenarios.test.ts (12 tests)
  ✓ apps/api/src/app.test.ts (4 tests)
- ✓ apps/api/src/github.test.ts (17 tests)
- ✓ apps/api/src/securityAndE2E.test.ts (21 tests)
+ ✓ apps/api/src/github.test.ts (15 tests)
+ ✓ apps/api/src/securityAndE2E.test.ts (20 tests)
  ✓ apps/desktop-agent/src/agent.test.ts (9 tests)
 
- Test Files  12 passed (12)
-      Tests  108 passed (108)
+ Test Files  16 passed (16)
+      Tests  141 passed (141)
+   Duration  12.4s
 ```
 
 ---

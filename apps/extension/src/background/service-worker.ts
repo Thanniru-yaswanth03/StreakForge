@@ -258,11 +258,23 @@ async function importLeetCodeHistoryViaBrowserSession(
 function isTrustedWebBridgeSender(sender: chrome.runtime.MessageSender): boolean {
   if (!sender?.tab) return true;
   const tabUrl = sender.tab.url || '';
-  return (
-    tabUrl.startsWith('http://localhost:') ||
-    tabUrl.startsWith('http://127.0.0.1:') ||
-    tabUrl.startsWith('https://streak-forge-six.vercel.app')
-  );
+  try {
+    const url = new URL(tabUrl);
+    return (
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1' ||
+      url.hostname === 'streak-forge-six.vercel.app' ||
+      url.hostname.endsWith('.vercel.app') ||
+      url.hostname.endsWith('streakforge.dev') ||
+      url.hostname.endsWith('onrender.com')
+    );
+  } catch {
+    return (
+      tabUrl.startsWith('http://localhost:') ||
+      tabUrl.startsWith('http://127.0.0.1:') ||
+      tabUrl.startsWith('https://streak-forge-six.vercel.app')
+    );
+  }
 }
 
 // 1. Message Dispatcher

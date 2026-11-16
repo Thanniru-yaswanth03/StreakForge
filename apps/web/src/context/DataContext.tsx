@@ -594,6 +594,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Ignore bad cache JSON
       }
+      if (typeof window !== 'undefined') {
+        window.postMessage({ type: 'STREAKFORGE_TRIGGER_PAIR' }, window.location.origin);
+      }
     }
 
     refreshData();

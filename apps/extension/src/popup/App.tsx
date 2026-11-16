@@ -488,7 +488,9 @@ export function App() {
               <span className="truncate">
                 {config?.authErrorReason ||
                   (authState === 'UNAUTHENTICATED'
-                    ? 'Sign in on web dashboard to link GitHub'
+                    ? username
+                      ? 'Dashboard tab sync required'
+                      : 'Sign in on web dashboard to link GitHub'
                     : 'Session attention required')}
               </span>
             </div>
@@ -557,7 +559,7 @@ export function App() {
 
           <div className="flex items-center justify-between text-[10px] text-[#8b949e] pt-1">
             <span>
-              Unique Solved: <strong className="text-[#f0f6fc]">{uniqueSolved}</strong>
+              LeetCode Solved: <strong className="text-[#f0f6fc]">{leetcodeStats?.totalSolved ?? (easyCount + mediumCount + hardCount)}</strong>
             </span>
             {queuedPendingCount > 0 ? (
               <button
