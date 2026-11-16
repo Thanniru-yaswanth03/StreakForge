@@ -174,7 +174,7 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
 
           {/* Quick Refresh Button */}
           <button
-            onClick={() => refreshData()}
+            onClick={() => refreshData(true)}
             disabled={isLoading}
             className="p-1.5 text-theme-muted hover:text-theme-primary rounded-md transition hover:bg-theme-elevated border border-transparent hover:border-theme-border disabled:opacity-50 cursor-pointer"
             title="Refresh GitHub & LeetCode telemetry"
@@ -242,7 +242,7 @@ export function Header({ currentTab, onMobileMenuOpen, onTabChange }: HeaderProp
           <span>{backendError}</span>
           <button
             type="button"
-            onClick={() => refreshData()}
+            onClick={() => refreshData(true)}
             disabled={isLoading}
             className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-semibold text-[11px] transition shrink-0 cursor-pointer"
           >

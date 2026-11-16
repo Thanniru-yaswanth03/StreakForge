@@ -27,6 +27,15 @@ type NotifCategoryKey =
   | 'weeklyReport'
   | 'streakWarning';
 
+const DEFAULT_CATEGORY_PREFS: Record<NotifCategoryKey, boolean> = {
+  problemSolved: true,
+  syncSuccess: true,
+  syncFailure: true,
+  dailySummary: true,
+  weeklyReport: true,
+  streakWarning: true
+};
+
 export function NotificationsView() {
   const {
     user,
@@ -44,7 +53,7 @@ export function NotificationsView() {
   );
 
   const [localPrefs, setLocalPrefs] = useState<Record<string, any>>(
-    () => ({ ...(user?.notificationPreferences || {}) })
+    () => ({ ...DEFAULT_CATEGORY_PREFS, ...(user?.notificationPreferences || {}) })
   );
   const [prefStatus, setPrefStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [prefError, setPrefError] = useState<string | null>(null);
@@ -52,7 +61,7 @@ export function NotificationsView() {
 
   useEffect(() => {
     if (pendingOpsRef.current === 0 && user?.notificationPreferences) {
-      setLocalPrefs({ ...user.notificationPreferences });
+      setLocalPrefs({ ...DEFAULT_CATEGORY_PREFS, ...user.notificationPreferences });
     }
   }, [user?.notificationPreferences]);
 
@@ -341,20 +350,22 @@ export function NotificationsView() {
 
               <div className="flex items-center gap-2.5 flex-shrink-0 text-right">
                 <span className="text-[11px] text-theme-muted font-mono">{item.timestamp}</span>
-                {!item.isRead && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      markNotificationAsRead(item.id);
-                    }}
-                    title="Mark as read"
-                    aria-label="Mark notification as read"
-                    className="p-1.5 hover:bg-emerald-500/15 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-md transition cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markNotificationAsRead(item.id);
+                  }}
+                  title={item.isRead ? 'Read' : 'Mark as read'}
+                  aria-label={item.isRead ? 'Notification read' : 'Mark notification as read'}
+                  className={`p-1.5 rounded-md border transition cursor-pointer flex items-center justify-center ${
+                    item.isRead
+                      ? 'bg-theme-elevated text-emerald-500 border-theme-border opacity-70 hover:opacity-100'
+                      : 'hover:bg-emerald-500/15 text-emerald-400 hover:text-emerald-300 border-emerald-500/40 shadow-xs'
+                  }`}
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                </button>
                 {item.link && (
                   <a
                     href={item.link}

@@ -179,7 +179,7 @@ async function enrichSubmissionWithGraphQL(
         })
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = await res.json().catch(() => null);
         const details = json?.data?.submissionDetails;
         if (details) {
           if (details.code) result.code = details.code;
@@ -232,7 +232,7 @@ async function enrichSubmissionWithGraphQL(
         })
       });
       if (qRes.ok) {
-        const qJson = await qRes.json();
+        const qJson = await qRes.json().catch(() => null);
         const q = qJson?.data?.question;
         if (q) {
           result.questionId = result.questionId || String(q.questionFrontendId || '');
@@ -293,7 +293,7 @@ async function fetchLatestAcceptedForProblem(slug: string): Promise<{
       })
     });
     if (!listRes.ok) return null;
-    const listJson = await listRes.json();
+    const listJson = await listRes.json().catch(() => null);
     const subs = listJson?.data?.submissionList?.submissions || [];
     const latestAc = subs.find((s: any) => s.statusDisplay === 'Accepted');
     if (!latestAc?.id) return null;

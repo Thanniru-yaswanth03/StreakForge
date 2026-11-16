@@ -76,7 +76,7 @@ async function importLeetCodeHistoryViaBrowserSession(
       error: `Unable to reach leetcode.com (${statusRes.status}). Open leetcode.com in Chrome and try again.`
     };
   }
-  const statusJson = await statusRes.json();
+  const statusJson = await statusRes.json().catch(() => null);
   if (!statusJson?.data?.userStatus?.isSignedIn) {
     return {
       success: false,
@@ -118,7 +118,7 @@ async function importLeetCodeHistoryViaBrowserSession(
     });
 
     if (!listRes.ok) break;
-    const listJson = await listRes.json();
+    const listJson = await listRes.json().catch(() => null);
     const listData = listJson?.data?.submissionList;
     const items = listData?.submissions || [];
     if (items.length === 0) break;
@@ -175,7 +175,7 @@ async function importLeetCodeHistoryViaBrowserSession(
       });
 
       if (detRes.ok) {
-        const detJson = await detRes.json();
+        const detJson = await detRes.json().catch(() => null);
         const det = detJson?.data?.submissionDetails;
         const runtimeMs = parseFloat(String(det?.runtime || s.runtime || '').replace(/[^0-9.]/g, ''));
         const memoryMb = parseFloat(String(det?.memory || s.memory || '').replace(/[^0-9.]/g, ''));
@@ -230,7 +230,7 @@ async function importLeetCodeHistoryViaBrowserSession(
     });
 
     if (impRes.ok) {
-      const impJson = await impRes.json();
+      const impJson = await impRes.json().catch(() => null);
       const d = impJson.data || {};
       totalImported += d.importedCount || 0;
       totalSkipped += d.skippedDuplicates || 0;

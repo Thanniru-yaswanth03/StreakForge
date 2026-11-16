@@ -137,7 +137,7 @@ interface DataContextValue {
   isStaleData: boolean;
   lastUpdatedAt: string | null;
   backendError: string | null;
-  refreshData: () => Promise<void>;
+  refreshData: (forceSyncGitHub?: boolean) => Promise<void>;
   refreshLeetCodeStats: (usernameOverride?: string) => Promise<void>;
   logout: () => Promise<void>;
   updateJournalNote: (date: string, note: string) => void;
@@ -257,7 +257,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (forceSyncGitHub: boolean = false) => {
     const token = getStoredToken();
     if (!token) {
       setUser(null);
@@ -292,6 +292,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoading(true);
       setBackendError(null);
+
+      // Force-sync live GitHub contributions if explicitly requested (e.g. user refreshed metrics)
+      if (forceSyncGitHub) {
+        await api.github.sync().catch(() => {});
+      }
 
       // Phase A: Fast canonical bootstrap first (/sync/state + overview + repos + submissions + heatmap + notifications)
       const [stateRes, overviewRes, heatmapRes, reposRes, subsRes, notifsRes, rulesRes] =

@@ -115,9 +115,10 @@ export function App() {
             signal: AbortSignal.timeout(10000)
           })
             .then(async (pRes) => {
-              if (pRes.ok) {
-                const pJson = await pRes.json();
-                if (pJson.data) setLeetcodeStats(pJson.data);
+              const ct = pRes.headers.get('content-type') || '';
+              if (pRes.ok && ct.includes('application/json')) {
+                const pJson = await pRes.json().catch(() => null);
+                if (pJson?.data) setLeetcodeStats(pJson.data);
               }
             })
             .catch(() => {})
@@ -302,20 +303,27 @@ export function App() {
   };
 
   const handleClearQueue = async (submissionId?: string) => {
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      await new Promise<void>((resolve) => {
-        chrome.runtime.sendMessage({ type: 'CLEAR_PENDING_QUEUE', payload: { submissionId } }, () => {
-          void chrome.runtime?.lastError;
-          resolve();
-        });
-      });
-    } else if (submissionId) {
-      const q = await StorageManager.getPendingQueue();
-      await StorageManager.setPendingQueue(q.filter((item) => item.submissionId !== submissionId));
+    // 1. Immediately update React state for instant UI responsiveness
+    if (submissionId) {
+      setPendingQueue((prev) => prev.filter((item) => String(item.submissionId) !== String(submissionId)));
     } else {
-      await StorageManager.setPendingQueue([]);
+      setPendingQueue([]);
     }
-    await loadLocalState();
+
+    // 2. Clear in StorageManager directly
+    const currentQ = await StorageManager.getPendingQueue();
+    const updatedQ = submissionId
+      ? currentQ.filter((item) => String(item.submissionId) !== String(submissionId))
+      : [];
+    await StorageManager.setPendingQueue(updatedQ);
+
+    // 3. Notify SW if available
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'CLEAR_PENDING_QUEUE', payload: { submissionId } }, () => {
+        void chrome.runtime?.lastError;
+      });
+    }
+
     showStatus(submissionId ? 'Removed queued item' : 'Cleared local retry queue');
   };
 
@@ -375,12 +383,35 @@ export function App() {
   );
   const exportedCount = config?.metrics?.exportedCount ?? verifiedExportedList.length;
 
-  const localPendingItems = pendingQueue.filter((q) => q.state !== 'SYNCED');
+  const exportedSlugs = new Set(
+    verifiedExportedList.map((s) => (s.questionSlug || '').toLowerCase()).filter(Boolean)
+  );
+  const exportedTitles = new Set(
+    verifiedExportedList.map((s) => (s.questionTitle || '').toLowerCase().trim()).filter(Boolean)
+  );
+  const exportedIds = new Set(
+    verifiedExportedList.map((s) => String(s.submissionId)).filter(Boolean)
+  );
+
+  const localPendingItems = pendingQueue.filter((q) => {
+    if (q.state === 'SYNCED') return false;
+    if (
+      exportedIds.has(String(q.submissionId)) ||
+      (q.questionSlug && exportedSlugs.has(q.questionSlug.toLowerCase())) ||
+      (q.questionTitle && exportedTitles.has(q.questionTitle.toLowerCase().trim()))
+    ) {
+      return false;
+    }
+    return true;
+  });
+
   const localIds = new Set(localPendingItems.map((q) => String(q.submissionId)));
   const historyUnresolved = syncedHistory.filter(
     (h) =>
       (h.state === 'FAILED' || h.state === 'EXPORT_PENDING' || h.state === 'RETRY_PENDING') &&
-      !localIds.has(String(h.submissionId))
+      !localIds.has(String(h.submissionId)) &&
+      !(h.questionSlug && exportedSlugs.has(h.questionSlug.toLowerCase())) &&
+      !(h.questionTitle && exportedTitles.has(h.questionTitle.toLowerCase().trim()))
   );
   const backendPendingTotal =
     (config?.metrics?.pendingCount ?? 0) + (config?.metrics?.failedCount ?? 0);

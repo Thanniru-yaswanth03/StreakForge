@@ -14,7 +14,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+  const apiUrl =
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://streakforge-api-5uhs.onrender.com/api/v1'
+      : 'http://localhost:4000/api/v1');
 
   return (
     <html lang="en" suppressHydrationWarning className="dark">

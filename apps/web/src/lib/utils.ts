@@ -5,8 +5,26 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-export const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
+function getResolvedApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined') {
+    const isLocal =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocal) {
+      if (!envUrl || envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
+        return 'https://streakforge-api-5uhs.onrender.com/api/v1';
+      }
+    }
+  }
+  return (
+    envUrl ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://streakforge-api-5uhs.onrender.com/api/v1'
+      : 'http://localhost:4000/api/v1')
+  ).replace(/\/+$/, '');
+}
+
+export const API_BASE_URL = getResolvedApiUrl();
 
 export function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;

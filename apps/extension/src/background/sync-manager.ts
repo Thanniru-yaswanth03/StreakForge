@@ -163,7 +163,27 @@ export class SyncManager {
           signal: AbortSignal.timeout(25000)
         });
 
-        const json = await res.json().catch(() => ({}));
+        // Safe response parsing: handle HTML pages from Render/Cloudflare cold starts
+        const contentType =
+          res.headers && typeof res.headers.get === 'function'
+            ? res.headers.get('content-type') || ''
+            : 'application/json';
+
+        let json: any = {};
+        if (contentType.includes('text/html')) {
+          if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < MAX_ATTEMPTS) {
+            await new Promise((r) => setTimeout(r, 2500));
+            continue;
+          }
+          return {
+            success: false,
+            status: res.status,
+            error: 'StreakForge backend API waking up (Render cold start). Retrying automatically.'
+          };
+        } else {
+          json = await res.json().catch(() => ({}));
+        }
+
         if (res.status === 401) {
           await StorageManager.updateConfig({
             authState: 'EXPIRED',
@@ -195,7 +215,9 @@ export class SyncManager {
         lastError =
           err?.name === 'TimeoutError'
             ? 'Backend server timed out (Render cold start). Retrying automatically.'
-            : err?.message || 'Network connection failed while reaching StreakForge API.';
+            : err?.message?.includes('JSON') || err?.message?.includes('<!DOCTYPE')
+              ? 'Backend server is waking up (Render cold start). Retrying automatically.'
+              : err?.message || 'Network connection failed while reaching StreakForge API.';
         if (attempt < MAX_ATTEMPTS) {
           await new Promise((r) => setTimeout(r, 2000));
         }
@@ -509,11 +531,45 @@ export class SyncManager {
     const config = await StorageManager.getConfig();
     if (!config.authToken || config.authState === 'EXPIRED') return;
 
+    const history = await StorageManager.getSyncedHistory();
+    const settledSlugs = new Set(
+      history
+        .filter((h) => h.state === 'SYNCED' && Boolean(h.commitSha))
+        .map((h) => (h.questionSlug || '').toLowerCase())
+    );
+    const settledTitles = new Set(
+      history
+        .filter((h) => h.state === 'SYNCED' && Boolean(h.commitSha))
+        .map((h) => (h.questionTitle || '').toLowerCase().trim())
+    );
+    const settledIds = new Set(
+      history
+        .filter((h) => h.state === 'SYNCED' && Boolean(h.commitSha))
+        .map((h) => String(h.submissionId))
+    );
+
     const remaining: DetectedSubmission[] = [];
     const now = Date.now();
 
     for (const sub of queue) {
       if (sub.state === 'SYNCED' && sub.commitSha) continue;
+
+      // Auto-prune items that have already been verified and pushed to GitHub
+      if (
+        settledIds.has(String(sub.submissionId)) ||
+        (sub.questionSlug && settledSlugs.has(sub.questionSlug.toLowerCase())) ||
+        (sub.questionTitle && settledTitles.has(sub.questionTitle.toLowerCase().trim()))
+      ) {
+        continue;
+      }
+
+      const userId = config.userProfile?.username || 'user';
+      const repo = config.targetRepoFullName || 'unassigned';
+      const subKey = generateSubmissionKey(userId, sub.submissionId, repo);
+      const dupCheck = await DuplicateRegistry.isDuplicate(subKey);
+      if (dupCheck.isDuplicate && dupCheck.record?.commitSha) {
+        continue;
+      }
 
       const retryCount = sub.retryCount || 0;
       const hasInvalidCode = isInvalidSubmissionSnippet(sub.code);

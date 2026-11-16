@@ -41,6 +41,9 @@ function getBackendUrl(): string {
     if (metaApi && /^https?:\/\//i.test(metaApi)) {
       const cleaned = metaApi.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
       if (cleaned && cleaned !== window.location.origin) {
+        if (!window.location.hostname.includes('localhost') && cleaned.includes('localhost')) {
+          return PRODUCTION_API_URL;
+        }
         return cleaned;
       }
     }

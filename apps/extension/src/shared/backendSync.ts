@@ -73,8 +73,21 @@ export async function fetchAndSyncCanonicalState(
       return { success: false, error: `Backend status ${stateRes.status}` };
     }
 
-    const stateJson = await stateRes.json();
-    const s = stateJson.data;
+    const stateContentType =
+      stateRes.headers && typeof stateRes.headers.get === 'function'
+        ? stateRes.headers.get('content-type') || ''
+        : 'application/json';
+
+    if (stateContentType.includes('text/html')) {
+      await StorageManager.updateConfig({
+        authState: 'NETWORK_ERROR',
+        authErrorReason: 'Backend server is waking up (Render cold start). Session retained.'
+      });
+      return { success: false, error: 'StreakForge backend API waking up (Render cold start).' };
+    }
+
+    const stateJson = await stateRes.json().catch(() => null);
+    const s = stateJson?.data;
     if (!s || !s.user) {
       return { success: false, error: 'Invalid sync state response' };
     }
@@ -167,9 +180,13 @@ export async function fetchAndSyncCanonicalState(
           headers: { Authorization: `Bearer ${activeToken}` },
           signal: AbortSignal.timeout(15000)
         });
-        if (histRes.ok) {
-          const hJson = await histRes.json();
-          const submissions = Array.isArray(hJson.data) ? hJson.data : hJson.data?.items || [];
+        const histContentType =
+          histRes.headers && typeof histRes.headers.get === 'function'
+            ? histRes.headers.get('content-type') || ''
+            : 'application/json';
+        if (histRes.ok && !histContentType.includes('text/html')) {
+          const hJson = await histRes.json().catch(() => null);
+          const submissions = Array.isArray(hJson?.data) ? hJson.data : hJson?.data?.items || [];
           mappedHistory = submissions.map((sub: any) => ({
             submissionId: sub.submissionId || String(sub._id),
             questionId: String(sub.questionId),
@@ -195,16 +212,31 @@ export async function fetchAndSyncCanonicalState(
 
           // Prune items from local pendingQueue that backend confirms SYNCED or SKIPPED (REJECTED),
           // or legacy malformed items lacking real source code
-          const settledIds = new Set(
-            mappedHistory
-              .filter((h) => (h.state === 'SYNCED' && Boolean(h.commitSha)) || h.state === 'REJECTED')
-              .map((h) => String(h.submissionId))
-          );
+          const settledIds = new Set<string>();
+          const settledSlugs = new Set<string>();
+          const settledTitles = new Set<string>();
+          const settledQuestionIds = new Set<string>();
+
+          for (const h of mappedHistory) {
+            if ((h.state === 'SYNCED' && Boolean(h.commitSha)) || h.state === 'REJECTED') {
+              if (h.submissionId) settledIds.add(String(h.submissionId));
+              if (h.questionSlug) settledSlugs.add(h.questionSlug.toLowerCase());
+              if (h.questionTitle) settledTitles.add(h.questionTitle.toLowerCase().trim());
+              if (h.questionId && h.questionId !== '0') settledQuestionIds.add(String(h.questionId));
+            }
+          }
+
           const localQueue = await StorageManager.getPendingQueue();
           if (localQueue.length > 0) {
             const cleanedQueue: DetectedSubmission[] = [];
             for (const q of localQueue) {
-              if (settledIds.has(String(q.submissionId))) {
+              const isSettled =
+                settledIds.has(String(q.submissionId)) ||
+                (q.questionSlug && settledSlugs.has(q.questionSlug.toLowerCase())) ||
+                (q.questionTitle && settledTitles.has(q.questionTitle.toLowerCase().trim())) ||
+                (q.questionId && q.questionId !== '0' && settledQuestionIds.has(String(q.questionId)));
+
+              if (isSettled) {
                 continue;
               }
               if (isInvalidSubmissionSnippet(q.code)) {

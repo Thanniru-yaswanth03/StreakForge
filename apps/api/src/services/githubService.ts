@@ -8,6 +8,7 @@ import { RepositoryConnection } from '../models/RepositoryConnection.js';
 import { DailyActivitySnapshot } from '../models/DailyActivitySnapshot.js';
 import { ActivityRecord } from '../models/ActivityRecord.js';
 import { getStreakOverview } from './streakService.js';
+import { StreakEngine } from './streakEngine.js';
 import { decryptToken } from '../utils/crypto.js';
 import { logAuditEvent } from './auditService.js';
 import { logger } from '../utils/logger.js';
@@ -942,10 +943,24 @@ export async function syncGitHubContributions(userId: string): Promise<GitHubSyn
           per_page: 30
         });
 
+        const datesWithNewCommits = new Set<string>();
+
         for (const c of repoCommits.data) {
           const cDate = c.commit.author?.date || c.commit.committer?.date;
           if (!cDate) continue;
-          const dateStr = cDate.slice(0, 10);
+
+          const authorLogin = c.author?.login || c.commit.author?.name;
+          const authorEmail = c.commit.author?.email || '';
+          // Ensure commit matches authenticated user
+          const isUserAuthor =
+            !login ||
+            (authorLogin && authorLogin.toLowerCase() === login.toLowerCase()) ||
+            (authorEmail && (authorEmail === user.email || user.verifiedEmails?.includes(authorEmail)));
+
+          if (!isUserAuthor) continue;
+
+          const dateStr = StreakEngine.formatDateInTimezone(new Date(cDate), user.timezone || 'UTC');
+          datesWithNewCommits.add(dateStr);
           const commitEventId = `${userId}:GITHUB:GITHUB_COMMIT:${c.sha}`;
 
           await ActivityRecord.updateOne(
@@ -966,12 +981,71 @@ export async function syncGitHubContributions(userId: string): Promise<GitHubSyn
                   repo: conn.repoFullName,
                   message: c.commit.message,
                   url: c.html_url,
-                  author: c.commit.author?.name || c.author?.login
+                  author: authorLogin
                 }
               }
             },
             { upsert: true }
           );
+        }
+
+        // Accurately synchronize DailyActivitySnapshot from distinct verified commits
+        for (const dStr of datesWithNewCommits) {
+          const distinctCommits = await ActivityRecord.countDocuments({
+            userId: new Types.ObjectId(userId),
+            date: dStr,
+            category: 'GITHUB',
+            eventType: 'GITHUB_COMMIT'
+          });
+
+          const snap = await DailyActivitySnapshot.findOne({
+            userId: new Types.ObjectId(userId),
+            date: dStr
+          });
+
+          if (snap) {
+            snap.gitCommitCount = Math.max(snap.gitCommitCount || 0, distinctCommits);
+            snap.github = snap.github || { commits: 0, prs: 0, issues: 0, other: 0 };
+            snap.github.commits = Math.max(snap.github.commits || 0, distinctCommits);
+            snap.streakMaintained = true;
+            snap.githubStreakEligible = true;
+            snap.overallStreakEligible = true;
+            snap.totalActivities =
+              snap.gitCommitCount + (snap.leetCodeCount || 0) + (snap.localDev?.sessions || 0);
+            await snap.save();
+          } else {
+            await DailyActivitySnapshot.create({
+              userId: new Types.ObjectId(userId),
+              date: dStr,
+              gitCommitCount: distinctCommits,
+              github: {
+                commits: distinctCommits,
+                prs: 0,
+                issues: 0,
+                other: 0
+              },
+              leetCodeCount: 0,
+              leetcode: {
+                submissions: 0,
+                accepted: 0,
+                uniqueProblems: 0
+              },
+              localDev: {
+                sessions: 0,
+                filesChanged: 0,
+                activeMinutes: 0
+              },
+              maintenance: {
+                backups: 0,
+                dependencyUpdates: 0,
+                docsSync: 0
+              },
+              totalActivities: distinctCommits,
+              streakMaintained: true,
+              githubStreakEligible: true,
+              overallStreakEligible: true
+            });
+          }
         }
       } catch (err: any) {
         logger.warn(`Failed to fetch individual commits for repo ${conn.repoFullName}: ${err.message}`);

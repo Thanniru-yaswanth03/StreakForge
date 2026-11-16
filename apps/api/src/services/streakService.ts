@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { DailyActivitySnapshot } from '../models/DailyActivitySnapshot.js';
 import { ActivityRecord } from '../models/ActivityRecord.js';
 import { User } from '../models/User.js';
@@ -178,27 +178,7 @@ export async function getStreakOverview(
     userId: new Types.ObjectId(userId.toString())
   }).sort({ date: -1 });
 
-  // Map to DailySummaryInput
-  const summaries: DailySummaryInput[] = snapshots.map((s) => ({
-    date: s.date,
-    github: s.github,
-    leetcode: s.leetcode,
-    localDev: s.localDev,
-    maintenance: s.maintenance,
-    gitCommitCount: s.gitCommitCount,
-    leetCodeCount: s.leetCodeCount,
-    totalActivities: s.totalActivities,
-    streakMaintained: s.streakMaintained || s.overallStreakEligible
-  }));
-
-  // Separate streak calculations
-  const overallStreak = StreakEngine.calculateOverallStreak(summaries, todayStr, goal);
-  const githubStreak = StreakEngine.calculateGitHubStreak(summaries, todayStr);
-  const leetCodeStreak = StreakEngine.calculateLeetCodeStreak(summaries, todayStr);
-  const localDevStreak = StreakEngine.calculateLocalDevStreak(summaries, todayStr);
-  const weeklyActivityScore = StreakEngine.calculateWeeklyActivityScore(summaries, todayStr);
-
-  // Today activity checks
+  // Today activity checks from snapshots
   let todayCommitCount = 0;
   let todayLeetCodeCount = 0;
   let totalGitCommits = 0;
@@ -228,6 +208,74 @@ export async function getStreakOverview(
       todayLeetCodeCount = s.leetcode?.accepted ?? lcSubs;
     }
   }
+
+  // Real-time fallback: verify if today has new commits/submissions not yet aggregated into snapshots
+  if (todayCommitCount === 0 && mongoose.connection.readyState === 1) {
+    const todayGitCount = await ActivityRecord.countDocuments({
+      userId: new Types.ObjectId(userId.toString()),
+      date: todayStr,
+      category: 'GITHUB',
+      eventType: 'GITHUB_COMMIT'
+    }).catch(() => 0);
+    if (todayGitCount > 0) {
+      todayCommitCount = todayGitCount;
+      totalGitCommits += todayGitCount;
+    }
+  }
+
+  if (todayLeetCodeCount === 0 && mongoose.connection.readyState === 1) {
+    const startOfTodayUtc = new Date(`${todayStr}T00:00:00Z`);
+    const todayLcCount = await LeetCodeSubmission.countDocuments({
+      userId: new Types.ObjectId(userId.toString()),
+      status: 'Accepted',
+      submittedAt: { $gte: startOfTodayUtc }
+    }).catch(() => 0);
+    if (todayLcCount > 0) {
+      todayLeetCodeCount = todayLcCount;
+      totalLeetCodeAccepted += todayLcCount;
+    }
+  }
+
+  // Map to DailySummaryInput
+  let summaries: DailySummaryInput[] = snapshots.map((s) => ({
+    date: s.date,
+    github: s.github,
+    leetcode: s.leetcode,
+    localDev: s.localDev,
+    maintenance: s.maintenance,
+    gitCommitCount: s.gitCommitCount,
+    leetCodeCount: s.leetCodeCount,
+    totalActivities: s.totalActivities,
+    streakMaintained: s.streakMaintained || s.overallStreakEligible
+  }));
+
+  if (!snapshots.some((s) => s.date === todayStr) && (todayCommitCount > 0 || todayLeetCodeCount > 0)) {
+    summaries = [
+      {
+        date: todayStr,
+        github: { commits: todayCommitCount, prs: 0, issues: 0, other: 0 },
+        leetcode: {
+          submissions: todayLeetCodeCount,
+          accepted: todayLeetCodeCount,
+          uniqueProblems: 1
+        },
+        localDev: { sessions: 0, filesChanged: 0, activeMinutes: 0 },
+        maintenance: { backups: 0, dependencyUpdates: 0, docsSync: 0 },
+        gitCommitCount: todayCommitCount,
+        leetCodeCount: todayLeetCodeCount,
+        totalActivities: todayCommitCount + todayLeetCodeCount,
+        streakMaintained: true
+      },
+      ...summaries
+    ];
+  }
+
+  // Separate streak calculations
+  const overallStreak = StreakEngine.calculateOverallStreak(summaries, todayStr, goal);
+  const githubStreak = StreakEngine.calculateGitHubStreak(summaries, todayStr);
+  const leetCodeStreak = StreakEngine.calculateLeetCodeStreak(summaries, todayStr);
+  const localDevStreak = StreakEngine.calculateLocalDevStreak(summaries, todayStr);
+  const weeklyActivityScore = StreakEngine.calculateWeeklyActivityScore(summaries, todayStr);
 
   // Difficulty distribution from authentic LeetCode stats, with fallback to exported solutions
   const submissions = await LeetCodeSubmission.find({
